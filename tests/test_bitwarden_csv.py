@@ -2,28 +2,19 @@
 import csv
 import io
 import json
-import os
-import sys
 import unittest
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
-
-from csvcompare.columns import ALL_NAMES, SOURCE_KEY  # noqa: E402
-from csvcompare.importers import CsvError, load_any  # noqa: E402
-from csvcompare.service import analyze  # noqa: E402
+from tests.helpers import read_fixture
+from csvcompare.columns import ALL_NAMES, SOURCE_KEY
+from csvcompare.importers import CsvError, load_any
+from csvcompare.service import analyze
 
 HEADER = ["folder", "favorite", "type", "name", "notes", "fields", "reprompt",
           "login_uri", "login_username", "login_password", "login_totp"]
 
 
-def read(name):
-    with open(os.path.join(ROOT, "tests", name), encoding="utf-8", newline="") as f:
-        return f.read()
-
-
-CSV_TEXT = read("bitwarden.csv")
-JSON_TEXT = read("bitwarden.json")
+CSV_TEXT = read_fixture("bitwarden.csv")
+JSON_TEXT = read_fixture("bitwarden.json")
 
 
 def make_csv(rows, header=HEADER):
@@ -168,7 +159,7 @@ class RobustnessTests(unittest.TestCase):
         self.assertIn("fehlen Spalten", str(ctx.exception))
 
     def test_keepass_csv_is_not_mistaken_for_bitwarden(self):
-        self.assertEqual(load_any("alt.csv", read("alt.csv")).format, "keepass-csv")
+        self.assertEqual(load_any("alt.csv", read_fixture("alt.csv")).format, "keepass-csv")
 
     def test_json_is_not_mistaken_for_csv(self):
         self.assertEqual(load_any("bw.json", JSON_TEXT).format, "bitwarden-json")

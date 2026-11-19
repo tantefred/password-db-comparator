@@ -1,21 +1,14 @@
 """Tests des Bitwarden/Vaultwarden-JSON-Importers."""
 import copy
 import json
-import os
-import subprocess
-import sys
 import unittest
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
+from tests.helpers import read_fixture, run
+from csvcompare.columns import ALL_NAMES, SOURCE_KEY
+from csvcompare.importers import CsvError, load_any
+from csvcompare.service import analyze
 
-from csvcompare.columns import ALL_NAMES, SOURCE_KEY  # noqa: E402
-from csvcompare.importers import CsvError, load_any  # noqa: E402
-from csvcompare.service import analyze  # noqa: E402
-
-PATH = os.path.join(ROOT, "tests", "bitwarden.json")
-with open(PATH, encoding="utf-8") as f:
-    TEXT = f.read()
+TEXT = read_fixture("bitwarden.json")
 DATA = json.loads(TEXT)
 
 
@@ -176,18 +169,13 @@ class ErrorTests(unittest.TestCase):
 
 
 class IntegrationTests(unittest.TestCase):
-    def run_cli(self, *args):
-        proc = subprocess.run([sys.executable, os.path.join(ROOT, "compare_csv.py"), *args],
-                              cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
-        return proc.returncode, proc.stdout, proc.stderr
-
     def test_file_with_itself_is_identical(self):
-        rc, out, _ = self.run_cli("tests/bitwarden.json", "tests/bitwarden.json")
+        rc, out, _ = run("tests/bitwarden.json", "tests/bitwarden.json")
         self.assertEqual(rc, 0)
         self.assertIn("Keine Unterschiede.", out)
 
     def test_header_shows_the_importer_notes(self):
-        _, out, _ = self.run_cli("tests/bitwarden.json", "tests/bitwarden.json")
+        _, out, _ = run("tests/bitwarden.json", "tests/bitwarden.json")
         self.assertIn("Hinweis: 2 Einträge übersprungen (1 Karte, 1 Identität)", out)
 
     def test_changes_between_two_exports_are_found(self):
@@ -206,7 +194,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertTrue(mail["changes"]["Password"]["masked"])
 
     def test_detection_does_not_break_csv_files(self):
-        rc, out, _ = self.run_cli("tests/alt.csv", "tests/neu.csv")
+        rc, out, _ = run("tests/alt.csv", "tests/neu.csv")
         self.assertEqual(rc, 0)
         self.assertIn("Zusammenfassung", out)
 

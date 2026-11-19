@@ -2,31 +2,18 @@
 import copy
 import json
 import os
-import subprocess
-import sys
+import tempfile
 import unittest
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
+from tests.helpers import read_fixture, run
+from csvcompare.service import UsageError, analyze, options_to_argv
 
-from csvcompare.service import UsageError, analyze, options_to_argv  # noqa: E402
-
-SCRIPT = os.path.join(ROOT, "compare_csv.py")
-
-
-def read(name):
-    with open(os.path.join(ROOT, "tests", name), encoding="utf-8", newline="") as f:
-        return f.read()
-
-
-ALT, NEU = read("alt.csv"), read("neu.csv")
+ALT, NEU = read_fixture("alt.csv"), read_fixture("neu.csv")
 
 
 def cli_json(*args):
-    proc = subprocess.run([sys.executable, SCRIPT, "tests/alt.csv", "tests/neu.csv", *args,
-                           "--format", "json"], cwd=ROOT, capture_output=True,
-                          text=True, encoding="utf-8")
-    return proc.returncode, json.loads(proc.stdout)
+    rc, out, _ = run("tests/alt.csv", "tests/neu.csv", *args, "--format", "json")
+    return rc, json.loads(out)
 
 
 def without_paths(report):
@@ -78,12 +65,11 @@ class SameAsCommandLineTests(unittest.TestCase):
         self.assertEqual(result["report"]["match_count"], 0)
 
     def test_exports_match_cli_files(self):
-        import tempfile
         with tempfile.TemporaryDirectory() as d:
             a, m = os.path.join(d, "a.csv"), os.path.join(d, "m.csv")
-            subprocess.run([sys.executable, SCRIPT, "tests/alt.csv", "tests/neu.csv",
-                            "--export-added", a, "--export-merged", m],
-                           cwd=ROOT, capture_output=True, check=True)
+            rc, _, _ = run("tests/alt.csv", "tests/neu.csv", "--export-added", a,
+                           "--export-merged", m)
+            self.assertEqual(rc, 0)
             result = ui({"export_added": True, "export_merged": True})
             with open(a, encoding="utf-8", newline="") as f:
                 self.assertEqual(result["exports"]["added"]["csv"], f.read())

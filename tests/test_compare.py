@@ -9,37 +9,18 @@ Ausführen (im Projektverzeichnis):  python3 -m unittest discover -s tests -v
 import csv
 import json
 import os
-import subprocess
-import sys
 import tempfile
 import unittest
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCRIPT = os.path.join(ROOT, "compare_csv.py")
-ALT = os.path.join(ROOT, "tests", "alt.csv")
-NEU = os.path.join(ROOT, "tests", "neu.csv")
-PROBLEME = os.path.join(ROOT, "tests", "probleme.csv")
-PASSWOERTER = os.path.join(ROOT, "tests", "passwoerter.csv")
+from tests.helpers import fixture_path, run, run_json, titles
+
+ALT = fixture_path("alt.csv")
+NEU = fixture_path("neu.csv")
+PROBLEME = fixture_path("probleme.csv")
+PASSWOERTER = fixture_path("passwoerter.csv")
 
 HEADER = ["Group", "Title", "Username", "Password", "URL", "Notes", "TOTP",
           "Icon", "Last Modified", "Created"]
-
-
-def run(*args):
-    """Startet das Skript und gibt (returncode, stdout, stderr) zurück."""
-    proc = subprocess.run([sys.executable, SCRIPT, *args], cwd=ROOT,
-                          capture_output=True, text=True, encoding="utf-8")
-    return proc.returncode, proc.stdout, proc.stderr
-
-
-def run_json(*args):
-    """Startet das Skript mit --format json und gibt (returncode, objekt) zurück."""
-    rc, out, _ = run(*args, "--format", "json")
-    return rc, json.loads(out)
-
-
-def titles(entries):
-    return sorted(e["title"] for e in entries)
 
 
 def write_csv_file(path, rows, header=HEADER, encoding="utf-8"):

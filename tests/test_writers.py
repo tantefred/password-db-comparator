@@ -3,28 +3,19 @@ import csv
 import dataclasses
 import json
 import os
-import subprocess
-import sys
 import tempfile
 import unittest
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
-
-from csvcompare.columns import CORE_NAMES, UNMAPPED_KEY  # noqa: E402
-from csvcompare.importers import load_any  # noqa: E402
-from csvcompare.service import analyze  # noqa: E402
-from csvcompare.writers import (DEFAULT_WRITER, KEEPASS_CSV_WRITER, has_data,  # noqa: E402
-                                loss_lines, lost_data)
+from tests.helpers import read_fixture, run
+from csvcompare.columns import CORE_NAMES, UNMAPPED_KEY
+from csvcompare.importers import load_any
+from csvcompare.service import analyze
+from csvcompare.writers import (DEFAULT_WRITER, KEEPASS_CSV_WRITER, has_data, loss_lines,
+                                lost_data)
 
 
-def read(name):
-    with open(os.path.join(ROOT, "tests", name), encoding="utf-8", newline="") as f:
-        return f.read()
-
-
-KP_A, KP_B = read("keepassium_a.csv"), read("keepassium_b.csv")
-BW_JSON, BW_CSV = read("bitwarden.json"), read("bitwarden.csv")
+KP_A, KP_B = read_fixture("keepassium_a.csv"), read_fixture("keepassium_b.csv")
+BW_JSON, BW_CSV = read_fixture("bitwarden.json"), read_fixture("bitwarden.csv")
 
 
 class WriterTests(unittest.TestCase):
@@ -116,14 +107,9 @@ class LostDataTests(unittest.TestCase):
 
 
 class ExportMessageTests(unittest.TestCase):
-    def run_cli(self, *args):
-        proc = subprocess.run([sys.executable, os.path.join(ROOT, "compare_csv.py"), *args],
-                              cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
-        return proc.returncode, proc.stdout, proc.stderr
-
     def test_terminal_names_what_the_export_loses(self):
         with tempfile.TemporaryDirectory() as d:
-            rc, out, _ = self.run_cli("tests/keepassium_a.csv", "tests/bitwarden.json",
+            rc, out, _ = run("tests/keepassium_a.csv", "tests/bitwarden.json",
                                       "--export-merged", os.path.join(d, "m.csv"))
         self.assertEqual(rc, 0)
         self.assertIn("Im KeePass-CSV nicht speicherbar (Anzahl betroffener Einträge): "
@@ -132,7 +118,7 @@ class ExportMessageTests(unittest.TestCase):
 
     def test_loss_line_comes_before_the_blank_line(self):
         with tempfile.TemporaryDirectory() as d:
-            _, out, _ = self.run_cli("tests/keepassium_a.csv", "tests/bitwarden.json",
+            _, out, _ = run("tests/keepassium_a.csv", "tests/bitwarden.json",
                                      "--export-merged", os.path.join(d, "m.csv"))
         lines = out.split("\n")
         i = next(n for n, line in enumerate(lines) if "nicht speicherbar" in line)
@@ -140,13 +126,13 @@ class ExportMessageTests(unittest.TestCase):
 
     def test_export_added_reports_losses_too(self):
         with tempfile.TemporaryDirectory() as d:
-            _, out, _ = self.run_cli("tests/keepassium_a.csv", "tests/bitwarden.json",
+            _, out, _ = run("tests/keepassium_a.csv", "tests/bitwarden.json",
                                      "--export-added", os.path.join(d, "a.csv"))
         self.assertIn("nicht speicherbar", out)          # die Notiz ist „note“, nur im Bitwarden-Export
 
     def test_no_message_when_nothing_is_lost(self):
         with tempfile.TemporaryDirectory() as d:
-            _, out, _ = self.run_cli("tests/keepassium_a.csv", "tests/keepassium_b.csv",
+            _, out, _ = run("tests/keepassium_a.csv", "tests/keepassium_b.csv",
                                      "--export-merged", os.path.join(d, "m.csv"),
                                      "--export-added", os.path.join(d, "a.csv"))
         self.assertNotIn("nicht speicherbar", out)
@@ -154,14 +140,14 @@ class ExportMessageTests(unittest.TestCase):
     def test_losses_only_count_rows_that_are_exported(self):
         # Der gelöschte Eintrag (Löschdatum) steht im Papierkorb und wird nicht exportiert.
         with tempfile.TemporaryDirectory() as d:
-            _, out, _ = self.run_cli("tests/bitwarden.json", "tests/bitwarden.json",
+            _, out, _ = run("tests/bitwarden.json", "tests/bitwarden.json",
                                      "--export-merged", os.path.join(d, "m.csv"))
         self.assertNotIn("Löschdatum", out)
         self.assertIn("Passwort-Verlauf (1)", out)
 
     def test_json_mode_sends_the_message_to_stderr(self):
         with tempfile.TemporaryDirectory() as d:
-            rc, out, err = self.run_cli("tests/keepassium_a.csv", "tests/bitwarden.json",
+            rc, out, err = run("tests/keepassium_a.csv", "tests/bitwarden.json",
                                         "--format", "json", "--export-merged",
                                         os.path.join(d, "m.csv"))
         self.assertEqual(json.loads(out)["mode"], "compare")

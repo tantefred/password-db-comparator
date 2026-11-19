@@ -1,36 +1,15 @@
 """Tests für den Datenbanknamen am Anfang der KeePassium-Gruppenpfade."""
 import csv
-import json
 import os
-import subprocess
-import sys
 import tempfile
 import unittest
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
+from tests.helpers import ROOT, run, run_json, titles
+from csvcompare.importers.keepass_csv import strip_db_prefix
+from csvcompare.service import analyze
 
-from csvcompare.importers.keepass_csv import strip_db_prefix  # noqa: E402
-from csvcompare.service import analyze  # noqa: E402
-
-SCRIPT = os.path.join(ROOT, "compare_csv.py")
 A = os.path.join("tests", "keepassium_a.csv")
 B = os.path.join("tests", "keepassium_b.csv")
-
-
-def run(*args):
-    proc = subprocess.run([sys.executable, SCRIPT, *args], cwd=ROOT, capture_output=True,
-                          text=True, encoding="utf-8")
-    return proc.returncode, proc.stdout, proc.stderr
-
-
-def run_json(*args):
-    rc, out, _ = run(*args, "--format", "json")
-    return rc, json.loads(out)
-
-
-def titles(entries):
-    return sorted(e["title"] for e in entries)
 
 
 class StripFunctionTests(unittest.TestCase):

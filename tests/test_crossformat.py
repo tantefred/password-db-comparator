@@ -7,21 +7,14 @@ import sys
 import tempfile
 import unittest
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
-
-from csvcompare.compare import comparable_columns  # noqa: E402
-from csvcompare.importers import load_any  # noqa: E402
-from csvcompare.service import analyze  # noqa: E402
+from tests.helpers import ROOT, read_fixture
+from csvcompare.compare import comparable_columns
+from csvcompare.importers import load_any
+from csvcompare.service import analyze
 
 
-def read(name):
-    with open(os.path.join(ROOT, "tests", name), encoding="utf-8", newline="") as f:
-        return f.read()
-
-
-KP_A, KP_B = read("keepassium_a.csv"), read("keepassium_b.csv")
-BW_JSON, BW_CSV = read("bitwarden.json"), read("bitwarden.csv")
+KP_A, KP_B = read_fixture("keepassium_a.csv"), read_fixture("keepassium_b.csv")
+BW_JSON, BW_CSV = read_fixture("bitwarden.json"), read_fixture("bitwarden.csv")
 BW_DATA = json.loads(BW_JSON)
 
 

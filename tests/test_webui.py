@@ -7,19 +7,11 @@ import sys
 import threading
 import unittest
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
+from tests.helpers import ROOT, read_fixture
+from csvcompare.service import analyze
+from csvcompare.webui import make_server
 
-from csvcompare.service import analyze  # noqa: E402
-from csvcompare.webui import make_server  # noqa: E402
-
-
-def read(name):
-    with open(os.path.join(ROOT, "tests", name), encoding="utf-8", newline="") as f:
-        return f.read()
-
-
-ALT, NEU = read("alt.csv"), read("neu.csv")
+ALT, NEU = read_fixture("alt.csv"), read_fixture("neu.csv")
 TOKEN = "test-token"
 
 
@@ -125,8 +117,8 @@ class ServerTests(ServerTestCase):
 
 class FormatTests(ServerTestCase):
     def test_json_and_csv_exports_can_be_compared(self):
-        payload = {"old": {"name": "kp.csv", "text": read("keepassium_a.csv")},
-                   "new": {"name": "bw.json", "text": read("bitwarden.json")}, "options": {}}
+        payload = {"old": {"name": "kp.csv", "text": read_fixture("keepassium_a.csv")},
+                   "new": {"name": "bw.json", "text": read_fixture("bitwarden.json")}, "options": {}}
         status, _, body = self.post(payload)
         self.assertEqual(status, 200)
         files = json.loads(body)["report"]["files"]
@@ -136,7 +128,7 @@ class FormatTests(ServerTestCase):
 
     def test_encrypted_bitwarden_export_is_a_clear_400(self):
         payload = {"old": {"name": "a.json", "text": json.dumps({"encrypted": True, "data": "x"})},
-                   "new": {"name": "b.csv", "text": read("keepassium_a.csv")}, "options": {}}
+                   "new": {"name": "b.csv", "text": read_fixture("keepassium_a.csv")}, "options": {}}
         status, _, body = self.post(payload)
         self.assertEqual(status, 400)
         self.assertIn("verschlüsselter Bitwarden-Export", json.loads(body)["error"])
@@ -247,7 +239,7 @@ class StaticPageTests(unittest.TestCase):
             self.skipTest("node ist nicht installiert")
         from csvcompare.importers import load_any
         func = re.search(r"function sniffFormat\(text\) \{.*?\n\}", self.html, re.S).group(0)
-        samples = {name: read(name) for name in ("alt.csv", "keepassium_a.csv", "bitwarden.json",
+        samples = {name: read_fixture(name) for name in ("alt.csv", "keepassium_a.csv", "bitwarden.json",
                                                   "bitwarden.csv")}
         samples["bom.json"] = chr(0xFEFF) + samples["bitwarden.json"]
         samples["bom.csv"] = chr(0xFEFF) + samples["bitwarden.csv"]
