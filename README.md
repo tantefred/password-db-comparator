@@ -12,12 +12,21 @@ python3 compare_csv.py tests/alt.csv tests/neu.csv
 | `--show-secrets` | Passwörter/TOTP im Klartext anzeigen (sonst maskiert) |
 | `-i`, `--ignore SPALTE...` | Spalten beim Vergleich ignorieren, z. B. `--ignore Icon "Last Modified"` |
 | `-s`, `--search TEXT` | Nur Einträge zeigen, deren Gruppe/Titel/Username `TEXT` enthält, samt Status (nicht mit `--export-added` / `--export-merged` kombinierbar) |
+| `--hide-trash` | Papierkorb-Gruppen komplett ausblenden (Vergleich, Suche und Exporte) |
+| `-g`, `--group TEXT` | Nur Einträge betrachten, deren Gruppenpfad `TEXT` enthält (Groß-/Kleinschreibung egal) |
 | `--no-detect-moves` | Verschobene/umbenannte Einträge nicht erkennen (sie erscheinen dann als „entfernt“ plus „hinzugefügt“) |
 | `--export-added [DATEI]` | Neu hinzugefügte Einträge als CSV schreiben (Standard: `neue_eintraege.csv`; Papierkorb-Gruppen werden ausgelassen; verschobene Einträge zählen nicht als neu) |
 | `--export-merged [DATEI]` | Zusammengeführte CSV schreiben (Standard: `merged.csv`): alle Einträge beider Dateien, bei Unterschieden die jeweils neuere Version; Papierkorb-Gruppen werden ausgelassen (nicht mit `--search` kombinierbar) |
 
 Geänderte Einträge werden danach gruppiert, in welcher Datei die jeweils
 aktuellere Version liegt.
+
+## Filter
+
+`--hide-trash` und `--group` filtern beide Dateien, **bevor** verglichen wird, und gelten
+damit auch für Suche und Exporte. Dadurch wirkt ein Eintrag, der in den Papierkorb
+oder aus der gefilterten Gruppe heraus verschoben wurde, als „nur in einer Datei“
+vorhanden. Beide Filter lassen sich kombinieren.
 
 ## Merge-Export
 
