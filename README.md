@@ -27,8 +27,9 @@ python3 compare_csv.py tests/alt.csv tests/neu.csv
 | `--port N` | Port für `--ui` (Standard: 8765; bei belegtem Port wird der nächste freie genommen) |
 | `--no-browser` | Mit `--ui` den Browser nicht automatisch öffnen |
 | `--no-detect-moves` | Verschobene/umbenannte Einträge nicht erkennen (sie erscheinen dann als „entfernt“ plus „hinzugefügt“) |
-| `--export-added [DATEI]` | Neu hinzugefügte Einträge als KeePass-CSV schreiben (Standard: `neue_eintraege.csv`; Papierkorb-Gruppen werden ausgelassen; verschobene Einträge zählen nicht als neu) |
-| `--export-merged [DATEI]` | Zusammengeführte KeePass-CSV schreiben (Standard: `merged.csv`): alle Einträge beider Dateien, bei Unterschieden die jeweils neuere Version; Papierkorb-Gruppen werden ausgelassen (nicht mit `--search` kombinierbar) |
+| `--export-added [DATEI]` | Neu hinzugefügte Einträge schreiben (Standard: `neue_eintraege.csv` bzw. `.json`, je nach `--export-format`; Papierkorb-Gruppen werden ausgelassen; verschobene Einträge zählen nicht als neu) |
+| `--export-merged [DATEI]` | Zusammengeführte Datei schreiben (Standard: `merged.csv` bzw. `.json`): alle Einträge beider Dateien, bei Unterschieden die jeweils neuere Version; Papierkorb-Gruppen werden ausgelassen (nicht mit `--search` kombinierbar) |
+| `--export-format FORMAT` | Format der Exporte: `keepass-csv` (Standard) oder `bitwarden-json` (unverschlüsselt, zum Import in Bitwarden/Vaultwarden); nur zusammen mit einem Export |
 
 Geänderte Einträge werden danach gruppiert, in welcher Datei die jeweils
 aktuellere Version liegt.
@@ -136,22 +137,34 @@ Jedes Objekt hat `mode`, `files` (Name, Pfad, Anzahl, `format`, `db_prefix`, `no
 Einträge werden als `{"group", "title", "username"}` ausgegeben. Passwörter und TOTP
 bleiben maskiert (`"masked": true`), außer mit `--show-secrets`.
 
-## Merge-Export
+## Exporte und Zielformate
 
-`--export-merged` schreibt eine CSV, die alle Einträge beider Dateien enthält.
+`--export-merged` schreibt eine Datei, die alle Einträge beider Dateien enthält.
 Gibt es einen Eintrag in beiden Dateien, wird die Version mit dem neueren
 `Last Modified` übernommen (auch bei verschobenen/umbenannten Einträgen). Ist die
 Aktualität nicht bestimmbar (gleicher oder fehlender Zeitstempel) und der Inhalt
 verschieden, wird die Version aus der zweiten Datei genommen und der Eintrag als
-Konflikt aufgelistet. Die Datei lässt sich in KeePassium importieren; sie enthält
-Passwörter im Klartext.
+Konflikt aufgelistet. Die Datei enthält Passwörter im Klartext.
 
-Geschrieben wird immer das **KeePass-CSV** mit seinen 10 Spalten, auch wenn die Einträge aus
-Bitwarden stammen. Was dieses Format nicht speichern kann (Favorit, Typ, eigene Felder, weitere
-URLs, Passwort-Verlauf, Passkeys …), nennt das Skript nach dem Export mit der Zahl der betroffenen
-Einträge, im Terminal wie in der Oberfläche. Intern behält jeder Eintrag **alle** Spalten und
-sein Originalformat; Writer für weitere Zielformate (Bitwarden-CSV/-JSON) lassen sich über die
-`writers.py` ergänzen, ohne Daten zu verlieren.
+Das **Zielformat** wählst du mit `--export-format` (in der Oberfläche: „Format der Exporte“),
+unabhängig vom Format der Eingabedateien:
+
+| Format | Datei | Import in |
+|---|---|---|
+| `keepass-csv` (Standard) | `.csv`, 10 Spalten; der Datenbankname wird den Gruppenpfaden wieder vorangestellt | KeePassium, KeePassXC |
+| `bitwarden-json` | `.json`, unverschlüsselt (`"encrypted": false`); Gruppen werden zu Ordnern (`Web/Shops` = verschachtelt) | Bitwarden/Vaultwarden, Dateityp „Bitwarden (json)“ |
+
+Beim **Bitwarden-JSON** behalten Einträge, die aus einem Bitwarden-JSON stammen, **alles**,
+was dort steht: Passwort-Verlauf, Passkeys, Sammlungen, Feldtypen, URL-Abgleichsmodus und ihre
+IDs; die aktuellen Spaltenwerte (Passwort, Notiz, Zeiten …) werden darübergelegt. Einträge aus
+KeePass-CSV werden aus ihren Spalten aufgebaut, und nur das Icon geht verloren. Stammt ein Eintrag
+aus einem Bitwarden-CSV, stehen die eigenen Felder dort als Text; sie werden zeilenweise exakt
+zerlegt, bei `Name: Wert Name: Wert` in einer Zeile nur geschätzt (das meldet das Skript). Neue
+IDs werden aus dem Inhalt abgeleitet, dieselbe Eingabe ergibt also dieselbe Datei.
+
+Was das gewählte Format nicht speichern kann (z. B. beim KeePass-CSV Favorit, Typ, eigene Felder,
+weitere URLs, Passwort-Verlauf, Passkeys), nennt das Skript nach dem Export mit der Zahl der
+betroffenen Einträge, im Terminal wie in der Oberfläche.
 
 ## Verschobene und umbenannte Einträge
 
@@ -187,8 +200,9 @@ steht der Wert aus Datei 1 neben dem aus Datei 2. Unter dem Ergebnis steht, wie 
 im Terminal aufrufst, und der JSON-Bericht lässt sich speichern.
 
 Die Oberfläche nimmt CSV- und JSON-Dateien an, zeigt das erkannte Format an jeder Datei, nennt die
-Hinweise der Importer und die ausgelassenen Spalten und sagt bei Exporten, was im KeePass-CSV
-verloren geht.
+Hinweise der Importer und die ausgelassenen Spalten und sagt bei Exporten, was im gewählten
+Format verloren geht. Das Format der Exporte (KeePass-CSV oder Bitwarden-JSON) wählst du im
+Bereich „Exportieren“.
 
 Beide Wege nutzen dieselbe Logik und dieselbe Optionsprüfung. Ein Test stellt sicher, dass
 die Oberfläche für gleiche Einstellungen exakt den Bericht der Kommandozeile liefert.
@@ -203,7 +217,7 @@ die Oberfläche für gleiche Einstellungen exakt den Bericht der Kommandozeile l
   lokalen Server anspricht.
 - Inhalte aus den CSV-Dateien werden nie als HTML eingesetzt.
 - Passwörter und TOTP bleiben verborgen, außer du aktivierst „Passwörter im Klartext zeigen“.
-  Die exportierten CSV-Dateien enthalten Passwörter im Klartext.
+  Die exportierten Dateien enthalten Passwörter im Klartext.
 - Eine Anfrage darf höchstens 64 MiB groß sein.
 
 Mit Strg+C im Terminal beendest du die Oberfläche.
@@ -222,16 +236,17 @@ einer Anfrage: **einlesen → Einträge bilden → vergleichen → ausgeben**.
 | `compare.py` | der Vergleich (`compare_files`): Verschoben-Erkennung, Aktualität, verglichene Spalten |
 | `search.py` | Suche nach einem Eintrag samt Status |
 | `analysis.py` | Statistik, Prüfung (`--check`) und Passwortqualität (`--password-check`) |
-| `exports.py`, `writers.py` | die beiden Exporte und das Zielformat samt Meldung „nicht speicherbar“ |
+| `exports.py` | die beiden Exporte: Auswahl der Einträge, Meldungen, Dateinamen |
+| `writers/` | die Zielformate (KeePass-CSV, Bitwarden-JSON) samt Meldung „nicht speicherbar“ |
 | `render_text.py`, `render_json.py` | Textausgabe bzw. JSON-Berichte (`build_report` wählt den Bericht) |
 | `display.py` | Darstellung für Menschen: Maskierung, Zeitabstände, Dateinamen |
 | `cli.py` | Optionen, Prüfung der Kombinationen, Ablauf im Terminal |
 | `service.py` | derselbe Ablauf aus Dateiinhalt und Optionen, ohne Pfade (für die Oberfläche) |
 | `webui.py`, `web/index.html` | lokaler Server und die Oberfläche selbst |
 
-Ein weiteres Zielformat (z. B. Bitwarden-JSON) bekommt in `writers.py` einen eigenen Writer
-mit den Methoden `text` und `write` und der Liste der Spalten, die er speichern kann; die
-Verlustmeldung der Exporte funktioniert dann automatisch.
+Ein weiteres Zielformat (z. B. Bitwarden-CSV) bekommt in `writers/` ein eigenes Modul mit einem
+Writer, der `text` ausfüllt und die Spalten nennt, die er speichern kann; danach wird er in
+`WRITERS` eingetragen. Die Verlustmeldung der Exporte funktioniert dann automatisch.
 
 ## Tests
 
