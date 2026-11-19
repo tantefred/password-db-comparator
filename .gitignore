@@ -13,3 +13,6 @@ __pycache__/
 # nur die Beispieldaten in tests/ sind erlaubt
 *.csv
 !tests/*.csv
+
+# Werkzeuge
+.ruff_cache/
