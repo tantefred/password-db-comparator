@@ -243,3 +243,18 @@ Die Tests starten das Skript wie ein Nutzer über die Kommandozeile und prüfen 
 direkt; gemeinsame Hilfen stehen in `tests/helpers.py`. Sie verwenden erfundene Beispieldaten
 in `tests/` (nur Standardbibliothek, kein Netzwerk): dieselben Einträge als KeePassium-CSV
 (`keepassium_a/b.csv`), Bitwarden-JSON (`bitwarden.json`) und Bitwarden-CSV (`bitwarden.csv`).
+
+## Entwicklung
+
+Das Programm selbst braucht keine Pakete. Für die Entwicklung gibt es Linter und Formatter in einem
+Werkzeug, [ruff](https://docs.astral.sh/ruff/):
+
+```
+pip install -r requirements-dev.txt   # einmalig
+ruff check .                          # Linter: Fehlerquellen, ungenutzte Importe, Importreihenfolge …
+ruff check . --fix                    # behebt, was sich gefahrlos beheben lässt
+ruff format .                         # Formatter: einheitlicher Code-Stil
+```
+
+Die Einstellungen (Zeilenlänge 100, Regelauswahl) stehen in `pyproject.toml`. `tests/test_style.py`
+führt beide Prüfungen mit aus und wird übersprungen, wenn ruff nicht installiert ist.
