@@ -7,7 +7,7 @@ from .columns import ALL_NAMES, KEY_NAMES, VALUE_NAMES
 from .compare import compare_files
 from .display import display_names
 from .entries import entries_from_rows, is_trash
-from .exports import prepare_added, prepare_merged
+from .exports import export_path, pick_writer, prepare_added, prepare_merged
 from .importers import CsvError, read_file
 from .render_json import build_report, dump
 from .render_text import (
@@ -20,6 +20,7 @@ from .render_text import (
     print_summary,
 )
 from .search import search
+from .writers import WRITERS
 
 
 def build_parser():
@@ -137,21 +138,27 @@ def build_parser():
     parser.add_argument(
         "--export-added",
         nargs="?",
-        const="neue_eintraege.csv",
+        const=True,
         metavar="DATEI",
-        help="Neu hinzugefügte Einträge als CSV schreiben "
-        "(Standard: neue_eintraege.csv). Enthält Passwörter im Klartext! "
+        help="Neu hinzugefügte Einträge schreiben (Standard: neue_eintraege.csv bzw. .json, "
+        "je nach --export-format). Enthält Passwörter im Klartext! "
         "Einträge aus Papierkorb-Gruppen werden ausgelassen.",
     )
     parser.add_argument(
         "--export-merged",
         nargs="?",
-        const="merged.csv",
+        const=True,
         metavar="DATEI",
-        help="Zusammengeführte CSV schreiben: alle Einträge beider Dateien, bei "
-        "Unterschieden die jeweils neuere Version (Standard: merged.csv). "
-        "Enthält Passwörter im Klartext! Papierkorb-Gruppen werden ausgelassen. "
-        "Nicht kombinierbar mit --search.",
+        help="Zusammengeführte Datei schreiben: alle Einträge beider Dateien, bei "
+        "Unterschieden die jeweils neuere Version (Standard: merged.csv bzw. .json, "
+        "je nach --export-format). Enthält Passwörter im Klartext! "
+        "Papierkorb-Gruppen werden ausgelassen. Nicht kombinierbar mit --search.",
+    )
+    parser.add_argument(
+        "--export-format",
+        choices=tuple(WRITERS),
+        help="Format der Exporte: keepass-csv (Standard) oder bitwarden-json "
+        "(unverschlüsselt, zum Import in Bitwarden/Vaultwarden).",
     )
     return parser
 
@@ -182,6 +189,8 @@ def check_combinations(parser, args):
         parser.error(f"{modes[0]} und {exports[0]} können nicht kombiniert werden.")
     if args.search is not None and not args.search.strip():
         parser.error("--search benötigt einen nicht-leeren Suchbegriff.")
+    if args.export_format and not exports:
+        parser.error("--export-format braucht --export-added oder --export-merged.")
 
 
 def parse_ignored(parser, args):
@@ -251,11 +260,16 @@ def log_to_stderr(*args, **kwargs):
 
 def run_exports(args, cmp, log):
     """Schreibt die angeforderten Exporte und meldet, was dabei passiert ist."""
-    requested = ((args.export_added, prepare_added), (args.export_merged, prepare_merged))
-    for path, prepare in requested:
-        if not path:
+    writer = pick_writer(args.export_format)
+    requested = (
+        (args.export_added, "added", prepare_added),
+        (args.export_merged, "merged", prepare_merged),
+    )
+    for value, kind, prepare in requested:
+        if not value:
             continue
-        export = prepare(cmp, path)
+        path = export_path(value, kind, writer)
+        export = prepare(cmp, path, writer)
         try:
             export.writer.write(path, export.rows)
         except OSError as e:

@@ -8,7 +8,7 @@ funktionieren.
 import shlex
 
 from .cli import build_comparison, build_parser, validate_args
-from .exports import prepare_added, prepare_merged
+from .exports import export_path, pick_writer, prepare_added, prepare_merged
 from .importers import CsvError, load_any
 from .render_json import build_report, entry_ref
 
@@ -70,11 +70,15 @@ def mode_arguments(options, mode):
 
 def export_arguments(options):
     """Exporte kommen zuletzt: ihre Optionen ohne Wert dürfen kein Argument verschlucken."""
-    return [
+    flags = [
         flag
         for key, flag in (("export_added", "--export-added"), ("export_merged", "--export-merged"))
         if options.get(key)
     ]
+    export_format = options.get("export_format")
+    if flags and export_format:
+        flags.insert(0, f"--export-format={export_format}")
+    return flags
 
 
 def options_to_argv(options):
@@ -129,12 +133,14 @@ def analyze(old_name, old_text, new_name, new_text, options):
     report, status = build_report(args, cmp)
 
     exports = {}
-    if args.export_added:
-        exports["added"] = export_payload(prepare_added(cmp, args.export_added), args.export_added)
-    if args.export_merged:
-        exports["merged"] = export_payload(
-            prepare_merged(cmp, args.export_merged), args.export_merged
-        )
+    writer = pick_writer(args.export_format)
+    for value, kind, prepare in (
+        (args.export_added, "added", prepare_added),
+        (args.export_merged, "merged", prepare_merged),
+    ):
+        if value:
+            path = export_path(value, kind, writer)
+            exports[kind] = export_payload(prepare(cmp, path, writer), path)
 
     command = shlex.join(["python3", "compare_csv.py", old_name, new_name, *argv])
     return {"report": report, "status": status, "command": command, "exports": exports}

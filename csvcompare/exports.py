@@ -10,7 +10,7 @@ from .columns import MODIFIED
 from .display import plural
 from .entries import entry_label, is_trash
 from .values import differing_columns, parse_time
-from .writers import DEFAULT_WRITER, loss_lines, lost_data
+from .writers import DEFAULT_WRITER, WRITERS, loss_lines, lost_data
 
 
 @dataclass
@@ -60,6 +60,20 @@ def merge_entries(cmp):
 
     rows.sort(key=lambda row: (row["Group"], row["Title"], row["Username"]))
     return rows, stats, conflicts
+
+
+# Dateinamen, wenn bei --export-added/--export-merged kein Pfad angegeben ist
+DEFAULT_NAMES = {"added": "neue_eintraege", "merged": "merged"}
+
+
+def pick_writer(format_id=None):
+    """Der Writer zur Kennung (z. B. ``bitwarden-json``); ohne Angabe das KeePass-CSV."""
+    return WRITERS[format_id or DEFAULT_WRITER.format]
+
+
+def export_path(requested, kind, writer):
+    """Zieldatei: der angegebene Pfad, sonst ein Standardname mit passender Endung."""
+    return requested if isinstance(requested, str) else DEFAULT_NAMES[kind] + writer.extension
 
 
 def db_prefix_for_export(cmp):
