@@ -2,7 +2,7 @@
 
 from .common import is_excluded, label
 from .compare import build_merged
-from .csvio import write_csv
+from .writers import DEFAULT_WRITER, loss_lines, lost_data
 
 
 def restore_db_prefix(rows, prefix):
@@ -61,17 +61,26 @@ def merged_export(cmp):
     return export, lines, conflicts
 
 
-def export_added(cmp, path, log):
-    """Schreibt die nur in der zweiten Datei vorhandenen Einträge in eine CSV-Datei."""
+def loss_report(rows, writer=DEFAULT_WRITER):
+    """Was das Zielformat bei diesen Einträgen nicht speichern kann: (zeilen, daten)."""
+    lost = lost_data(rows, writer)
+    return loss_lines(lost, writer), lost
+
+
+def export_added(cmp, path, log, writer=DEFAULT_WRITER):
+    """Schreibt die nur in der zweiten Datei vorhandenen Einträge in eine Datei."""
     rows, message = added_export(cmp)
-    write_csv(path, rows)
-    log(message.format(path=path))
+    writer.write(path, rows)
+    log(message.format(path=path).rstrip("\n"))
+    for line in loss_report(rows, writer)[0]:
+        log(line)
+    log()
 
 
-def export_merged(cmp, path, log):
-    """Schreibt die zusammengeführten Einträge in eine CSV-Datei."""
+def export_merged(cmp, path, log, writer=DEFAULT_WRITER):
+    """Schreibt die zusammengeführten Einträge in eine Datei."""
     rows, lines, _ = merged_export(cmp)
-    write_csv(path, rows)
-    for line in lines:
+    writer.write(path, rows)
+    for line in lines + loss_report(rows, writer)[0]:
         log(line.format(path=path))
     log()

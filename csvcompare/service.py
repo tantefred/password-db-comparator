@@ -9,8 +9,9 @@ import shlex
 
 from .cli import build_parser, filter_entries, validate_args
 from .compare import compare_files
-from .csvio import CsvError, csv_text, entries_from_rows, read_text
-from .exports import added_export, merged_export
+from .csvio import CsvError, entries_from_rows, read_text
+from .exports import added_export, loss_report, merged_export
+from .writers import DEFAULT_WRITER
 from .render_json import base_report, entry_ref
 from .report import build_report
 
@@ -112,15 +113,20 @@ def analyze(old_name, old_text, new_name, new_text, options):
     exports = {}
     if args.export_added:
         rows, message = added_export(cmp)
-        exports["added"] = {"filename": args.export_added, "csv": csv_text(rows),
+        loss_lines, lost = loss_report(rows)
+        exports["added"] = {"filename": args.export_added, "csv": DEFAULT_WRITER.text(rows),
                             "entries": len(rows),
-                            "lines": [message.format(path=args.export_added).strip()]}
+                            "lines": [message.format(path=args.export_added).strip()] + loss_lines,
+                            "lost": lost, "target": DEFAULT_WRITER.label}
     if args.export_merged:
         rows, lines, conflicts = merged_export(cmp)
-        exports["merged"] = {"filename": args.export_merged, "csv": csv_text(rows),
+        loss_lines, lost = loss_report(rows)
+        exports["merged"] = {"filename": args.export_merged, "csv": DEFAULT_WRITER.text(rows),
                              "entries": len(rows),
-                             "lines": [ln.format(path=args.export_merged) for ln in lines],
-                             "conflicts": [entry_ref(k) for k in conflicts]}
+                             "lines": [ln.format(path=args.export_merged)
+                                       for ln in lines + loss_lines],
+                             "conflicts": [entry_ref(k) for k in conflicts],
+                             "lost": lost, "target": DEFAULT_WRITER.label}
 
     command = shlex.join(["python3", "compare_csv.py", old_name, new_name, *argv])
     return {"report": report, "status": status, "command": command, "exports": exports}
