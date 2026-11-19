@@ -97,6 +97,17 @@ def is_excluded(row):
     return any(p in g for p in EXCLUDE_GROUP_PATTERNS)
 
 
+def write_csv(path, rows):
+    """Schreibt Einträge im KeePassium-Spaltenformat (wieder importierbar)."""
+    try:
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=EXPECTED, extrasaction="ignore")
+            w.writeheader()
+            w.writerows(rows)
+    except OSError as e:
+        sys.exit(f"Fehler: '{path}' kann nicht geschrieben werden: {e}")
+
+
 def display_names(path1, path2):
     """Dateinamen für die Ausgabe; bei gleichem Namen der volle Pfad."""
     n1, n2 = os.path.basename(path1), os.path.basename(path2)
@@ -332,14 +343,7 @@ def main():
     if args.export_added:
         export = [k for k in added if not is_excluded(new[k])]
         skipped = len(added) - len(export)
-        try:
-            with open(args.export_added, "w", newline="", encoding="utf-8") as f:
-                w = csv.DictWriter(f, fieldnames=EXPECTED, extrasaction="ignore")
-                w.writeheader()
-                for k in export:
-                    w.writerow(new[k])
-        except OSError as e:
-            sys.exit(f"Fehler: '{args.export_added}' kann nicht geschrieben werden: {e}")
+        write_csv(args.export_added, [new[k] for k in export])
         print(f"{len(export)} neue Einträge nach '{args.export_added}' exportiert "
               f"({skipped} aus Papierkorb ausgelassen; Datei enthält Passwörter im Klartext).\n")
 
