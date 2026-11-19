@@ -9,7 +9,7 @@ import shlex
 
 from .cli import build_parser, filter_entries, validate_args
 from .compare import compare_files
-from .csvio import CsvError, csv_text, load_text
+from .csvio import CsvError, csv_text, entries_from_rows, read_text
 from .exports import added_export, merged_export
 from .render_json import base_report, entry_ref
 from .report import build_report
@@ -49,6 +49,8 @@ def options_to_argv(options):
         argv.append("--hide-trash")
     if options.get("detect_moves") is False:
         argv.append("--no-detect-moves")
+    if options.get("keep_db_name"):
+        argv.append("--keep-db-name")
     if options.get("show_secrets"):
         argv.append("--show-secrets")
 
@@ -91,16 +93,18 @@ def analyze(old_name, old_text, new_name, new_text, options):
     ignored = validate_args(parser, args)
 
     try:
-        old = load_text(old_text, old_name)
-        new = load_text(new_text, new_name)
+        src_old = read_text(old_text, old_name, keep_db_name=args.keep_db_name)
+        src_new = read_text(new_text, new_name, keep_db_name=args.keep_db_name)
     except CsvError as e:
         raise UsageError(str(e)) from None
-    old, new = filter_entries(parser, args, old, new)
+    old, new = filter_entries(parser, args, entries_from_rows(src_old.rows),
+                              entries_from_rows(src_new.rows))
 
     n1, n2 = old_name, new_name
     if n1 == n2:  # gleicher Dateiname: im Bericht unterscheidbar machen
         n1, n2 = f"{old_name} (1)", f"{new_name} (2)"
-    cmp = compare_files(old, new, n1, n2, ignored, detect_moves=not args.no_detect_moves)
+    cmp = compare_files(old, new, n1, n2, ignored, detect_moves=not args.no_detect_moves,
+                        src_old=src_old, src_new=src_new)
     base = base_report(cmp, old_name, new_name, args.hide_trash, args.group,
                        not args.no_detect_moves)
     report, status = build_report(args, cmp, base)

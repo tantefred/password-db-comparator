@@ -142,6 +142,8 @@ class Comparison:
     added: list      # nur in der zweiten Datei (ohne verschobene)
     moves: list      # (alter_key, neuer_key, sicherheit)
     groups: dict     # 'old_outdated' | 'new_outdated' | 'unclear' -> [(key, diffs, delta)]
+    src_old: object = None  # LoadResult der ersten Datei (Format, Datenbankname, Hinweise)
+    src_new: object = None  # LoadResult der zweiten Datei
 
     @property
     def n_changed(self):
@@ -152,7 +154,7 @@ class Comparison:
         return not (self.removed or self.added or self.n_changed or self.moves)
 
 
-def compare_files(old, new, n1, n2, ignored, detect_moves=True):
+def compare_files(old, new, n1, n2, ignored, detect_moves=True, src_old=None, src_new=None):
     """Vergleicht zwei Dateien und gibt ein Comparison-Objekt zurück."""
     removed = sorted(set(old) - set(new))
     added = sorted(set(new) - set(old))
@@ -172,4 +174,4 @@ def compare_files(old, new, n1, n2, ignored, detect_moves=True):
             grp, delta = classify(key, old, new, n1, n2)
             groups[grp].append((key, diffs, delta))
     return Comparison(old, new, n1, n2, list(ignored), compare_cols,
-                      removed, added, moves, groups)
+                      removed, added, moves, groups, src_old, src_new)

@@ -101,8 +101,10 @@ def group_titles(n1, n2):
 
 def print_header(cmp, hide_trash, group):
     """Kopfzeilen: Dateien, Anzahl der Einträge und aktive Filter."""
-    print(f"{cmp.n1}: {len(cmp.old)} Einträge")
-    print(f"{cmp.n2}: {len(cmp.new)} Einträge")
+    for name, entries, src in ((cmp.n1, cmp.old, cmp.src_old), (cmp.n2, cmp.new, cmp.src_new)):
+        print(f"{name}: {len(entries)} Einträge")
+        for note in (src.notes if src else []):
+            print(f"  Hinweis: {note}")
     if cmp.ignored:
         print(f"Ignorierte Spalten: {', '.join(cmp.ignored)}")
     if hide_trash:

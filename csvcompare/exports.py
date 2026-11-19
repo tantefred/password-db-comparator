@@ -5,12 +5,33 @@ from .compare import build_merged
 from .csvio import write_csv
 
 
+def restore_db_prefix(rows, prefix):
+    """Kopien der Zeilen mit vorangestelltem Datenbanknamen im Gruppenpfad (wie im Original)."""
+    if not prefix:
+        return list(rows)
+    out = []
+    for row in rows:
+        row = dict(row)
+        row["Group"] = f"{prefix}/{row['Group']}" if row["Group"] else prefix
+        out.append(row)
+    return out
+
+
+def export_prefix(cmp):
+    """Datenbankname für Exporte: der aus der zweiten Datei, sonst der aus der ersten."""
+    for src in (cmp.src_new, cmp.src_old):
+        if src is not None and src.db_prefix:
+            return src.db_prefix
+    return None
+
+
 def added_export(cmp):
     """Nur in der zweiten Datei vorhandene Einträge (ohne Papierkorb).
 
     Rückgabe: (zeilen, meldung); in der Meldung steht {path} für den Zielpfad.
     """
-    rows = [cmp.new[k] for k in cmp.added if not is_excluded(cmp.new[k])]
+    rows = restore_db_prefix([cmp.new[k] for k in cmp.added if not is_excluded(cmp.new[k])],
+                             export_prefix(cmp))
     skipped = len(cmp.added) - len(rows)
     message = (f"{len(rows)} neue Einträge nach '{{path}}' exportiert "
                f"({skipped} aus Papierkorb ausgelassen; Datei enthält Passwörter im Klartext).\n")
@@ -24,7 +45,7 @@ def merged_export(cmp):
     """
     rows, stats, conflicts = build_merged(cmp.old, cmp.new, cmp.removed, cmp.added,
                                           cmp.moves, cmp.compare_cols)
-    export = [r for r in rows if not is_excluded(r)]
+    export = restore_db_prefix([r for r in rows if not is_excluded(r)], export_prefix(cmp))
     lines = [
         f"{len(export)} Einträge nach '{{path}}' exportiert "
         f"({len(rows) - len(export)} aus Papierkorb ausgelassen; "

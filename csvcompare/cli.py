@@ -6,7 +6,7 @@ import sys
 from .common import display_names, is_excluded
 from .compare import compare_files, search_matches
 from .constants import EXPECTED, KEY_COLS
-from .csvio import load
+from .csvio import entries_from_rows, read_file
 from .exports import export_added, export_merged
 from .render_json import base_report, dump
 from .report import build_report
@@ -65,6 +65,9 @@ def build_parser():
                    help="Ausgabeformat (Standard: text). Bei json steht nur das JSON auf stdout; "
                         "Hinweise zu Exporten gehen nach stderr. Passwörter bleiben maskiert, "
                         "außer mit --show-secrets.")
+    p.add_argument("--keep-db-name", action="store_true",
+                   help="Den Datenbanknamen am Anfang der Gruppenpfade (KeePassium-Export, "
+                        "z. B. DB1/Web) nicht entfernen")
     p.add_argument("--no-detect-moves", action="store_true",
                    help="Verschobene/umbenannte Einträge nicht erkennen "
                         "(sie erscheinen dann als 'entfernt' plus 'hinzugefügt')")
@@ -128,8 +131,12 @@ def filter_entries(p, args, old, new):
 
 
 def load_filtered(p, args):
-    """Lädt beide Dateien und wendet die Filter an."""
-    return filter_entries(p, args, load(args.alt), load(args.neu))
+    """Lädt beide Dateien und wendet die Filter an. Rückgabe: (alt, neu, quelle_alt, quelle_neu)."""
+    src_old = read_file(args.alt, keep_db_name=args.keep_db_name)
+    src_new = read_file(args.neu, keep_db_name=args.keep_db_name)
+    old, new = filter_entries(p, args, entries_from_rows(src_old.rows),
+                              entries_from_rows(src_new.rows))
+    return old, new, src_old, src_new
 
 
 def run_search(args, cmp):
@@ -164,9 +171,10 @@ def main():
     # Im JSON-Modus bleibt stdout dem JSON vorbehalten
     log = (lambda *a, **k: print(*a, file=sys.stderr, **k)) if as_json else print
 
-    old, new = load_filtered(p, args)
+    old, new, src_old, src_new = load_filtered(p, args)
     n1, n2 = display_names(args.alt, args.neu)
-    cmp = compare_files(old, new, n1, n2, ignored, detect_moves=not args.no_detect_moves)
+    cmp = compare_files(old, new, n1, n2, ignored, detect_moves=not args.no_detect_moves,
+                        src_old=src_old, src_new=src_new)
     base = base_report(cmp, args.alt, args.neu, args.hide_trash, args.group,
                        not args.no_detect_moves)
 

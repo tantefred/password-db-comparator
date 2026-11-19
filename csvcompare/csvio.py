@@ -23,21 +23,21 @@ def entries_from_rows(rows):
     return entries
 
 
-def load(path):
-    """Liest eine Datei; beendet das Programm mit einer Meldung bei Fehlern."""
+def read_file(path, keep_db_name=False):
+    """Liest eine Datei als LoadResult; beendet das Programm mit einer Meldung bei Fehlern."""
     try:
         with open(path, newline="", encoding="utf-8-sig") as f:
             text = f.read()
-        return entries_from_rows(load_any(path, text).rows)
+        return load_any(path, text, keep_db_name=keep_db_name)
     except CsvError as e:
         sys.exit(f"Fehler: {e}")
     except OSError as e:
         sys.exit(f"Fehler: '{path}' kann nicht gelesen werden: {e}")
 
 
-def load_text(text, name):
+def read_text(text, name, keep_db_name=False):
     """Liest Inhalt aus einem String (z. B. aus einem Upload). Wirft CsvError."""
-    return entries_from_rows(load_any(name, text).rows)
+    return load_any(name, text, keep_db_name=keep_db_name)
 
 
 def write_rows(fileobj, rows):

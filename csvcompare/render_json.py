@@ -56,10 +56,16 @@ def dump(report):
 
 def base_report(cmp, path_old, path_new, hide_trash, group, detect_moves):
     """Gemeinsamer Kopf aller Berichte: Dateien und aktive Filter."""
+    def side(name, path, entries, src):
+        return {"name": name, "path": path, "entries": len(entries),
+                "format": src.format if src else None,
+                "db_prefix": src.db_prefix if src else None,
+                "notes": list(src.notes) if src else []}
+
     return {
         "files": {
-            "old": {"name": cmp.n1, "path": path_old, "entries": len(cmp.old)},
-            "new": {"name": cmp.n2, "path": path_new, "entries": len(cmp.new)},
+            "old": side(cmp.n1, path_old, cmp.old, cmp.src_old),
+            "new": side(cmp.n2, path_new, cmp.new, cmp.src_new),
         },
         "filters": {
             "ignored_columns": cmp.ignored,

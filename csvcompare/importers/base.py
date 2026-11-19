@@ -14,3 +14,4 @@ class LoadResult:
     format: str                # Kennung des erkannten Formats, z. B. "keepass-csv"
     provided_columns: frozenset  # Spalten, die dieses Format tatsächlich liefert
     notes: list = field(default_factory=list)  # Hinweise für Nutzer (übersprungene Typen …)
+    db_prefix: str = None      # Datenbankname, der aus den Gruppenpfaden entfernt wurde
