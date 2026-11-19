@@ -374,6 +374,16 @@ class InputTests(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("kann nicht gelesen werden", err)
 
+    def test_file_that_is_not_utf8_gives_a_message_instead_of_a_traceback(self):
+        with tempfile.TemporaryDirectory() as d:
+            latin1 = os.path.join(d, "latin1.csv")
+            with open(latin1, "wb") as f:
+                f.write(b"Group,Title\n\xe4\xf6\xfc\n")
+            rc, _, err = run(latin1, ALT)
+        self.assertEqual(rc, 1)
+        self.assertIn("keine UTF-8-Textdatei", err)
+        self.assertNotIn("Traceback", err)
+
     def test_missing_columns(self):
         with tempfile.TemporaryDirectory() as d:
             bad = os.path.join(d, "bad.csv")

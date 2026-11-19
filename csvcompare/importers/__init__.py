@@ -30,6 +30,8 @@ def read_file(path, keep_db_name=False):
             text = f.read()
     except OSError as e:
         raise CsvError(f"'{path}' kann nicht gelesen werden: {e}") from None
+    except UnicodeDecodeError:
+        raise CsvError(f"'{path}' ist keine UTF-8-Textdatei und kann nicht gelesen werden.") from None
     return load_any(path, text, keep_db_name=keep_db_name)
 
 
