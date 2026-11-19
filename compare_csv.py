@@ -379,17 +379,17 @@ def main():
                         "Nicht kombinierbar mit --search.")
     args = p.parse_args()
 
-    if args.search is not None and args.export_added:
-        p.error("--search und --export-added können nicht kombiniert werden.")
-    if args.search is not None and args.export_merged:
-        p.error("--search und --export-merged können nicht kombiniert werden.")
-    if args.stats and (args.search is not None or args.export_added or args.export_merged):
-        p.error("--stats kann nicht mit --search, --export-added oder --export-merged "
-                "kombiniert werden.")
-    if args.check and (args.search is not None or args.stats
-                       or args.export_added or args.export_merged):
-        p.error("--check kann nicht mit --search, --stats, --export-added oder "
-                "--export-merged kombiniert werden.")
+    # Auswertungsmodi ersetzen die normale Ausgabe und schließen sich gegenseitig
+    # sowie die Exporte aus.
+    modes = [name for name, active in (("--search", args.search is not None),
+                                       ("--stats", args.stats),
+                                       ("--check", args.check)) if active]
+    exports = [name for name, active in (("--export-added", args.export_added),
+                                         ("--export-merged", args.export_merged)) if active]
+    if len(modes) > 1:
+        p.error(f"{modes[0]} und {modes[1]} können nicht kombiniert werden.")
+    if modes and exports:
+        p.error(f"{modes[0]} und {exports[0]} können nicht kombiniert werden.")
     if args.search is not None and not args.search.strip():
         p.error("--search benötigt einen nicht-leeren Suchbegriff.")
 
