@@ -3,7 +3,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 
-from .common import human_delta, parse_ts
+from .common import differing_columns, human_delta, parse_ts, values_equal
 from .constants import EXPECTED, KEY_COLS, TIME_COL
 
 
@@ -14,7 +14,8 @@ def find_moves(old, new, removed, added, ignored):
     'wahrscheinlich'. Gepaart wird nur bei eindeutigen 1:1-Treffern.
     """
     def same(r, a, col):
-        return col not in ignored and old[r][col] != "" and old[r][col] == new[a][col]
+        return (col not in ignored and old[r][col] != ""
+                and values_equal(col, old[r][col], new[a][col]))
 
     def strong(r, a):
         return same(r, a, "Created") and any(
@@ -70,7 +71,7 @@ def build_merged(old, new, removed, added, moves, compare_cols):
     for ok, nk in pairs:
         t_old = parse_ts(old[ok][TIME_COL])
         t_new = parse_ts(new[nk][TIME_COL])
-        differs = any(old[ok][c] != new[nk][c] for c in compare_cols)
+        differs = bool(differing_columns(old[ok], new[nk], compare_cols))
         if t_old and t_new and t_old > t_new:
             rows.append(old[ok])
             stats["alt_neuer"] += 1
@@ -166,7 +167,7 @@ def compare_files(old, new, n1, n2, ignored, detect_moves=True):
 
     groups = {"old_outdated": [], "new_outdated": [], "unclear": []}
     for key in sorted(set(old) & set(new)):
-        diffs = [c for c in compare_cols if old[key][c] != new[key][c]]
+        diffs = differing_columns(old[key], new[key], compare_cols)
         if diffs:
             grp, delta = classify(key, old, new, n1, n2)
             groups[grp].append((key, diffs, delta))

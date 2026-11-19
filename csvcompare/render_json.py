@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 
 from .analysis import audit_entries, check_entries, stats_rows
+from .common import differing_columns
 from .compare import classify
 from .constants import KEY_COLS, SECRET_COLS, TIME_COL
 
@@ -40,7 +41,7 @@ def changed_json(ok, nk, diffs, delta, old, new, show_secrets):
 def move_json(move, compare_cols, old, new, n1, n2, show_secrets):
     """Verschobenes/umbenanntes Paar als JSON-Objekt."""
     ok, nk, confidence = move
-    diffs = [c for c in compare_cols if old[ok][c] != new[nk][c]]
+    diffs = differing_columns(old[ok], new[nk], compare_cols)
     _, delta = classify(ok, old, new, n1, n2, new_key=nk)
     d = changed_json(ok, nk, diffs, delta, old, new, show_secrets)
     d["changed_key_columns"] = [c for c, a, b in zip(KEY_COLS, ok, nk) if a != b]

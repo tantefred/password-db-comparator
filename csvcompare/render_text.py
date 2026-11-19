@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 from .analysis import audit_entries, check_entries, stats_rows
-from .common import label, short
+from .common import differing_columns, label, short
 from .compare import classify
 from .constants import KEY_COLS, SECRET_COLS, TIME_COL
 
@@ -37,7 +37,7 @@ def print_move(move, compare_cols, old, new, n1, n2, show_secrets, indent="  "):
     """Gibt ein erkanntes Paar aus verschobenem/umbenanntem Eintrag aus."""
     ok, nk, confidence = move
     key_changes = [c for c, a, b in zip(KEY_COLS, ok, nk) if a != b]
-    diffs = [c for c in compare_cols if old[ok][c] != new[nk][c]]
+    diffs = differing_columns(old[ok], new[nk], compare_cols)
     _, delta = classify(ok, old, new, n1, n2, new_key=nk)
     header = (f"↷ {label(ok)}  →  {label(nk)}\n"
               f"{indent}    geändert in: {', '.join(key_changes)}  [{confidence}]")

@@ -2,8 +2,11 @@
 
 from datetime import datetime, timezone
 import os
+from urllib.parse import parse_qs, urlsplit
 
 from .constants import EXCLUDE_GROUP_PATTERNS, TS_FORMATS
+
+TIME_COLUMNS = ("Last Modified", "Created")
 
 
 def parse_ts(s):
@@ -64,3 +67,46 @@ def display_names(path1, path2):
     """Dateinamen für die Ausgabe; bei gleichem Namen der volle Pfad."""
     n1, n2 = os.path.basename(path1), os.path.basename(path2)
     return (path1, path2) if n1 == n2 else (n1, n2)
+
+
+def totp_key(value):
+    """Vergleichbare Form eines TOTP-Werts: (Secret, Stellen, Periode, Algorithmus).
+
+    Ein otpauth://-Link und das reine Secret gelten als gleich, wenn sie dasselbe
+    Einmalpasswort erzeugen (Groß-/Kleinschreibung, Leerzeichen und Bindestriche im
+    Secret spielen keine Rolle).
+    """
+    value = (value or "").strip()
+    if not value:
+        return None
+    params = {}
+    secret = value
+    if value.lower().startswith("otpauth://"):
+        params = {k.lower(): v[0] for k, v in parse_qs(urlsplit(value).query).items()}
+        secret = params.get("secret", "")
+    secret = "".join(secret.split()).replace("-", "").upper()
+    return (secret, params.get("digits", "6"), params.get("period", "30"),
+            params.get("algorithm", "SHA1").upper())
+
+
+def values_equal(col, a, b):
+    """Vergleicht zwei Zellwerte inhaltlich statt zeichengenau.
+
+    Zeiten gelten als gleich, wenn sie zur selben Sekunde gehören (egal in welcher
+    Schreibweise); TOTP-Werte, wenn sie dasselbe Einmalpasswort ergeben. Alles andere
+    wird genau verglichen.
+    """
+    if a == b:
+        return True
+    if col in TIME_COLUMNS:
+        ta, tb = parse_ts(a), parse_ts(b)
+        return ta is not None and tb is not None and ta.replace(microsecond=0) == tb.replace(microsecond=0)
+    if col == "TOTP":
+        ka, kb = totp_key(a), totp_key(b)
+        return ka is not None and ka == kb
+    return False
+
+
+def differing_columns(row_a, row_b, columns):
+    """Spalten aus columns, in denen sich beide Zeilen inhaltlich unterscheiden."""
+    return [c for c in columns if not values_equal(c, row_a[c], row_b[c])]
