@@ -9,11 +9,13 @@ import shlex
 
 from .cli import build_parser, filter_entries, validate_args
 from .compare import compare_files
-from .csvio import CsvError, entries_from_rows, read_text
+from .entries import entries_from_rows
 from .exports import added_export, loss_report, merged_export
-from .writers import DEFAULT_WRITER
+from .importers import CsvError, load_any
 from .render_json import base_report, entry_ref
 from .report import build_report
+from .writers import DEFAULT_WRITER
+
 
 MODES = ("compare", "search", "stats", "check", "password-check")
 
@@ -94,8 +96,8 @@ def analyze(old_name, old_text, new_name, new_text, options):
     ignored = validate_args(parser, args)
 
     try:
-        src_old = read_text(old_text, old_name, keep_db_name=args.keep_db_name)
-        src_new = read_text(new_text, new_name, keep_db_name=args.keep_db_name)
+        src_old = load_any(old_name, old_text, keep_db_name=args.keep_db_name)
+        src_new = load_any(new_name, new_text, keep_db_name=args.keep_db_name)
     except CsvError as e:
         raise UsageError(str(e)) from None
     old, new = filter_entries(parser, args, entries_from_rows(src_old.rows),

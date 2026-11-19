@@ -3,19 +3,20 @@
 import argparse
 import sys
 
-from .common import display_names, is_excluded
+from .columns import ALL_NAMES, KEY_NAMES, VALUE_NAMES
 from .compare import compare_files, search_matches
-from .columns import ALL_NAMES
-from .constants import KEY_COLS
-from .csvio import entries_from_rows, read_file
+from .display import display_names
+from .entries import entries_from_rows, is_trash
 from .exports import export_added, export_merged
+from .importers import CsvError, read_file
 from .render_json import base_report, dump
-from .report import build_report
 from .render_text import (print_check, print_compare, print_header,
                           print_password_check, print_search, print_stats,
                           print_summary)
+from .report import build_report
 
-IGNORABLE = [c for c in ALL_NAMES if c not in KEY_COLS]
+
+IGNORABLE = VALUE_NAMES
 
 
 def build_parser():
@@ -110,7 +111,7 @@ def validate_args(p, args):
         col = by_lower.get(part.lower())
         if col is None:
             p.error(f"Unbekannte Spalte '{part}'. Gültig: {', '.join(IGNORABLE)}")
-        if col in KEY_COLS:
+        if col in KEY_NAMES:
             p.error(f"Die Spalte '{col}' identifiziert die Einträge und kann nicht ignoriert werden.")
         if col not in ignored:
             ignored.append(col)
@@ -120,8 +121,8 @@ def validate_args(p, args):
 def filter_entries(p, args, old, new):
     """Wendet --hide-trash und --group auf beide Dateien an."""
     if args.hide_trash:
-        old = {k: r for k, r in old.items() if not is_excluded(r)}
-        new = {k: r for k, r in new.items() if not is_excluded(r)}
+        old = {k: r for k, r in old.items() if not is_trash(r)}
+        new = {k: r for k, r in new.items() if not is_trash(r)}
     if args.group is not None:
         needle = args.group.strip().lower()
         if not needle:
@@ -133,8 +134,11 @@ def filter_entries(p, args, old, new):
 
 def load_filtered(p, args):
     """Lädt beide Dateien und wendet die Filter an. Rückgabe: (alt, neu, quelle_alt, quelle_neu)."""
-    src_old = read_file(args.alt, keep_db_name=args.keep_db_name)
-    src_new = read_file(args.neu, keep_db_name=args.keep_db_name)
+    try:
+        src_old = read_file(args.alt, keep_db_name=args.keep_db_name)
+        src_new = read_file(args.neu, keep_db_name=args.keep_db_name)
+    except CsvError as e:
+        sys.exit(f"Fehler: {e}")
     old, new = filter_entries(p, args, entries_from_rows(src_old.rows),
                               entries_from_rows(src_new.rows))
     return old, new, src_old, src_new

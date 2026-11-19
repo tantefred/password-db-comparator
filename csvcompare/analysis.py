@@ -3,8 +3,9 @@
 from collections import Counter, defaultdict
 from urllib.parse import urlsplit
 
-from .common import label, parse_ts
-from .constants import TIME_COL
+from .columns import MODIFIED
+from .entries import entry_label
+from .values import parse_time
 
 
 def stats_rows(old, new):
@@ -40,7 +41,7 @@ def check_entries(entries):
     exact = defaultdict(list)
     for k in entries:
         exact[k[:3]].append(k)
-    lines = [f"{label(ks[0])}  ({len(ks)}×)" for ks in exact.values() if len(ks) > 1]
+    lines = [f"{entry_label(ks[0])}  ({len(ks)}×)" for ks in exact.values() if len(ks) > 1]
     findings.append(("Doppelte Einträge (gleiche Gruppe, Titel und Username)", sorted(lines)))
 
     by_title = defaultdict(list)
@@ -61,18 +62,18 @@ def check_entries(entries):
     lines = []
     for (url, user), ks in by_url.items():
         if len({k[:3] for k in ks}) > 1:
-            lines.append(f"{url} [{user}]: " + "; ".join(label(k) for k in ks))
+            lines.append(f"{url} [{user}]: " + "; ".join(entry_label(k) for k in ks))
     findings.append(("Gleiche URL und Username in verschiedenen Einträgen", sorted(lines)))
 
     findings.append(("Einträge ohne Passwort",
-                     sorted(label(k) for k, r in entries.items() if not r["Password"])))
+                     sorted(entry_label(k) for k, r in entries.items() if not r["Password"])))
     findings.append(("Einträge ohne Titel",
-                     sorted(label(k) for k in entries if not k[1])))
+                     sorted(entry_label(k) for k in entries if not k[1])))
     lines = []
     for k, r in sorted(entries.items()):
         reason = url_problem(r["URL"])
         if reason:
-            lines.append(f"{label(k)}: '{r['URL'].strip()}' ({reason})")
+            lines.append(f"{entry_label(k)}: '{r['URL'].strip()}' ({reason})")
     findings.append(("Ungültige URLs", lines))
 
     return [(title, lines) for title, lines in findings if lines]
@@ -89,19 +90,19 @@ def audit_entries(entries, min_length, max_age_days, now):
     for k, r in entries.items():
         if r["Password"]:
             by_pw[r["Password"]].append(k)
-    lines = sorted(f"{len(ks)} Einträge teilen ein Passwort: " + "; ".join(label(k) for k in sorted(ks))
+    lines = sorted(f"{len(ks)} Einträge teilen ein Passwort: " + "; ".join(entry_label(k) for k in sorted(ks))
                    for ks in by_pw.values() if len(ks) > 1)
     findings.append(("Wiederverwendete Passwörter", lines))
 
-    lines = [f"{label(k)}  ({len(r['Password'])} Zeichen)"
+    lines = [f"{entry_label(k)}  ({len(r['Password'])} Zeichen)"
              for k, r in sorted(entries.items()) if r["Password"] and len(r["Password"]) < min_length]
     findings.append((f"Kurze Passwörter (< {min_length} Zeichen)", lines))
 
     lines = []
     for k, r in sorted(entries.items()):
-        ts = parse_ts(r[TIME_COL])
+        ts = parse_time(r[MODIFIED])
         if ts is not None and (now - ts).days > max_age_days:
-            lines.append(f"{label(k)}  (zuletzt geändert {ts.date().isoformat()}, "
+            lines.append(f"{entry_label(k)}  (zuletzt geändert {ts.date().isoformat()}, "
                          f"vor {(now - ts).days} Tagen)")
     findings.append((f"Lange nicht geändert (> {max_age_days} Tage)", lines))
 

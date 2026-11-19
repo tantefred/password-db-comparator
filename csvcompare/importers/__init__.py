@@ -4,21 +4,15 @@ import csv
 import io
 
 from . import bitwarden, keepass_csv
-from .base import CsvError, LoadResult
+from .base import BITWARDEN_CSV, BITWARDEN_JSON, FORMAT_LABELS, KEEPASS_CSV, CsvError, LoadResult
 
 BOM = "\ufeff"
-
-FORMAT_LABELS = {
-    "keepass-csv": "KeePass-CSV",
-    "bitwarden-json": "Bitwarden-JSON",
-    "bitwarden-csv": "Bitwarden-CSV",
-}
 
 
 def load_any(name, text, keep_db_name=False):
     """Erkennt das Format am Inhalt und liest die Einträge. Wirft CsvError bei Problemen.
 
-    name wird nur für Fehlermeldungen verwendet.
+    ``name`` wird nur für Fehlermeldungen verwendet.
     """
     text = text.lstrip(BOM)
     if text.lstrip().startswith(("{", "[")):
@@ -29,4 +23,15 @@ def load_any(name, text, keep_db_name=False):
     return keepass_csv.parse(text, name, keep_db_name=keep_db_name)
 
 
-__all__ = ["CsvError", "FORMAT_LABELS", "LoadResult", "load_any"]
+def read_file(path, keep_db_name=False):
+    """Liest eine Datei und erkennt das Format. Wirft CsvError, wenn das nicht gelingt."""
+    try:
+        with open(path, newline="", encoding="utf-8-sig") as f:
+            text = f.read()
+    except OSError as e:
+        raise CsvError(f"'{path}' kann nicht gelesen werden: {e}") from None
+    return load_any(path, text, keep_db_name=keep_db_name)
+
+
+__all__ = ["BITWARDEN_CSV", "BITWARDEN_JSON", "FORMAT_LABELS", "KEEPASS_CSV", "CsvError",
+           "LoadResult", "load_any", "read_file"]

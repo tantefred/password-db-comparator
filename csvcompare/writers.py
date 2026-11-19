@@ -5,11 +5,13 @@ ergänzen: Ein ``Writer`` nennt die Spalten, die er speichern kann, und ``lost_d
 für beliebige Zeilen, was beim Schreiben verloren ginge.
 """
 
+import csv
+import io
+import sys
 from collections import Counter
 from dataclasses import dataclass
 
 from .columns import ALL_NAMES, BY_NAME, CORE_NAMES, LABELS, UNMAPPED_KEY
-from .csvio import csv_text, write_csv
 
 
 @dataclass(frozen=True)
@@ -28,12 +30,24 @@ class Writer:
         raise NotImplementedError
 
 
+def write_csv_rows(fileobj, rows):
+    writer = csv.DictWriter(fileobj, fieldnames=CORE_NAMES, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(rows)
+
+
 class KeePassCsvWriter(Writer):
     def text(self, rows):
-        return csv_text(rows)
+        buffer = io.StringIO(newline="")
+        write_csv_rows(buffer, rows)
+        return buffer.getvalue()
 
     def write(self, path, rows):
-        write_csv(path, rows)
+        try:
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                write_csv_rows(f, rows)
+        except OSError as e:
+            sys.exit(f"Fehler: '{path}' kann nicht geschrieben werden: {e}")
 
 
 KEEPASS_CSV = KeePassCsvWriter("keepass-csv", "KeePass-CSV", CORE_NAMES)
@@ -46,7 +60,7 @@ def has_data(column, row):
     value = row.get(column, "")
     if column == "URLs":
         return len(value.split()) > 1  # die erste URL steht ohnehin in „URL“
-    return value not in BY_NAME[column].empty
+    return value not in BY_NAME[column].defaults
 
 
 def lost_data(rows, writer=DEFAULT_WRITER):

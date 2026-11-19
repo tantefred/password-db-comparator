@@ -11,11 +11,9 @@ import io
 import json
 
 from ..columns import ALL_NAMES, SOURCE_KEY, UNMAPPED_KEY
-from ..common import collapse_whitespace, normalize_timestamp
-from .base import CsvError, LoadResult
+from ..values import collapse_whitespace, normalize_time
+from .base import BITWARDEN_CSV, BITWARDEN_JSON, CsvError, LoadResult
 
-FORMAT_JSON = "bitwarden-json"
-FORMAT_CSV = "bitwarden-csv"
 
 # Diese Spalten liefert Bitwarden; ein Icon gibt es nicht.
 PROVIDED = frozenset(ALL_NAMES) - {"Icon"}
@@ -127,8 +125,8 @@ def parse_json(text_, name):
         row["URLs"] = "\n".join(uris)
         row["Notes"] = text(item.get("notes"))
         row["TOTP"] = text(login.get("totp"))
-        row["Last Modified"] = normalize_timestamp(text(item.get("revisionDate")))
-        row["Created"] = normalize_timestamp(text(item.get("creationDate")))
+        row["Last Modified"] = normalize_time(text(item.get("revisionDate")))
+        row["Created"] = normalize_time(text(item.get("creationDate")))
         row["Favorite"] = "1" if item.get("favorite") else "0"
         row["Type"] = "login" if type_id == TYPE_LOGIN else "note"
         row["Reprompt"] = "1" if item.get("reprompt") else "0"
@@ -151,7 +149,7 @@ def parse_json(text_, name):
         notes.append(f"{subject} enthalten und steht in der Gruppe „{TRASH_GROUP}“."
                      if deleted == 1 else
                      f"{subject} enthalten und stehen in der Gruppe „{TRASH_GROUP}“.")
-    return LoadResult(rows=rows, format=FORMAT_JSON, provided_columns=PROVIDED, notes=notes)
+    return LoadResult(rows=rows, format=BITWARDEN_JSON, provided_columns=PROVIDED, notes=notes)
 
 
 def is_csv(header):
@@ -199,4 +197,4 @@ def parse_csv(text_, name):
         notes.append(f"{n} {'Eintrag' if n == 1 else 'Einträge'} übersprungen ({names}); "
                      f"verglichen werden Logins und sichere Notizen.")
     notes.append(CSV_NO_TIMESTAMPS_NOTE)
-    return LoadResult(rows=rows, format=FORMAT_CSV, provided_columns=PROVIDED_CSV, notes=notes)
+    return LoadResult(rows=rows, format=BITWARDEN_CSV, provided_columns=PROVIDED_CSV, notes=notes)

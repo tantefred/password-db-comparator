@@ -4,9 +4,10 @@ import json
 from datetime import datetime, timezone
 
 from .analysis import audit_entries, check_entries, stats_rows
-from .common import differing_columns
+from .columns import KEY_NAMES, MODIFIED, SECRET_NAMES
 from .compare import classify
-from .constants import KEY_COLS, SECRET_COLS, TIME_COL
+from .display import mask_secret
+from .values import differing_columns
 
 
 def entry_ref(key):
@@ -22,18 +23,17 @@ def changed_json(ok, nk, diffs, delta, old, new, show_secrets):
     changes = {}
     for c in diffs:
         a, b = old[ok][c], new[nk][c]
-        if c in SECRET_COLS and not show_secrets:
-            changes[c] = {"old": "(gesetzt)" if a else "(leer)",
-                          "new": "(gesetzt)" if b else "(leer)", "masked": True}
+        if c in SECRET_NAMES and not show_secrets:
+            changes[c] = {"old": mask_secret(a), "new": mask_secret(b), "masked": True}
         else:
             changes[c] = {"old": a, "new": b}
     d = {"entry": entry_ref(ok)}
     if nk != ok:
         d["moved_to"] = entry_ref(nk)
     d["differing_columns"] = list(diffs)
-    d["only_timestamp"] = bool(diffs) and all(c == TIME_COL for c in diffs)
+    d["only_timestamp"] = bool(diffs) and all(c == MODIFIED for c in diffs)
     d["note"] = delta if diffs else None
-    d["last_modified"] = {"old": old[ok][TIME_COL], "new": new[nk][TIME_COL]}
+    d["last_modified"] = {"old": old[ok][MODIFIED], "new": new[nk][MODIFIED]}
     d["changes"] = changes
     return d
 
@@ -44,7 +44,7 @@ def move_json(move, compare_cols, old, new, n1, n2, show_secrets):
     diffs = differing_columns(old[ok], new[nk], compare_cols)
     _, delta = classify(ok, old, new, n1, n2, new_key=nk)
     d = changed_json(ok, nk, diffs, delta, old, new, show_secrets)
-    d["changed_key_columns"] = [c for c, a, b in zip(KEY_COLS, ok, nk) if a != b]
+    d["changed_key_columns"] = [c for c, a, b in zip(KEY_NAMES, ok, nk) if a != b]
     d["confidence"] = "certain" if confidence == "sicher" else "likely"
     return d
 
@@ -124,13 +124,13 @@ def search_report(base, cmp, query, n_matches, results, show_secrets):
                 k, k, diffs, delta, old, new, show_secrets)})
         elif kind == "only_old":
             items.append({"status": "only_in_old", "entry": entry_ref(data),
-                          "last_modified": old[data][TIME_COL]})
+                          "last_modified": old[data][MODIFIED]})
         elif kind == "only_new":
             items.append({"status": "only_in_new", "entry": entry_ref(data),
-                          "last_modified": new[data][TIME_COL]})
+                          "last_modified": new[data][MODIFIED]})
         else:
             items.append({"status": "identical", "entry": entry_ref(data),
-                          "last_modified": old[data][TIME_COL]})
+                          "last_modified": old[data][MODIFIED]})
     return {"mode": "search", **base, "query": query,
             "match_count": n_matches, "results": items}
 

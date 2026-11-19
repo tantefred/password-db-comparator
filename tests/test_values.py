@@ -6,7 +6,7 @@ import unittest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from csvcompare.common import differing_columns, totp_key, values_equal  # noqa: E402
+from csvcompare.values import differing_columns, totp_key, values_equal  # noqa: E402
 from csvcompare.service import analyze  # noqa: E402
 
 HEADER = "Group,Title,Username,Password,URL,Notes,TOTP,Icon,Last Modified,Created\n"

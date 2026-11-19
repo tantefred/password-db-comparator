@@ -3,10 +3,12 @@
 from datetime import datetime, timezone
 
 from .analysis import audit_entries, check_entries, stats_rows
-from .common import differing_columns, label, short
+from .columns import KEY_NAMES, MODIFIED, SECRET_NAMES
 from .compare import classify
-from .constants import KEY_COLS, SECRET_COLS, TIME_COL
-from .importers import FORMAT_LABELS
+from .display import display_value
+from .entries import entry_label
+from .importers import FORMAT_LABELS, KEEPASS_CSV
+from .values import differing_columns
 
 
 def print_changed(k, diffs, delta, old, new, show_secrets, indent="  ",
@@ -16,18 +18,18 @@ def print_changed(k, diffs, delta, old, new, show_secrets, indent="  ",
     new_k: Key des Eintrags in der zweiten Datei, falls er sich von k unterscheidet.
     """
     nk = new_k or k
-    names = [c for c in diffs if c != TIME_COL]
-    print(f"{indent}{header or '~ ' + label(k)}")
+    names = [c for c in diffs if c != MODIFIED]
+    print(f"{indent}{header or '~ ' + entry_label(k)}")
     if not diffs:
         print(f"{indent}    sonst keine Änderungen")
     else:
         kind = "nur Zeitstempel" if not names else "Unterschiede in: " + ", ".join(names)
         print(f"{indent}    {kind}  ({delta})")
-        print(f"{indent}    Last Modified: {old[k][TIME_COL]}  |  {new[nk][TIME_COL]}")
+        print(f"{indent}    Last Modified: {old[k][MODIFIED]}  |  {new[nk][MODIFIED]}")
     for c in names:
-        secret = c in SECRET_COLS
-        a = short(old[k][c], secret, show_secrets)
-        b = short(new[nk][c], secret, show_secrets)
+        secret = c in SECRET_NAMES
+        a = display_value(old[k][c], secret, show_secrets)
+        b = display_value(new[nk][c], secret, show_secrets)
         if secret and not show_secrets:
             print(f"{indent}    {c}: geändert ({a} → {b})")
         else:
@@ -37,10 +39,10 @@ def print_changed(k, diffs, delta, old, new, show_secrets, indent="  ",
 def print_move(move, compare_cols, old, new, n1, n2, show_secrets, indent="  "):
     """Gibt ein erkanntes Paar aus verschobenem/umbenanntem Eintrag aus."""
     ok, nk, confidence = move
-    key_changes = [c for c, a, b in zip(KEY_COLS, ok, nk) if a != b]
+    key_changes = [c for c, a, b in zip(KEY_NAMES, ok, nk) if a != b]
     diffs = differing_columns(old[ok], new[nk], compare_cols)
     _, delta = classify(ok, old, new, n1, n2, new_key=nk)
-    header = (f"↷ {label(ok)}  →  {label(nk)}\n"
+    header = (f"↷ {entry_label(ok)}  →  {entry_label(nk)}\n"
               f"{indent}    geändert in: {', '.join(key_changes)}  [{confidence}]")
     print_changed(ok, diffs, delta, old, new, show_secrets, indent=indent,
                   new_k=nk, header=header)
@@ -103,7 +105,7 @@ def group_titles(n1, n2):
 def print_header(cmp, hide_trash, group):
     """Kopfzeilen: Dateien, Anzahl der Einträge und aktive Filter."""
     for name, entries, src in ((cmp.n1, cmp.old, cmp.src_old), (cmp.n2, cmp.new, cmp.src_new)):
-        fmt = FORMAT_LABELS.get(src.format) if src and src.format != "keepass-csv" else None
+        fmt = FORMAT_LABELS.get(src.format) if src and src.format != KEEPASS_CSV else None
         print(f"{name}: {len(entries)} Einträge" + (f" ({fmt})" if fmt else ""))
         for note in (src.notes if src else []):
             print(f"  Hinweis: {note}")
@@ -130,21 +132,21 @@ def print_search(query, n_matches, results, cmp, show_secrets):
             print(f"  Status: verschoben/umbenannt")
             print_move(data, cmp.compare_cols, old, new, n1, n2, show_secrets)
         elif kind == "only_old":
-            print(f"  - {label(data)}")
+            print(f"  - {entry_label(data)}")
             print(f"      Status: nur in {n1} (in {n2} nicht vorhanden)")
-            print(f"      Last Modified: {old[data][TIME_COL]}")
+            print(f"      Last Modified: {old[data][MODIFIED]}")
         elif kind == "only_new":
-            print(f"  + {label(data)}")
+            print(f"  + {entry_label(data)}")
             print(f"      Status: nur in {n2} (in {n1} nicht vorhanden)")
-            print(f"      Last Modified: {new[data][TIME_COL]}")
+            print(f"      Last Modified: {new[data][MODIFIED]}")
         elif kind == "changed":
             k, grp, diffs, delta = data
             print(f"  Status: {titles[grp]}")
             print_changed(k, diffs, delta, old, new, show_secrets)
         else:
-            print(f"  = {label(data)}")
+            print(f"  = {entry_label(data)}")
             print(f"      Status: identisch in beiden Dateien")
-            print(f"      Last Modified: {old[data][TIME_COL]}")
+            print(f"      Last Modified: {old[data][MODIFIED]}")
         print()
 
 
@@ -160,12 +162,12 @@ def print_compare(cmp, show_secrets):
     if cmp.removed:
         print(f"== Nur in {n1} (in {n2} nicht vorhanden): {len(cmp.removed)} ==")
         for k in cmp.removed:
-            print(f"  - {label(k)}")
+            print(f"  - {entry_label(k)}")
         print()
     if cmp.added:
         print(f"== Nur in {n2} (in {n1} nicht vorhanden): {len(cmp.added)} ==")
         for k in cmp.added:
-            print(f"  + {label(k)}")
+            print(f"  + {entry_label(k)}")
         print()
 
     for grp in ("old_outdated", "new_outdated", "unclear"):
