@@ -10,7 +10,7 @@ import csv
 import io
 import json
 
-from ..columns import ALL_NAMES, SOURCE_KEY
+from ..columns import ALL_NAMES, SOURCE_KEY, UNMAPPED_KEY
 from ..common import collapse_whitespace, normalize_timestamp
 from .base import CsvError, LoadResult
 
@@ -57,6 +57,37 @@ def plural_names(counts):
         one, many = SKIPPED_TYPE_NAMES.get(type_id, (f"Typ {type_id}", f"Typ {type_id}"))
         parts.append(f"{n} {one if n == 1 else many}")
     return ", ".join(parts)
+
+
+def unmapped_json_item(item):
+    """Bezeichnungen der Daten eines Bitwarden-Eintrags, die in keiner Spalte landen."""
+    login = item.get("login") if isinstance(item.get("login"), dict) else {}
+    labels = []
+    if item.get("passwordHistory"):
+        labels.append("Passwort-Verlauf")
+    if login.get("fido2Credentials"):
+        labels.append("Passkeys")
+    if item.get("collectionIds"):
+        labels.append("Sammlungen")
+    if item.get("organizationId"):
+        labels.append("Organisation")
+    if any(isinstance(f, dict) and f.get("type") not in (None, 0) for f in item.get("fields") or []):
+        labels.append("Typ eigener Felder")
+    if any(isinstance(u, dict) and u.get("match") is not None for u in login.get("uris") or []):
+        labels.append("URL-Abgleichsmodus")
+    if item.get("deletedDate"):
+        labels.append("Löschdatum")
+    return labels
+
+
+CSV_KNOWN_COLUMNS = ("folder", "favorite", "type", "name", "notes", "fields", "reprompt",
+                     "login_uri", "login_username", "login_password", "login_totp")
+
+
+def unmapped_csv_row(source):
+    """Bezeichnungen zusätzlicher CSV-Spalten mit Inhalt (z. B. ``collections`` in Organisationen)."""
+    return [f"Spalte „{key}“" for key, value in source.items()
+            if key not in CSV_KNOWN_COLUMNS and key is not None and value]
 
 
 def parse_json(text_, name):
@@ -106,6 +137,7 @@ def parse_json(text_, name):
             row["Group"] = TRASH_GROUP  # Bitwarden hat keine Papierkorb-Gruppe
             deleted += 1
         row[SOURCE_KEY] = item
+        row[UNMAPPED_KEY] = unmapped_json_item(item)
         rows.append(row)
 
     notes = []
@@ -157,6 +189,7 @@ def parse_csv(text_, name):
         row["Reprompt"] = "1" if text(source.get("reprompt")).strip() in ("1", "true", "True") else "0"
         row["Fields"] = collapse_whitespace(text(source.get("fields")))
         row[SOURCE_KEY] = dict(source)
+        row[UNMAPPED_KEY] = unmapped_csv_row(source)
         rows.append(row)
 
     notes = []

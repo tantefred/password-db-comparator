@@ -10,6 +10,9 @@ Spalten (nicht gelieferte bleiben leer); welche ein Format wirklich liefert, ste
 from dataclasses import dataclass
 
 SOURCE_KEY = "_source"
+# Liste von Bezeichnungen für Daten des Originaleintrags, die in keiner Spalte stehen
+# (z. B. „Passwort-Verlauf“). Wird beim Einlesen gefüllt und von Exporten gemeldet.
+UNMAPPED_KEY = "_unmapped"
 
 
 @dataclass(frozen=True)
@@ -17,6 +20,7 @@ class Column:
     name: str
     label: str            # deutsche Beschriftung für Oberfläche und Berichte
     secret: bool = False  # Werte werden ohne --show-secrets nicht angezeigt
+    empty: tuple = ("",)  # Werte, die „keine Daten“ bedeuten (für die Verlustmeldung)
 
 
 CORE = (
@@ -33,9 +37,9 @@ CORE = (
 )
 
 EXTENDED = (
-    Column("Favorite", "Favorit"),
-    Column("Type", "Typ"),
-    Column("Reprompt", "Passwort-Nachfrage"),
+    Column("Favorite", "Favorit", empty=("", "0")),
+    Column("Type", "Typ", empty=("", "login")),
+    Column("Reprompt", "Passwort-Nachfrage", empty=("", "0")),
     # Im CSV-Export ist nicht erkennbar, welche Felder „verborgen“ sind: alles gilt als geheim.
     Column("Fields", "Eigene Felder", secret=True),
     Column("URLs", "Alle URLs"),
@@ -47,3 +51,4 @@ EXTENDED_NAMES = tuple(c.name for c in EXTENDED)
 ALL_NAMES = tuple(c.name for c in ALL_COLUMNS)
 SECRET_NAMES = tuple(c.name for c in ALL_COLUMNS if c.secret)
 LABELS = {c.name: c.label for c in ALL_COLUMNS}
+BY_NAME = {c.name: c for c in ALL_COLUMNS}
