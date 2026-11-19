@@ -151,7 +151,7 @@ Bitwarden stammen. Was dieses Format nicht speichern kann (Favorit, Typ, eigene 
 URLs, Passwort-Verlauf, Passkeys …), nennt das Skript nach dem Export mit der Zahl der betroffenen
 Einträge, im Terminal wie in der Oberfläche. Intern behält jeder Eintrag **alle** Spalten und
 sein Originalformat; Writer für weitere Zielformate (Bitwarden-CSV/-JSON) lassen sich über die
-Registry in `writers.py` ergänzen, ohne Daten zu verlieren.
+`writers.py` ergänzen, ohne Daten zu verlieren.
 
 ## Verschobene und umbenannte Einträge
 
@@ -210,23 +210,28 @@ Mit Strg+C im Terminal beendest du die Oberfläche.
 
 ## Projektaufbau
 
-`compare_csv.py` ist nur der Einstiegspunkt; die Logik liegt im Paket `csvcompare/`:
+`compare_csv.py` ist nur der Einstiegspunkt; die Logik liegt im Paket `csvcompare/`. Der Weg
+einer Anfrage: **einlesen → Einträge bilden → vergleichen → ausgeben**.
 
 | Modul | Aufgabe |
 |---|---|
-| `cli.py` | Optionen, Validierung, Ablauf |
-| `columns.py` | alle Spalten aller Formate (Name, Beschriftung, geheim?) |
 | `importers/` | erkennt das Format am Inhalt und liest KeePass-CSV, Bitwarden-JSON und -CSV |
-| `csvio.py` | Dateien lesen, Einträge bilden, CSV schreiben |
-| `writers.py` | Zielformate für Exporte und die Meldung „nicht speicherbar“ |
-| `compare.py` | Vergleich (`compare_files`), Verschoben-Erkennung, Aktualität, Merge, Suche |
-| `analysis.py` | Statistik, Prüfung (`--check`), Passwortqualität |
-| `exports.py` | `--export-added` und `--export-merged` |
-| `report.py` | wählt den JSON-Bericht zum gewählten Modus (Terminal und Oberfläche) |
-| `service.py` | Auswertung aus CSV-Text und Optionen, ohne Dateipfade (für die Oberfläche) |
+| `columns.py` | alle Spalten aller Formate (Name, Beschriftung, geheim?, Schlüsselspalten) |
+| `entries.py` | Einträge und ihr Schlüssel (`Key`), Beschriftung, Papierkorb-Erkennung |
+| `values.py` | Zeiten, TOTP und Leerraum nach Bedeutung vergleichen |
+| `compare.py` | der Vergleich (`compare_files`): Verschoben-Erkennung, Aktualität, verglichene Spalten |
+| `search.py` | Suche nach einem Eintrag samt Status |
+| `analysis.py` | Statistik, Prüfung (`--check`) und Passwortqualität (`--password-check`) |
+| `exports.py`, `writers.py` | die beiden Exporte und das Zielformat samt Meldung „nicht speicherbar“ |
+| `render_text.py`, `render_json.py` | Textausgabe bzw. JSON-Berichte (`build_report` wählt den Bericht) |
+| `display.py` | Darstellung für Menschen: Maskierung, Zeitabstände, Dateinamen |
+| `cli.py` | Optionen, Prüfung der Kombinationen, Ablauf im Terminal |
+| `service.py` | derselbe Ablauf aus Dateiinhalt und Optionen, ohne Pfade (für die Oberfläche) |
 | `webui.py`, `web/index.html` | lokaler Server und die Oberfläche selbst |
-| `render_text.py` / `render_json.py` | Textausgabe bzw. JSON-Berichte |
-| `common.py`, `constants.py` | Hilfsfunktionen, Spaltendefinitionen und Konfiguration |
+
+Ein weiteres Zielformat (z. B. Bitwarden-JSON) bekommt in `writers.py` einen eigenen Writer
+mit den Methoden `text` und `write` und der Liste der Spalten, die er speichern kann; die
+Verlustmeldung der Exporte funktioniert dann automatisch.
 
 ## Tests
 
@@ -235,6 +240,6 @@ python3 -m unittest discover -s tests -v
 ```
 
 Die Tests starten das Skript wie ein Nutzer über die Kommandozeile und prüfen auch die Module
-direkt. Sie verwenden erfundene Beispieldaten in `tests/` (nur Standardbibliothek, kein Netzwerk):
-dieselben Einträge als KeePassium-CSV (`keepassium_a/b.csv`), Bitwarden-JSON (`bitwarden.json`) und
-Bitwarden-CSV (`bitwarden.csv`).
+direkt; gemeinsame Hilfen stehen in `tests/helpers.py`. Sie verwenden erfundene Beispieldaten
+in `tests/` (nur Standardbibliothek, kein Netzwerk): dieselben Einträge als KeePassium-CSV
+(`keepassium_a/b.csv`), Bitwarden-JSON (`bitwarden.json`) und Bitwarden-CSV (`bitwarden.csv`).
