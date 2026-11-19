@@ -246,6 +246,52 @@ def print_check(old, new, n1, n2):
         print()
 
 
+def audit_entries(entries, min_length, max_age_days, now):
+    """Bewertet die Passwortqualität einer Datei. Passwörter werden nie ausgegeben.
+
+    Rückgabe: (funde, totp_anzahl) mit funde = Liste (überschrift, [zeilen]).
+    """
+    findings = []
+
+    by_pw = defaultdict(list)
+    for k, r in entries.items():
+        if r["Password"]:
+            by_pw[r["Password"]].append(k)
+    lines = sorted(f"{len(ks)} Einträge teilen ein Passwort: " + "; ".join(label(k) for k in sorted(ks))
+                   for ks in by_pw.values() if len(ks) > 1)
+    findings.append(("Wiederverwendete Passwörter", lines))
+
+    lines = [f"{label(k)}  ({len(r['Password'])} Zeichen)"
+             for k, r in sorted(entries.items()) if r["Password"] and len(r["Password"]) < min_length]
+    findings.append((f"Kurze Passwörter (< {min_length} Zeichen)", lines))
+
+    lines = []
+    for k, r in sorted(entries.items()):
+        ts = parse_ts(r[TIME_COL])
+        if ts is not None and (now - ts).days > max_age_days:
+            lines.append(f"{label(k)}  (zuletzt geändert {ts.date().isoformat()}, "
+                         f"vor {(now - ts).days} Tagen)")
+    findings.append((f"Lange nicht geändert (> {max_age_days} Tage)", lines))
+
+    totp = sum(1 for r in entries.values() if r["TOTP"].strip())
+    return [(t, ls) for t, ls in findings if ls], totp
+
+
+def print_password_check(old, new, n1, n2, min_length, max_age_days):
+    """Gibt die Passwortqualität beider Dateien aus."""
+    now = datetime.now(timezone.utc)
+    for name, entries in ((n1, old), (n2, new)):
+        print(f"=== {name} ===")
+        findings, totp = audit_entries(entries, min_length, max_age_days, now)
+        if not findings:
+            print("  Keine Auffälligkeiten.")
+        for title, lines in findings:
+            print(f"  {title}: {len(lines)}")
+            for line in lines:
+                print(f"    - {line}")
+        print(f"  TOTP: {totp} von {len(entries)} Einträgen haben TOTP eingerichtet\n")
+
+
 def display_names(path1, path2):
     """Dateinamen für die Ausgabe; bei gleichem Namen der volle Pfad."""
     n1, n2 = os.path.basename(path1), os.path.basename(path2)
@@ -364,6 +410,15 @@ def main():
                    help="Jede Datei einzeln auf Dubletten und kaputte Einträge prüfen "
                         "(ohne Passwörter anzuzeigen; nicht kombinierbar mit --search, "
                         "--stats und den Exporten)")
+    p.add_argument("--password-check", action="store_true",
+                   help="Passwortqualität je Datei prüfen: wiederverwendete und kurze Passwörter, "
+                        "lange nicht geänderte Einträge, TOTP-Anzahl (Passwörter werden nie "
+                        "angezeigt; nicht kombinierbar mit --search, --stats, --check, Exporten)")
+    p.add_argument("--min-length", type=int, default=10, metavar="N",
+                   help="Mindestlänge für --password-check (Standard: 10)")
+    p.add_argument("--max-age-days", type=int, default=730, metavar="TAGE",
+                   help="Maximales Alter seit der letzten Änderung für --password-check "
+                        "(Standard: 730)")
     p.add_argument("--no-detect-moves", action="store_true",
                    help="Verschobene/umbenannte Einträge nicht erkennen "
                         "(sie erscheinen dann als 'entfernt' plus 'hinzugefügt')")
@@ -383,7 +438,8 @@ def main():
     # sowie die Exporte aus.
     modes = [name for name, active in (("--search", args.search is not None),
                                        ("--stats", args.stats),
-                                       ("--check", args.check)) if active]
+                                       ("--check", args.check),
+                                       ("--password-check", args.password_check)) if active]
     exports = [name for name, active in (("--export-added", args.export_added),
                                          ("--export-merged", args.export_merged)) if active]
     if len(modes) > 1:
@@ -453,6 +509,10 @@ def main():
     if args.check:
         print()
         print_check(old, new, n1, n2)
+        return
+    if args.password_check:
+        print()
+        print_password_check(old, new, n1, n2, args.min_length, args.max_age_days)
         return
     print()
 
