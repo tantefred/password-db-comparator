@@ -1,7 +1,9 @@
 """Einlesen der unterstützten Exportformate in eine gemeinsame Darstellung."""
 
-from . import keepass_csv
+from . import bitwarden, keepass_csv
 from .base import CsvError, LoadResult
+
+BOM = "\ufeff"
 
 
 def load_any(name, text, keep_db_name=False):
@@ -9,7 +11,9 @@ def load_any(name, text, keep_db_name=False):
 
     name wird nur für Fehlermeldungen verwendet.
     """
-    text = text.lstrip("﻿")
+    text = text.lstrip(BOM)
+    if text.lstrip().startswith(("{", "[")):
+        return bitwarden.parse_json(text, name)
     return keepass_csv.parse(text, name, keep_db_name=keep_db_name)
 
 
