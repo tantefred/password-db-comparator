@@ -175,6 +175,18 @@ def print_changed(k, diffs, delta, old, new, show_secrets, indent="  ",
             print(f"{indent}    {c}: {a}  →  {b}")
 
 
+def print_move(move, compare_cols, old, new, n1, n2, show_secrets, indent="  "):
+    """Gibt ein erkanntes Paar aus verschobenem/umbenanntem Eintrag aus."""
+    ok, nk, confidence = move
+    key_changes = [c for c, a, b in zip(KEY_COLS, ok, nk) if a != b]
+    diffs = [c for c in compare_cols if old[ok][c] != new[nk][c]]
+    _, delta = classify(ok, old, new, n1, n2, new_key=nk)
+    header = (f"↷ {label(ok)}  →  {label(nk)}\n"
+              f"{indent}    geändert in: {', '.join(key_changes)}  [{confidence}]")
+    print_changed(ok, diffs, delta, old, new, show_secrets, indent=indent,
+                  new_k=nk, header=header)
+
+
 def main():
     p = argparse.ArgumentParser(description="KeePassium-CSV-Exporte vergleichen")
     p.add_argument("alt", help="Erste CSV-Datei")
@@ -189,6 +201,9 @@ def main():
                    help="Nur Einträge anzeigen, deren Gruppe, Titel oder Username TEXT enthält "
                         "(Groß-/Kleinschreibung egal), samt Status. "
                         "Nicht kombinierbar mit --export-added.")
+    p.add_argument("--no-detect-moves", action="store_true",
+                   help="Verschobene/umbenannte Einträge nicht erkennen "
+                        "(sie erscheinen dann als 'entfernt' plus 'hinzugefügt')")
     p.add_argument("--export-added", nargs="?", const="neue_eintraege.csv",
                    metavar="DATEI",
                    help="Neu hinzugefügte Einträge als CSV schreiben "
@@ -223,8 +238,7 @@ def main():
     compare_cols = [c for c in EXPECTED if c not in KEY_COLS and c not in ignored]
 
     # Verschobene/umbenannte Einträge aus removed/added herauslösen
-    # (im Suchmodus vorerst deaktiviert)
-    moves = [] if args.search is not None else find_moves(old, new, removed, added, ignored)
+    moves = [] if args.no_detect_moves else find_moves(old, new, removed, added, ignored)
     moved_old = {m[0] for m in moves}
     moved_new = {m[1] for m in moves}
     removed = [k for k in removed if k not in moved_old]
@@ -261,8 +275,17 @@ def main():
                      f"'{args.search}' enthält.")
         print(f"Suche nach '{args.search}': {len(matches)} Treffer\n")
         removed_set, added_set = set(removed), set(added)
+        moved_by_key = {k: m for m in moves for k in m[:2]}
+        shown_moves = set()
         for k in matches:
-            if k in removed_set:
+            if k in moved_by_key:
+                move = moved_by_key[k]
+                if move in shown_moves:
+                    continue  # Paar wurde schon über den anderen Key ausgegeben
+                shown_moves.add(move)
+                print(f"  Status: verschoben/umbenannt")
+                print_move(move, compare_cols, old, new, n1, n2, args.show_secrets)
+            elif k in removed_set:
                 print(f"  - {label(k)}")
                 print(f"      Status: nur in {n1} (in {n2} nicht vorhanden)")
                 print(f"      Last Modified: {old[k][TIME_COL]}")
@@ -283,14 +306,8 @@ def main():
 
     if moves:
         print(f"== Verschoben/umbenannt: {len(moves)} ==")
-        for ok, nk, confidence in moves:
-            key_changes = [c for c, a, b in zip(KEY_COLS, ok, nk) if a != b]
-            diffs = [c for c in compare_cols if old[ok][c] != new[nk][c]]
-            _, delta = classify(ok, old, new, n1, n2, new_key=nk)
-            header = (f"↷ {label(ok)}  →  {label(nk)}\n"
-                      f"      geändert in: {', '.join(key_changes)}  [{confidence}]")
-            print_changed(ok, diffs, delta, old, new, args.show_secrets,
-                          new_k=nk, header=header)
+        for move in moves:
+            print_move(move, compare_cols, old, new, n1, n2, args.show_secrets)
         print()
     if removed:
         print(f"== Nur in {n1} (in {n2} nicht vorhanden): {len(removed)} ==")
