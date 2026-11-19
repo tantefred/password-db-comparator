@@ -8,6 +8,12 @@ from .base import CsvError, LoadResult
 
 BOM = "\ufeff"
 
+FORMAT_LABELS = {
+    "keepass-csv": "KeePass-CSV",
+    "bitwarden-json": "Bitwarden-JSON",
+    "bitwarden-csv": "Bitwarden-CSV",
+}
+
 
 def load_any(name, text, keep_db_name=False):
     """Erkennt das Format am Inhalt und liest die Einträge. Wirft CsvError bei Problemen.
@@ -23,4 +29,4 @@ def load_any(name, text, keep_db_name=False):
     return keepass_csv.parse(text, name, keep_db_name=keep_db_name)
 
 
-__all__ = ["CsvError", "LoadResult", "load_any"]
+__all__ = ["CsvError", "FORMAT_LABELS", "LoadResult", "load_any"]

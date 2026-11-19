@@ -5,7 +5,8 @@ import sys
 
 from .common import display_names, is_excluded
 from .compare import compare_files, search_matches
-from .constants import EXPECTED, KEY_COLS
+from .columns import ALL_NAMES
+from .constants import KEY_COLS
 from .csvio import entries_from_rows, read_file
 from .exports import export_added, export_merged
 from .render_json import base_report, dump
@@ -14,7 +15,7 @@ from .render_text import (print_check, print_compare, print_header,
                           print_password_check, print_search, print_stats,
                           print_summary)
 
-IGNORABLE = [c for c in EXPECTED if c not in KEY_COLS]
+IGNORABLE = [c for c in ALL_NAMES if c not in KEY_COLS]
 
 
 def build_parser():
@@ -101,7 +102,7 @@ def validate_args(p, args):
     if args.search is not None and not args.search.strip():
         p.error("--search benötigt einen nicht-leeren Suchbegriff.")
 
-    by_lower = {c.lower(): c for c in EXPECTED}
+    by_lower = {c.lower(): c for c in ALL_NAMES}
     ignored = []
     for part in (s.strip() for item in args.ignore for s in item.split(",")):
         if not part:

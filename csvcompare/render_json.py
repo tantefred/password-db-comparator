@@ -69,6 +69,8 @@ def base_report(cmp, path_old, path_new, hide_trash, group, detect_moves):
         },
         "filters": {
             "ignored_columns": cmp.ignored,
+            "auto_ignored": [{"column": col, "reason": reason}
+                             for col, reason in (cmp.auto_ignored or [])],
             "hide_trash": hide_trash,
             "group": group.strip() if group is not None else None,
             "detect_moves": detect_moves,

@@ -3,7 +3,9 @@
 from collections import defaultdict
 from dataclasses import dataclass
 
-from .common import differing_columns, human_delta, parse_ts, values_equal
+from .columns import ALL_NAMES
+from .common import (TIME_COLUMNS, differing_columns, human_delta, parse_ts,
+                     values_equal)
 from .constants import EXPECTED, KEY_COLS, TIME_COL
 
 
@@ -144,6 +146,7 @@ class Comparison:
     groups: dict     # 'old_outdated' | 'new_outdated' | 'unclear' -> [(key, diffs, delta)]
     src_old: object = None  # LoadResult der ersten Datei (Format, Datenbankname, Hinweise)
     src_new: object = None  # LoadResult der zweiten Datei
+    auto_ignored: list = None  # [(spalte, grund)] – automatisch nicht verglichene Spalten
 
     @property
     def n_changed(self):
@@ -154,11 +157,41 @@ class Comparison:
         return not (self.removed or self.added or self.n_changed or self.moves)
 
 
+TIME_REASON = ("Zeitstempel verschiedener Formate sind nicht vergleichbar, sie bestimmen "
+               "nur, welche Datei aktueller ist")
+
+
+def comparable_columns(n1, n2, ignored, src_old, src_new):
+    """Bestimmt, welche Spalten verglichen werden.
+
+    Verglichen wird, was **beide** Dateien liefern. Spalten, die nur eine Seite hat, und –
+    bei verschiedenen Formaten – die Zeitstempel werden automatisch ausgelassen.
+    Rückgabe: (spalten, [(spalte, grund)]).
+    """
+    provided_old = src_old.provided_columns if src_old else frozenset(EXPECTED)
+    provided_new = src_new.provided_columns if src_new else frozenset(EXPECTED)
+    formats_differ = bool(src_old and src_new and src_old.format != src_new.format)
+    columns, auto = [], []
+    for col in ALL_NAMES:
+        if col in KEY_COLS or col in ignored:
+            continue
+        in_old, in_new = col in provided_old, col in provided_new
+        if in_old and in_new:
+            if formats_differ and col in TIME_COLUMNS:
+                auto.append((col, TIME_REASON))
+            else:
+                columns.append(col)
+        elif in_old or in_new:
+            missing = n2 if in_old else n1
+            auto.append((col, f"kommt in {missing} nicht vor"))
+    return columns, auto
+
+
 def compare_files(old, new, n1, n2, ignored, detect_moves=True, src_old=None, src_new=None):
     """Vergleicht zwei Dateien und gibt ein Comparison-Objekt zurück."""
     removed = sorted(set(old) - set(new))
     added = sorted(set(new) - set(old))
-    compare_cols = [c for c in EXPECTED if c not in KEY_COLS and c not in ignored]
+    compare_cols, auto_ignored = comparable_columns(n1, n2, ignored, src_old, src_new)
 
     # Verschobene/umbenannte Einträge aus removed/added herauslösen
     moves = find_moves(old, new, removed, added, ignored) if detect_moves else []
@@ -174,4 +207,4 @@ def compare_files(old, new, n1, n2, ignored, detect_moves=True, src_old=None, sr
             grp, delta = classify(key, old, new, n1, n2)
             groups[grp].append((key, diffs, delta))
     return Comparison(old, new, n1, n2, list(ignored), compare_cols,
-                      removed, added, moves, groups, src_old, src_new)
+                      removed, added, moves, groups, src_old, src_new, auto_ignored)

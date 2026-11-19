@@ -6,6 +6,7 @@ from .analysis import audit_entries, check_entries, stats_rows
 from .common import differing_columns, label, short
 from .compare import classify
 from .constants import KEY_COLS, SECRET_COLS, TIME_COL
+from .importers import FORMAT_LABELS
 
 
 def print_changed(k, diffs, delta, old, new, show_secrets, indent="  ",
@@ -102,11 +103,17 @@ def group_titles(n1, n2):
 def print_header(cmp, hide_trash, group):
     """Kopfzeilen: Dateien, Anzahl der Einträge und aktive Filter."""
     for name, entries, src in ((cmp.n1, cmp.old, cmp.src_old), (cmp.n2, cmp.new, cmp.src_new)):
-        print(f"{name}: {len(entries)} Einträge")
+        fmt = FORMAT_LABELS.get(src.format) if src and src.format != "keepass-csv" else None
+        print(f"{name}: {len(entries)} Einträge" + (f" ({fmt})" if fmt else ""))
         for note in (src.notes if src else []):
             print(f"  Hinweis: {note}")
     if cmp.ignored:
         print(f"Ignorierte Spalten: {', '.join(cmp.ignored)}")
+    by_reason = {}
+    for col, reason in (cmp.auto_ignored or []):
+        by_reason.setdefault(reason, []).append(col)
+    for reason, cols in by_reason.items():
+        print(f"Automatisch ausgelassen ({reason}): {', '.join(cols)}")
     if hide_trash:
         print("Papierkorb-Gruppen ausgeblendet")
     if group is not None:
