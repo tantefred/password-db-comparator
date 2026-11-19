@@ -213,6 +213,10 @@ class StaticPageTests(unittest.TestCase):
         for storage in ("localStorage", "sessionStorage", "indexedDB", "document.cookie"):
             self.assertNotIn(storage, self.html, storage)
 
+    def test_downloads_have_no_byte_order_mark(self):
+        # Die CSV-Downloads müssen byte-gleich zu den Dateien aus dem Terminal sein.
+        self.assertNotIn(chr(0xFEFF), self.html)
+
     def test_javascript_syntax(self):
         import re
         import shutil
