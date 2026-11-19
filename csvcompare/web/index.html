@@ -2,10 +2,741 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<title>CSV Comparator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="csv-token" content="__TOKEN__">
+<meta name="color-scheme" content="light dark">
+<title>CSV Comparator</title>
+<style>
+:root {
+  --bg: #eef1f4;
+  --surface: #ffffff;
+  --sunken: #f5f7f9;
+  --ink: #1c2733;
+  --muted: #5a6776;
+  --line: #d3dae2;
+  --focus: #2f5bd0;
+  /* Jede Datei hat ihre feste Farbe; sie bedeutet nur „kommt aus dieser Datei“ */
+  --a: #a8660f;
+  --a-soft: #f6e8d2;
+  --b: #0b7480;
+  --b-soft: #d4ecee;
+  --moved: #4a58a6;
+  --moved-soft: #e0e3f4;
+  --danger: #a3262f;
+  --danger-soft: #f8e1e2;
+  --radius: 6px;
+  --font: "Avenir Next", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+:root[data-theme="dark"] { color-scheme: dark; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11171f;
+    --surface: #19212b;
+    --sunken: #141b24;
+    --ink: #e5eaf0;
+    --muted: #96a3b2;
+    --line: #2d3948;
+    --focus: #7da0ff;
+    --a: #e3a850;
+    --a-soft: #3a2d17;
+    --b: #4fc0cb;
+    --b-soft: #14343a;
+    --moved: #9aa6ee;
+    --moved-soft: #272c4c;
+    --danger: #ff8d93;
+    --danger-soft: #3d2124;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11171f; --surface: #19212b; --sunken: #141b24; --ink: #e5eaf0; --muted: #96a3b2;
+  --line: #2d3948; --focus: #7da0ff; --a: #e3a850; --a-soft: #3a2d17; --b: #4fc0cb;
+  --b-soft: #14343a; --moved: #9aa6ee; --moved-soft: #272c4c; --danger: #ff8d93;
+  --danger-soft: #3d2124;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.5 var(--font);
+}
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- Kopf ---------- */
+.topbar {
+  display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  padding: 14px 24px; border-bottom: 1px solid var(--line); background: var(--surface);
+}
+.topbar h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: 0.01em; }
+.topbar p { margin: 0; color: var(--muted); font-size: 13px; }
+.topbar .spacer { flex: 1; }
+.linkish { background: none; border: 0; padding: 0; color: var(--muted); font-size: 13px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+
+/* ---------- Raster ---------- */
+.layout { display: grid; grid-template-columns: 372px minmax(0, 1fr); gap: 24px; padding: 24px; max-width: 1480px; margin: 0 auto; align-items: start; }
+.controls { position: sticky; top: 16px; display: grid; gap: 20px; max-height: calc(100vh - 32px); overflow: auto; padding-right: 2px; }
+@media (max-width: 940px) {
+  .layout { grid-template-columns: 1fr; padding: 16px; }
+  .controls { position: static; max-height: none; }
+  .topbar { padding: 12px 16px; }
+}
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.panel > h2, .panel > summary { margin: 0; padding: 12px 16px; font-size: 14px; font-weight: 650; border-bottom: 1px solid var(--line); }
+.panel .body { padding: 14px 16px; display: grid; gap: 14px; }
+details.panel > summary { cursor: pointer; border-bottom: 0; list-style: none; display: flex; align-items: center; gap: 8px; }
+details.panel > summary::before { content: ""; width: 7px; height: 7px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform .12s; flex: none; }
+details.panel[open] > summary::before { transform: rotate(45deg); }
+details.panel[open] > summary { border-bottom: 1px solid var(--line); }
+details.panel > summary::-webkit-details-marker { display: none; }
+
+/* ---------- Dateien ---------- */
+.files { display: grid; gap: 10px; }
+.drop {
+  position: relative; display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; align-items: center;
+  padding: 12px 14px; background: var(--sunken); border: 1.5px dashed var(--line);
+  border-left: 5px solid var(--side); border-radius: var(--radius); cursor: pointer;
+}
+.drop.a { --side: var(--a); --side-soft: var(--a-soft); }
+.drop.b { --side: var(--b); --side-soft: var(--b-soft); }
+.drop:hover, .drop.over { border-color: var(--side); background: var(--side-soft); }
+.drop input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.drop:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+.drop .tag { grid-row: span 2; font-weight: 700; font-size: 20px; color: var(--side); width: 28px; text-align: center; }
+.drop .name { font-weight: 600; overflow-wrap: anywhere; }
+.drop .meta { color: var(--muted); font-size: 13px; }
+.drop.filled { border-style: solid; background: var(--surface); }
+.swap { justify-self: start; }
+
+/* ---------- Formularelemente ---------- */
+.modes { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--sunken); }
+.modes label { position: relative; text-align: center; padding: 8px 2px; font-size: 13px; cursor: pointer; border-right: 1px solid var(--line); line-height: 1.25; display: grid; place-items: center; }
+.modes label:last-child { border-right: 0; }
+.modes input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
+.modes label:has(input:checked) { background: var(--ink); color: var(--surface); font-weight: 600; }
+.modes label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
+.hint { color: var(--muted); font-size: 13px; margin: 0; }
+.field { display: grid; gap: 4px; }
+.field > span, legend { font-size: 13px; font-weight: 600; }
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.text-in { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.text-in:disabled { opacity: .5; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.check { display: flex; gap: 9px; align-items: flex-start; cursor: pointer; }
+.check input { margin-top: 4px; accent-color: var(--ink); }
+.check small { display: block; color: var(--muted); font-size: 12.5px; }
+.check.warn input:checked + span small { color: var(--danger); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.chips label { position: relative; }
+.chips input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
+.chips span { display: inline-block; padding: 3px 10px; border: 1px solid var(--line); border-radius: 99px; font-size: 13px; background: var(--surface); cursor: pointer; }
+.chips input:checked + span { background: var(--ink); color: var(--surface); border-color: var(--ink); text-decoration: line-through; text-decoration-thickness: 1px; }
+.chips input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 2px; }
+.btn {
+  appearance: none; border: 1px solid var(--ink); background: var(--ink); color: var(--surface);
+  border-radius: var(--radius); padding: 10px 16px; font-weight: 650; cursor: pointer;
+}
+.btn.quiet { background: transparent; color: var(--ink); border-color: var(--line); font-weight: 500; padding: 5px 10px; font-size: 13px; }
+a.btn { display: inline-block; text-decoration: none; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn:not(:disabled):hover { filter: brightness(1.12); }
+.btn.quiet:not(:disabled):hover { border-color: var(--ink); filter: none; }
+.is-hidden { display: none !important; }
+
+/* ---------- Ergebnis ---------- */
+.results { display: grid; gap: 18px; min-width: 0; }
+.empty { padding: 36px 28px; }
+.empty h2 { margin: 0 0 6px; font-size: 20px; }
+.empty p { margin: 0 0 6px; color: var(--muted); max-width: 62ch; }
+.empty ol { margin: 14px 0 0; padding-left: 20px; color: var(--muted); max-width: 62ch; }
+.alert { padding: 12px 16px; border: 1px solid var(--danger); background: var(--danger-soft); color: var(--danger); border-radius: var(--radius); font-weight: 500; overflow-wrap: anywhere; }
+.status { color: var(--muted); font-size: 14px; }
+
+.head { padding: 16px 18px; display: grid; gap: 12px; }
+.pair { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-weight: 650; font-size: 18px; }
+.pair .sep { color: var(--muted); font-weight: 400; }
+.side { padding: 1px 10px; border-radius: 4px; overflow-wrap: anywhere; }
+.side.a { background: var(--a-soft); color: var(--a); }
+.side.b { background: var(--b-soft); color: var(--b); }
+.side small { font-weight: 500; color: var(--muted); margin-left: 6px; }
+.filters { color: var(--muted); font-size: 13px; }
+.cmd { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.cmd code { font: 12.5px/1.4 var(--mono); background: var(--sunken); border: 1px solid var(--line); border-radius: 4px; padding: 4px 8px; overflow-wrap: anywhere; flex: 1 1 280px; }
+.cmd .lbl { font-size: 13px; color: var(--muted); }
+
+.balance { display: flex; height: 22px; border-radius: 4px; overflow: hidden; background: var(--sunken); border: 1px solid var(--line); gap: 2px; padding: 2px; }
+.balance i { display: block; min-width: 3px; border-radius: 2px; transform-origin: left; animation: grow .5s ease-out both; }
+@keyframes grow { from { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .balance i { animation: none; } }
+.seg-same { background: var(--line); }
+.seg-a { background: var(--a); }
+.seg-b { background: var(--b); }
+.seg-moved { background: var(--moved); }
+.seg-ch-a { background: repeating-linear-gradient(135deg, var(--a) 0 4px, var(--a-soft) 4px 8px); }
+.seg-ch-b { background: repeating-linear-gradient(135deg, var(--b) 0 4px, var(--b-soft) 4px 8px); }
+.seg-ch-u { background: repeating-linear-gradient(135deg, var(--muted) 0 4px, var(--line) 4px 8px); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; list-style: none; font-size: 13.5px; }
+.legend li { display: flex; align-items: center; gap: 7px; }
+.legend .sw { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+.legend a { color: inherit; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.legend a:hover { text-decoration-color: currentColor; }
+.legend b { font-variant-numeric: tabular-nums; }
+
+.group > summary { display: flex; align-items: center; gap: 10px; }
+.group > summary .count { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 500; }
+.group > summary .bar { width: 5px; align-self: stretch; border-radius: 2px; margin: -4px 0; flex: none; }
+.entries { list-style: none; margin: 0; padding: 0; }
+.entry { padding: 12px 16px; border-bottom: 1px solid var(--line); display: grid; gap: 8px; }
+.entry:last-child { border-bottom: 0; }
+.entry .title { font-weight: 650; overflow-wrap: anywhere; }
+.entry .path { color: var(--muted); font-size: 13.5px; overflow-wrap: anywhere; }
+.entry .move { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.entry .move .arrow { color: var(--moved); font-weight: 700; }
+.badge { display: inline-block; padding: 0 8px; border-radius: 99px; font-size: 12.5px; font-weight: 600; background: var(--sunken); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.badge.moved { background: var(--moved-soft); color: var(--moved); border-color: transparent; }
+.badge.a { background: var(--a-soft); color: var(--a); border-color: transparent; }
+.badge.b { background: var(--b-soft); color: var(--b); border-color: transparent; }
+.badge.warn { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
+.note { font-size: 13px; color: var(--muted); }
+
+table.diff { width: 100%; border-collapse: collapse; font-size: 14px; table-layout: fixed; }
+table.diff th, table.diff td { text-align: left; vertical-align: top; padding: 5px 10px 5px 0; }
+table.diff th { width: 112px; font-weight: 500; color: var(--muted); }
+table.diff thead th { font-size: 12.5px; font-weight: 650; padding-bottom: 2px; }
+table.diff thead th.a { color: var(--a); }
+table.diff thead th.b { color: var(--b); }
+table.diff td { font: 13px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+table.diff td.a { color: var(--a); }
+table.diff td.b { color: var(--b); }
+table.diff td.masked { font-family: var(--font); font-size: 13.5px; font-style: italic; color: var(--muted); }
+@media (max-width: 560px) {
+  table.diff, table.diff tbody, table.diff tr, table.diff th, table.diff td { display: block; width: auto; }
+  table.diff thead { display: none; }
+  table.diff tr { padding: 4px 0; }
+}
+
+.findings { padding: 14px 16px; display: grid; gap: 14px; }
+.finding h4 { margin: 0 0 4px; font-size: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.finding ul { margin: 0; padding-left: 20px; color: var(--ink); overflow-wrap: anywhere; }
+.finding li { margin: 2px 0; }
+.clean { color: var(--muted); }
+.fileblock > h3 { margin: 0; padding: 12px 16px; font-size: 15px; border-bottom: 1px solid var(--line); border-left: 5px solid var(--side); }
+.fileblock.a { --side: var(--a); } .fileblock.b { --side: var(--b); }
+.fileblock > h3 small { color: var(--muted); font-weight: 400; margin-left: 8px; }
+
+table.stats { width: 100%; border-collapse: collapse; }
+table.stats th { text-align: left; font-size: 12.5px; color: var(--muted); font-weight: 600; padding: 10px 16px 6px; }
+table.stats td { padding: 8px 16px; border-top: 1px solid var(--line); vertical-align: middle; }
+table.stats td.g { width: 28%; overflow-wrap: anywhere; }
+table.stats .pair-bars { display: grid; gap: 3px; }
+table.stats .bl { display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; font-size: 13px; }
+table.stats .bl i { display: block; height: 9px; border-radius: 2px; min-width: 2px; }
+table.stats .bl.a i { background: var(--a); } table.stats .bl.b i { background: var(--b); }
+table.stats td.d { text-align: right; font-variant-numeric: tabular-nums; width: 80px; white-space: nowrap; }
+table.stats tfoot td { font-weight: 650; border-top: 2px solid var(--line); }
+@media (max-width: 560px) { table.stats td.g { width: auto; } }
+
+.exports { padding: 14px 16px; display: grid; gap: 14px; }
+.export { display: grid; gap: 6px; padding: 12px 14px; background: var(--sunken); border: 1px solid var(--line); border-radius: var(--radius); }
+.export p { margin: 0; font-size: 13.5px; }
+.export .btn { justify-self: start; }
+.export ul { margin: 0; padding-left: 20px; font-size: 13.5px; }
+pre.json { margin: 0; padding: 14px 16px; max-height: 420px; overflow: auto; font: 12.5px/1.45 var(--mono); background: var(--sunken); }
+.json-actions { padding: 10px 16px; display: flex; gap: 8px; border-top: 1px solid var(--line); }
+</style>
 </head>
 <body>
-<p>Die Oberfläche folgt.</p>
+<header class="topbar">
+  <h1>CSV Comparator</h1>
+  <p>Vergleicht zwei KeePassium-Exporte. Läuft nur auf diesem Rechner, nichts wird gespeichert oder verschickt.</p>
+  <span class="spacer"></span>
+  <button class="linkish" id="theme" type="button">Dunkel / Hell wechseln</button>
+</header>
+
+<main class="layout">
+  <form class="controls" id="form" autocomplete="off">
+    <section class="panel" aria-labelledby="h-files">
+      <h2 id="h-files">Dateien</h2>
+      <div class="body">
+        <div class="files">
+          <label class="drop a" id="drop-a">
+            <span class="tag" aria-hidden="true">1</span>
+            <span class="name" data-name>Erste Datei wählen</span>
+            <span class="meta" data-meta>CSV hierher ziehen oder klicken</span>
+            <input type="file" id="file-a" accept=".csv,text/csv,text/plain" aria-label="Erste CSV-Datei">
+          </label>
+          <label class="drop b" id="drop-b">
+            <span class="tag" aria-hidden="true">2</span>
+            <span class="name" data-name>Zweite Datei wählen</span>
+            <span class="meta" data-meta>CSV hierher ziehen oder klicken</span>
+            <input type="file" id="file-b" accept=".csv,text/csv,text/plain" aria-label="Zweite CSV-Datei">
+          </label>
+        </div>
+        <button class="btn quiet swap" type="button" id="swap">Dateien tauschen</button>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-mode">
+      <h2 id="h-mode">Was möchtest du sehen?</h2>
+      <div class="body">
+        <div class="modes" role="radiogroup" aria-labelledby="h-mode">
+          <label><input type="radio" name="mode" value="compare" checked><span>Vergleich</span></label>
+          <label><input type="radio" name="mode" value="search"><span>Suche</span></label>
+          <label><input type="radio" name="mode" value="stats"><span>Statistik</span></label>
+          <label><input type="radio" name="mode" value="check"><span>Dubletten</span></label>
+          <label><input type="radio" name="mode" value="password-check"><span>Passwörter</span></label>
+        </div>
+        <p class="hint" id="mode-hint"></p>
+
+        <label class="field is-hidden" id="f-search">
+          <span>Suchbegriff</span>
+          <input class="text-in" id="search" type="text" placeholder="Gruppe, Titel oder Username">
+        </label>
+        <div class="row2 is-hidden" id="f-pw">
+          <label class="field"><span>Mindestlänge</span><input class="text-in" id="min-length" type="number" min="1" value="10"></label>
+          <label class="field"><span>Maximales Alter (Tage)</span><input class="text-in" id="max-age" type="number" min="1" value="730"></label>
+        </div>
+      </div>
+    </section>
+
+    <details class="panel" id="opts">
+      <summary>Optionen</summary>
+      <div class="body">
+        <label class="field">
+          <span>Nur diese Gruppe</span>
+          <input class="text-in" id="group" type="text" placeholder="z. B. Privat">
+        </label>
+        <label class="check"><input type="checkbox" id="hide-trash"><span>Papierkorb ausblenden<small>Einträge aus Papierkorb-Gruppen werden ganz ignoriert.</small></span></label>
+        <label class="check"><input type="checkbox" id="detect-moves" checked><span>Verschobene Einträge erkennen<small>Sonst erscheinen sie als „entfernt“ plus „neu“.</small></span></label>
+        <fieldset>
+          <legend>Spalten ignorieren</legend>
+          <div class="chips" id="ignore"></div>
+        </fieldset>
+        <label class="check warn"><input type="checkbox" id="show-secrets"><span>Passwörter im Klartext zeigen<small>Sonst bleiben Passwörter und TOTP verborgen.</small></span></label>
+      </div>
+    </details>
+
+    <details class="panel" id="export-panel">
+      <summary>Exportieren</summary>
+      <div class="body">
+        <label class="check"><input type="checkbox" id="export-added"><span>Neu hinzugefügte Einträge<small>Nur in Datei 2, ohne Papierkorb. Als CSV zum Importieren.</small></span></label>
+        <label class="check"><input type="checkbox" id="export-merged"><span>Zusammengeführte Datei<small>Alle Einträge, bei Unterschieden die neuere Version.</small></span></label>
+        <p class="hint" id="export-hint">Exporte gibt es nur im Vergleich. Die Dateien enthalten Passwörter im Klartext.</p>
+      </div>
+    </details>
+
+    <button class="btn" type="submit" id="run" disabled>Vergleichen</button>
+  </form>
+
+  <section class="results" id="results" aria-live="polite">
+    <div class="panel empty" id="empty">
+      <h2>Zwei Exporte, ein Überblick</h2>
+      <p>Du siehst, was sich zwischen den Dateien unterscheidet und in welcher davon die jeweils neuere Version liegt.</p>
+      <ol>
+        <li>Wähle links die beiden CSV-Dateien aus.</li>
+        <li>Lege fest, was du sehen möchtest.</li>
+        <li>Klicke auf „Vergleichen“.</li>
+      </ol>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const TOKEN = document.querySelector('meta[name="csv-token"]').content;
+const COLUMNS = ["Password", "URL", "Notes", "TOTP", "Icon", "Last Modified", "Created"];
+const COLUMN_LABEL = { "Password": "Passwort", "URL": "URL", "Notes": "Notizen", "TOTP": "TOTP",
+  "Icon": "Icon", "Last Modified": "Geändert am", "Created": "Erstellt am" };
+const SECRET = new Set(["Password", "TOTP"]);
+const MODE_LABEL = { "compare": "Vergleichen", "search": "Suchen", "stats": "Zählen",
+  "check": "Prüfen", "password-check": "Prüfen" };
+const MODE_HINT = {
+  "compare": "Was ist neu, entfernt, verschoben oder geändert – und in welcher Datei steht die neuere Version?",
+  "search": "Findet einen Eintrag über Gruppe, Titel oder Username und zeigt seinen Status.",
+  "stats": "Wie viele Einträge liegen pro Gruppe in jeder Datei?",
+  "check": "Sucht in jeder Datei einzeln nach Dubletten, fehlenden Passwörtern und ungültigen URLs.",
+  "password-check": "Zeigt wiederverwendete, kurze und lange nicht geänderte Passwörter. Passwörter selbst erscheinen nie."
+};
+
+const $ = (id) => document.getElementById(id);
+const state = { a: null, b: null, last: null, urls: [] };
+
+/* ---------- DOM-Helfer: Inhalte nie als HTML einsetzen ---------- */
+function h(tag, attrs, ...children) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === false || v == null) continue;
+    if (k === "class") el.className = v;
+    else if (k === "text") el.textContent = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of children.flat()) {
+    if (c == null || c === false) continue;
+    el.append(c.nodeType ? c : document.createTextNode(String(c)));
+  }
+  return el;
+}
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/* ---------- Dateien ---------- */
+function setupDrop(key, dropEl, input) {
+  const load = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      state[key] = { name: file.name, text: String(reader.result), size: file.size };
+      renderDrop(key, dropEl);
+      refreshRun();
+    };
+    reader.onerror = () => showError(`„${file.name}“ konnte nicht gelesen werden.`);
+    reader.readAsText(file, "utf-8");
+  };
+  input.addEventListener("change", () => load(input.files[0]));
+  ["dragenter", "dragover"].forEach((ev) => dropEl.addEventListener(ev, (e) => { e.preventDefault(); dropEl.classList.add("over"); }));
+  ["dragleave", "drop"].forEach((ev) => dropEl.addEventListener(ev, (e) => { e.preventDefault(); dropEl.classList.remove("over"); }));
+  dropEl.addEventListener("drop", (e) => load(e.dataTransfer.files[0]));
+}
+function renderDrop(key, dropEl) {
+  const f = state[key];
+  dropEl.classList.toggle("filled", !!f);
+  dropEl.querySelector("[data-name]").textContent = f ? f.name : (key === "a" ? "Erste Datei wählen" : "Zweite Datei wählen");
+  dropEl.querySelector("[data-meta]").textContent = f
+    ? `${(f.size / 1024).toLocaleString("de-DE", { maximumFractionDigits: 1 })} KB – klicken zum Ersetzen`
+    : "CSV hierher ziehen oder klicken";
+}
+function refreshRun() {
+  const mode = currentMode();
+  const needsSearch = mode === "search" && !$("search").value.trim();
+  $("run").disabled = !(state.a && state.b) || needsSearch;
+  $("run").textContent = MODE_LABEL[mode];
+}
+
+/* ---------- Optionen ---------- */
+function currentMode() { return document.querySelector('input[name="mode"]:checked').value; }
+function collectOptions() {
+  const mode = currentMode();
+  const opts = {
+    mode,
+    ignore: [...document.querySelectorAll("#ignore input:checked")].map((i) => i.value),
+    group: $("group").value,
+    hide_trash: $("hide-trash").checked,
+    detect_moves: $("detect-moves").checked,
+    show_secrets: $("show-secrets").checked,
+  };
+  if (mode === "search") opts.search = $("search").value;
+  if (mode === "password-check") {
+    opts.min_length = Number($("min-length").value);
+    opts.max_age_days = Number($("max-age").value);
+  }
+  if (mode === "compare") {
+    opts.export_added = $("export-added").checked;
+    opts.export_merged = $("export-merged").checked;
+  }
+  return opts;
+}
+function onModeChange() {
+  const mode = currentMode();
+  $("mode-hint").textContent = MODE_HINT[mode];
+  $("f-search").classList.toggle("is-hidden", mode !== "search");
+  $("f-pw").classList.toggle("is-hidden", mode !== "password-check");
+  const canExport = mode === "compare";
+  for (const id of ["export-added", "export-merged"]) {
+    $(id).disabled = !canExport;
+    if (!canExport) $(id).checked = false;
+  }
+  $("export-hint").classList.toggle("is-hidden", canExport);
+  refreshRun();
+  if (mode === "search") $("search").focus();
+}
+
+/* ---------- Anfrage ---------- */
+async function run() {
+  clearResults();
+  $("results").append(h("p", { class: "status", text: "Wird ausgewertet …" }));
+  $("run").disabled = true;
+  try {
+    const resp = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Token": TOKEN },
+      body: JSON.stringify({
+        old: { name: state.a.name, text: state.a.text },
+        new: { name: state.b.name, text: state.b.text },
+        options: collectOptions(),
+      }),
+    });
+    let data = null;
+    try { data = await resp.json(); } catch (_) { /* keine JSON-Antwort */ }
+    if (!resp.ok) throw new Error((data && data.error) || `Fehler ${resp.status}`);
+    state.last = data;
+    render(data);
+  } catch (err) {
+    showError(err.message || String(err));
+  } finally {
+    refreshRun();
+  }
+}
+
+/* ---------- Anzeige ---------- */
+function clearResults() {
+  state.urls.forEach((u) => URL.revokeObjectURL(u));
+  state.urls = [];
+  $("results").replaceChildren();
+}
+function showError(msg) {
+  clearResults();
+  $("results").append(h("div", { class: "alert", role: "alert", text: msg }));
+}
+function entryLabel(e) {
+  return { title: e.title || "(ohne Titel)", path: [e.group || "(ohne Gruppe)", e.username].filter(Boolean).join("  ·  ") };
+}
+function entryNode(e) {
+  const l = entryLabel(e);
+  return h("div", null, h("div", { class: "title", text: l.title }), h("div", { class: "path", text: l.path }));
+}
+const sideTag = (cls, name) => h("span", { class: `side ${cls}`, text: name });
+
+function render(data) {
+  clearResults();
+  const r = data.report;
+  const out = $("results");
+  out.append(headPanel(data));
+  if (r.mode === "compare") renderCompare(out, r, data);
+  else if (r.mode === "search") renderSearch(out, r, data);
+  else if (r.mode === "stats") renderStats(out, r);
+  else renderFindings(out, r);
+  out.append(jsonPanel(r));
+  // Nur scrollen, wenn das Ergebnis nicht im sichtbaren Bereich beginnt (z. B. auf dem Handy)
+  const top = out.firstChild.getBoundingClientRect().top;
+  if (top > window.innerHeight * 0.75 || top < 0) out.firstChild.scrollIntoView({ block: "start" });
+}
+
+function headPanel(data) {
+  const r = data.report, f = r.files, fl = r.filters;
+  const notes = [];
+  if (fl.group) notes.push(`Gruppe „${fl.group}“`);
+  if (fl.hide_trash) notes.push("ohne Papierkorb");
+  if (fl.ignored_columns.length) notes.push(`ignoriert: ${fl.ignored_columns.map((c) => COLUMN_LABEL[c] || c).join(", ")}`);
+  if (!fl.detect_moves) notes.push("Verschiebungen nicht erkannt");
+  const copy = h("button", { class: "btn quiet", type: "button", text: "Kopieren" });
+  copy.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(data.command); copy.textContent = "Kopiert"; }
+    catch (_) { copy.textContent = "Nicht möglich"; }
+    setTimeout(() => (copy.textContent = "Kopieren"), 1600);
+  });
+  return h("section", { class: "panel head", id: "top" },
+    h("div", { class: "pair" },
+      sideTag("a", f.old.name), h("small", { class: "note", text: plural(f.old.entries, "Eintrag", "Einträge") }),
+      h("span", { class: "sep", "aria-hidden": "true", text: "⇄" }),
+      sideTag("b", f.new.name), h("small", { class: "note", text: plural(f.new.entries, "Eintrag", "Einträge") })),
+    notes.length ? h("div", { class: "filters", text: notes.join("  ·  ") }) : null,
+    h("div", { class: "cmd" }, h("span", { class: "lbl", text: "Im Terminal:" }), h("code", { text: data.command }), copy));
+}
+
+/* ----- Vergleich ----- */
+function renderCompare(out, r, data) {
+  const s = r.summary, a = r.files.old.name, b = r.files.new.name;
+  const same = Math.max(0, r.files.old.entries - s.only_in_old - s.moved - s.changed);
+  const head = out.firstChild;
+  if (s.identical) {
+    head.append(h("p", { class: "status", text: "Keine Unterschiede. Beide Dateien enthalten dasselbe." }));
+  } else {
+    const parts = [
+      ["seg-same", same, "Identisch", null],
+      ["seg-ch-b", s.newer_in_new, `Geändert, ${b} aktueller`, "sec-newer_in_new"],
+      ["seg-ch-a", s.newer_in_old, `Geändert, ${a} aktueller`, "sec-newer_in_old"],
+      ["seg-ch-u", s.unclear, "Geändert, Aktualität unklar", "sec-unclear"],
+      ["seg-moved", s.moved, "Verschoben/umbenannt", "sec-moved"],
+      ["seg-a", s.only_in_old, `Nur in ${a}`, "sec-only_in_old"],
+      ["seg-b", s.only_in_new, `Nur in ${b}`, "sec-only_in_new"],
+    ].filter((p) => p[1] > 0);
+    const total = parts.reduce((n, p) => n + p[1], 0);
+    head.append(
+      h("div", { class: "balance", role: "img", "aria-label": parts.map((p) => `${p[2]}: ${p[1]}`).join(", ") },
+        parts.map((p) => h("i", { class: p[0], style: `flex: ${p[1] / total} 1 0`, title: `${p[2]}: ${p[1]}` }))),
+      h("ul", { class: "legend" }, parts.map((p) => h("li", null,
+        h("span", { class: `sw ${p[0]}` }),
+        p[3] ? h("a", { href: `#${p[3]}` }, p[2]) : p[2], h("b", { text: p[1] })))));
+  }
+
+  const sections = [
+    ["newer_in_new", `${b} ist aktueller – ${a} aktualisieren`, "b", r.changed.newer_in_new, "changed"],
+    ["newer_in_old", `${a} ist aktueller – ${b} aktualisieren`, "a", r.changed.newer_in_old, "changed"],
+    ["unclear", "Aktualität unklar – selbst prüfen", "u", r.changed.unclear, "changed"],
+    ["moved", "Verschoben oder umbenannt", "moved", r.moved, "moved"],
+    ["only_in_old", `Nur in ${a}`, "a", r.only_in_old, "single"],
+    ["only_in_new", `Nur in ${b}`, "b", r.only_in_new, "single"],
+  ];
+  for (const [id, title, tone, items, kind] of sections) {
+    if (!items.length) continue;
+    out.append(groupPanel(`sec-${id}`, title, tone, items.length, h("ul", { class: "entries" }, items.map((it) =>
+      h("li", { class: "entry" }, kind === "changed" ? changedBody(it, r) : kind === "moved" ? movedBody(it, r) : entryNode(it))))));
+  }
+  const exp = exportsPanel(data.exports);
+  if (exp) out.append(exp);
+}
+function groupPanel(id, title, tone, count, body) {
+  const colour = { a: "--a", b: "--b", moved: "--moved", u: "--muted" }[tone];
+  return h("details", { class: "panel group", id, open: true },
+    h("summary", null, h("span", { class: "bar", style: `background: var(${colour})` }), title, h("span", { class: "count", text: count })),
+    body);
+}
+function fieldRows(changes, cols, r) {
+  const rows = cols.map((c) => {
+    const ch = changes[c];
+    const label = COLUMN_LABEL[c] || c;
+    if (ch.masked) {
+      return h("tr", null, h("th", { scope: "row", text: label }),
+        h("td", { class: "masked", colspan: 2, text: "geändert (Wert verborgen)" }));
+    }
+    return h("tr", null, h("th", { scope: "row", text: label }),
+      h("td", { class: "a", text: ch.old === "" ? "(leer)" : ch.old }),
+      h("td", { class: "b", text: ch.new === "" ? "(leer)" : ch.new }));
+  });
+  return h("table", { class: "diff" },
+    h("thead", null, h("tr", null, h("th", { scope: "col" }, h("span", { class: "sr-only", text: "Feld" })),
+      h("th", { scope: "col", class: "a", text: r.files.old.name }), h("th", { scope: "col", class: "b", text: r.files.new.name }))),
+    h("tbody", null, rows));
+}
+function changedBody(it, r) {
+  const cols = it.differing_columns.filter((c) => c !== "Last Modified");
+  const lm = it.last_modified;
+  const nodes = [entryNode(it.entry)];
+  if (it.only_timestamp) nodes.push(h("div", null, h("span", { class: "badge", text: "nur Zeitstempel" })));
+  if (cols.length) nodes.push(fieldRows(it.changes, cols, r));
+  nodes.push(h("div", { class: "note" }, it.note ? `${it.note}.  ` : "", `Zuletzt geändert: ${lm.old}  |  ${lm.new}`));
+  return nodes;
+}
+function movedBody(it, r) {
+  const o = entryLabel(it.entry), n = entryLabel(it.moved_to);
+  const cols = it.differing_columns.filter((c) => c !== "Last Modified");
+  const nodes = [
+    h("div", { class: "move" },
+      h("div", null, h("div", { class: "title", text: o.title }), h("div", { class: "path", text: o.path })),
+      h("span", { class: "arrow", "aria-label": "verschoben nach", text: "→" }),
+      h("div", null, h("div", { class: "title", text: n.title }), h("div", { class: "path", text: n.path }))),
+    h("div", null, h("span", { class: "badge moved", text: `geändert in: ${it.changed_key_columns.map((c) => ({ Group: "Gruppe", Title: "Titel", Username: "Username" }[c])).join(", ")}` }),
+      " ", h("span", { class: "badge", text: it.confidence === "certain" ? "sicher" : "wahrscheinlich" })),
+  ];
+  if (cols.length) nodes.push(fieldRows(it.changes, cols, r));
+  else nodes.push(h("div", { class: "note", text: "Sonst keine Änderungen." }));
+  return nodes;
+}
+function exportsPanel(exps) {
+  const keys = Object.keys(exps || {});
+  if (!keys.length) return null;
+  const items = keys.map((k) => {
+    const e = exps[k];
+    const url = URL.createObjectURL(new Blob(["﻿" + e.csv], { type: "text/csv;charset=utf-8" }));
+    state.urls.push(url);
+    const title = k === "added" ? "Neu hinzugefügte Einträge" : "Zusammengeführte Datei";
+    return h("div", { class: "export" },
+      h("strong", { text: title }),
+      e.lines.map((l) => h("p", { class: l.startsWith("    !") ? "note" : null, text: l.trim() })),
+      h("a", { class: "btn", href: url, download: e.filename, text: `${e.filename} speichern` }));
+  });
+  return h("section", { class: "panel" }, h("h2", { text: "Exporte" }),
+    h("div", { class: "exports" }, h("p", { class: "hint", text: "Die Dateien enthalten Passwörter im Klartext. Nach dem Import wieder löschen." }), items));
+}
+
+/* ----- Suche ----- */
+const SEARCH_STATUS = {
+  moved: ["Verschoben/umbenannt", "moved"], identical: ["Identisch in beiden Dateien", ""], unclear: ["Aktualität unklar", "warn"],
+};
+function renderSearch(out, r) {
+  const a = r.files.old.name, b = r.files.new.name;
+  const status = (s) => ({
+    only_in_old: [`Nur in ${a}`, "a"], only_in_new: [`Nur in ${b}`, "b"],
+    newer_in_new: [`${b} ist aktueller`, "b"], newer_in_old: [`${a} ist aktueller`, "a"],
+  }[s] || SEARCH_STATUS[s]);
+  if (!r.results.length) {
+    out.append(h("div", { class: "panel empty" }, h("h2", { text: "Kein Treffer" }),
+      h("p", { text: `Kein Eintrag enthält „${r.query}“ in Gruppe, Titel oder Username.` })));
+    return;
+  }
+  const list = h("ul", { class: "entries" }, r.results.map((it) => {
+    const [label, tone] = status(it.status);
+    const body = it.status === "moved" ? movedBody(it, r)
+      : it.differing_columns ? changedBody(it, r) : [entryNode(it.entry), h("div", { class: "note", text: `Zuletzt geändert: ${it.last_modified}` })];
+    return h("li", { class: "entry" }, h("div", null, h("span", { class: `badge ${tone}`, text: label })), body);
+  }));
+  out.append(h("section", { class: "panel group" },
+    h("h2", null, `${plural(r.match_count, "Treffer", "Treffer")} für „${r.query}“`), list));
+}
+
+/* ----- Statistik ----- */
+function renderStats(out, r) {
+  const a = r.files.old.name, b = r.files.new.name;
+  const max = Math.max(1, ...r.groups.map((g) => Math.max(g.old, g.new)));
+  const bars = (g) => h("div", { class: "pair-bars" },
+    h("div", { class: "bl a" }, h("i", { style: `width: ${(g.old / max) * 100}%` }), g.old),
+    h("div", { class: "bl b" }, h("i", { style: `width: ${(g.new / max) * 100}%` }), g.new));
+  const diff = (n) => (n > 0 ? "+" : n < 0 ? "−" : "±") + Math.abs(n);
+  out.append(h("section", { class: "panel" }, h("h2", { text: "Einträge pro Gruppe" }),
+    h("table", { class: "stats" },
+      h("thead", null, h("tr", null, h("th", { scope: "col", text: "Gruppe" }),
+        h("th", { scope: "col" }, sideTag("a", a), " ", sideTag("b", b)), h("th", { scope: "col", style: "text-align:right", text: "Differenz" }))),
+      h("tbody", null, r.groups.map((g) => h("tr", null,
+        h("td", { class: "g", text: g.group || "(ohne Gruppe)" }), h("td", null, bars(g)), h("td", { class: "d", text: diff(g.difference) })))),
+      h("tfoot", null, h("tr", null, h("td", { class: "g", text: "Gesamt" }),
+        h("td", { text: `${r.total.old} | ${r.total.new}` }), h("td", { class: "d", text: diff(r.total.difference) }))))));
+}
+
+/* ----- Prüfungen ----- */
+function renderFindings(out, r) {
+  r.results.forEach((res, i) => {
+    const side = i === 0 ? "a" : "b";
+    const entries = r.files[i === 0 ? "old" : "new"].entries;
+    const block = h("section", { class: `panel fileblock ${side}` },
+      h("h3", null, res.file, h("small", { text: plural(entries, "Eintrag", "Einträge") })));
+    const body = h("div", { class: "findings" });
+    if (!res.findings.length) body.append(h("p", { class: "clean", text: "Keine Auffälligkeiten." }));
+    res.findings.forEach((f) => body.append(h("div", { class: "finding" },
+      h("h4", null, f.category, h("span", { class: "badge warn", text: f.count })),
+      h("ul", null, f.items.map((it) => h("li", { text: it }))))));
+    if (res.totp) body.append(h("p", { class: "note", text: `TOTP: ${res.totp.with_totp} von ${res.totp.entries} Einträgen haben TOTP eingerichtet.` }));
+    block.append(body);
+    out.append(block);
+  });
+}
+
+/* ----- JSON ----- */
+function jsonPanel(report) {
+  const pre = h("pre", { class: "json" });
+  const save = h("button", { class: "btn quiet", type: "button", text: "JSON speichern" });
+  save.addEventListener("click", () => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
+    const a = h("a", { href: url, download: `bericht-${report.mode}.json` });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+  const panel = h("details", { class: "panel" }, h("summary", { text: "JSON-Bericht" }), pre,
+    h("div", { class: "json-actions" }, save));
+  panel.addEventListener("toggle", () => { if (panel.open && !pre.textContent) pre.textContent = JSON.stringify(report, null, 2); });
+  return panel;
+}
+
+/* ---------- Start ---------- */
+COLUMNS.forEach((c) => $("ignore").append(
+  h("label", null, h("input", { type: "checkbox", value: c }), h("span", { text: COLUMN_LABEL[c] }))));
+setupDrop("a", $("drop-a"), $("file-a"));
+setupDrop("b", $("drop-b"), $("file-b"));
+$("swap").addEventListener("click", () => {
+  [state.a, state.b] = [state.b, state.a];
+  renderDrop("a", $("drop-a")); renderDrop("b", $("drop-b")); refreshRun();
+});
+document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener("change", onModeChange));
+$("search").addEventListener("input", refreshRun);
+$("form").addEventListener("submit", (e) => { e.preventDefault(); if (!$("run").disabled) run(); });
+$("theme").addEventListener("click", () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark";
+});
+onModeChange();
+</script>
 </body>
 </html>
