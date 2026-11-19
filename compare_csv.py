@@ -9,6 +9,7 @@ import os
 import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 
 KEY_COLS = ("Group", "Title", "Username")
 SECRET_COLS = ("Password", "TOTP")
@@ -166,6 +167,85 @@ def print_stats(old, new, n1, n2):
     print(f"{'Gesamt':<{w}}  {a:>{w1}}  {b:>{w2}}  {b - a:+d}")
 
 
+def url_problem(url):
+    """Gibt einen Grund zurück, falls die URL offensichtlich ungültig ist, sonst None."""
+    url = url.strip()
+    if not url:
+        return None
+    if any(ch.isspace() for ch in url):
+        return "enthält Leerzeichen"
+    host = urlsplit(url if "://" in url else "//" + url).hostname or ""
+    if not host:
+        return "kein Host erkennbar"
+    if "." not in host and host != "localhost" and ":" not in host:
+        return "Host ohne Punkt"
+    return None
+
+
+def check_entries(entries):
+    """Prüft eine Datei auf Dubletten und kaputte Einträge.
+
+    Rückgabe: Liste (überschrift, [zeilen]) – nur Kategorien mit Funden.
+    Passwörter werden nie ausgegeben.
+    """
+    findings = []
+
+    exact = defaultdict(list)
+    for k in entries:
+        exact[k[:3]].append(k)
+    lines = [f"{label(ks[0])}  ({len(ks)}×)" for ks in exact.values() if len(ks) > 1]
+    findings.append(("Doppelte Einträge (gleiche Gruppe, Titel und Username)", sorted(lines)))
+
+    by_title = defaultdict(list)
+    for k in entries:
+        if k[1] and k[2]:
+            by_title[(k[1].lower(), k[2].lower())].append(k)
+    lines = []
+    for ks in by_title.values():
+        if len({k[0] for k in ks}) > 1:
+            lines.append(f"{ks[0][1]} [{ks[0][2]}] in: " + ", ".join(sorted({k[0] or '(ohne Gruppe)' for k in ks})))
+    findings.append(("Gleicher Titel und Username in verschiedenen Gruppen", sorted(lines)))
+
+    by_url = defaultdict(list)
+    for k, r in entries.items():
+        url = r["URL"].strip().lower().rstrip("/")
+        if url and k[2]:
+            by_url[(url, k[2].lower())].append(k)
+    lines = []
+    for (url, user), ks in by_url.items():
+        if len({k[:3] for k in ks}) > 1:
+            lines.append(f"{url} [{user}]: " + "; ".join(label(k) for k in ks))
+    findings.append(("Gleiche URL und Username in verschiedenen Einträgen", sorted(lines)))
+
+    findings.append(("Einträge ohne Passwort",
+                     sorted(label(k) for k, r in entries.items() if not r["Password"])))
+    findings.append(("Einträge ohne Titel",
+                     sorted(label(k) for k in entries if not k[1])))
+    lines = []
+    for k, r in sorted(entries.items()):
+        reason = url_problem(r["URL"])
+        if reason:
+            lines.append(f"{label(k)}: '{r['URL'].strip()}' ({reason})")
+    findings.append(("Ungültige URLs", lines))
+
+    return [(title, lines) for title, lines in findings if lines]
+
+
+def print_check(old, new, n1, n2):
+    """Gibt das Prüfergebnis beider Dateien aus."""
+    for name, entries in ((n1, old), (n2, new)):
+        print(f"=== {name} ===")
+        findings = check_entries(entries)
+        if not findings:
+            print("  Keine Auffälligkeiten.\n")
+            continue
+        for title, lines in findings:
+            print(f"  {title}: {len(lines)}")
+            for line in lines:
+                print(f"    - {line}")
+        print()
+
+
 def display_names(path1, path2):
     """Dateinamen für die Ausgabe; bei gleichem Namen der volle Pfad."""
     n1, n2 = os.path.basename(path1), os.path.basename(path2)
@@ -280,6 +360,10 @@ def main():
     p.add_argument("--stats", action="store_true",
                    help="Nur die Anzahl der Einträge pro Gruppe in beiden Dateien anzeigen "
                         "(nicht kombinierbar mit --search, --export-added, --export-merged)")
+    p.add_argument("--check", action="store_true",
+                   help="Jede Datei einzeln auf Dubletten und kaputte Einträge prüfen "
+                        "(ohne Passwörter anzuzeigen; nicht kombinierbar mit --search, "
+                        "--stats und den Exporten)")
     p.add_argument("--no-detect-moves", action="store_true",
                    help="Verschobene/umbenannte Einträge nicht erkennen "
                         "(sie erscheinen dann als 'entfernt' plus 'hinzugefügt')")
@@ -302,6 +386,10 @@ def main():
     if args.stats and (args.search is not None or args.export_added or args.export_merged):
         p.error("--stats kann nicht mit --search, --export-added oder --export-merged "
                 "kombiniert werden.")
+    if args.check and (args.search is not None or args.stats
+                       or args.export_added or args.export_merged):
+        p.error("--check kann nicht mit --search, --stats, --export-added oder "
+                "--export-merged kombiniert werden.")
     if args.search is not None and not args.search.strip():
         p.error("--search benötigt einen nicht-leeren Suchbegriff.")
 
@@ -361,6 +449,10 @@ def main():
     if args.stats:
         print()
         print_stats(old, new, n1, n2)
+        return
+    if args.check:
+        print()
+        print_check(old, new, n1, n2)
         return
     print()
 
