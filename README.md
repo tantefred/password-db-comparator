@@ -19,6 +19,7 @@ python3 compare_csv.py tests/alt.csv tests/neu.csv
 | `--password-check` | Passwortqualität je Datei prüfen (Passwörter werden nie angezeigt; nicht kombinierbar mit `--search`, `--stats`, `--check` oder den Exporten) |
 | `--min-length N` | Mindestlänge für `--password-check` (Standard: 10) |
 | `--max-age-days TAGE` | Maximales Alter seit der letzten Änderung für `--password-check` (Standard: 730) |
+| `--format text\|json` | Ausgabeformat (Standard: `text`). Mit `json` steht nur JSON auf stdout; Hinweise zu Exporten gehen nach stderr |
 | `--no-detect-moves` | Verschobene/umbenannte Einträge nicht erkennen (sie erscheinen dann als „entfernt“ plus „hinzugefügt“) |
 | `--export-added [DATEI]` | Neu hinzugefügte Einträge als CSV schreiben (Standard: `neue_eintraege.csv`; Papierkorb-Gruppen werden ausgelassen; verschobene Einträge zählen nicht als neu) |
 | `--export-merged [DATEI]` | Zusammengeführte CSV schreiben (Standard: `merged.csv`): alle Einträge beider Dateien, bei Unterschieden die jeweils neuere Version; Papierkorb-Gruppen werden ausgelassen (nicht mit `--search` kombinierbar) |
@@ -58,6 +59,28 @@ Pro Datei werden gemeldet:
 
 Das „Alter“ wird relativ zum heutigen Datum berechnet, die Ausgabe für
 `tests/passwoerter.csv` ändert sich daher mit der Zeit.
+
+## JSON-Ausgabe (`--format json`)
+
+Mit `--format json` wird statt des Textes ein JSON-Objekt ausgegeben, und zwar für
+das, was du sonst angefragt hättest (Vergleich, `--search`, `--stats`, `--check`
+oder `--password-check`). Alle Filter und Optionen (`--group`, `--hide-trash`,
+`--ignore`, `--no-detect-moves`, …) gelten unverändert und stehen unter `filters`.
+Exporte (`--export-added`, `--export-merged`) lassen sich mit dem Vergleich
+kombinieren; ihre Hinweise gehen dann nach stderr, damit stdout gültiges JSON bleibt.
+
+Jedes Objekt hat `mode`, `files` (Name, Pfad, Anzahl) und `filters`. Danach folgt je Modus:
+
+| `mode` | Inhalt |
+|---|---|
+| `compare` | `moved`, `only_in_old`, `only_in_new`, `changed` (`newer_in_new`, `newer_in_old`, `unclear`) und `summary` |
+| `search` | `query`, `match_count` und `results` mit `status` (`moved`, `only_in_old`, `only_in_new`, `newer_in_new`, `newer_in_old`, `unclear`, `identical`); Exit-Code 1 ohne Treffer |
+| `stats` | `groups` (je `old`, `new`, `difference`) und `total` |
+| `check` | `results` je Datei mit `findings` (`category`, `count`, `items`) |
+| `password-check` | wie `check`, dazu `totp` je Datei und `thresholds` |
+
+Einträge werden als `{"group", "title", "username"}` ausgegeben. Passwörter und TOTP
+bleiben maskiert (`"masked": true`), außer mit `--show-secrets`.
 
 ## Merge-Export
 
