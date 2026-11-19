@@ -148,6 +148,14 @@ class RobustnessTests(unittest.TestCase):
         r = result.rows[0]
         self.assertEqual((r["Title"], r["Group"], r["Fields"], r["Favorite"]), ("A", "", "", "0"))
 
+    def test_switches_accept_the_usual_spellings(self):
+        for on in ("1", "true", "True", "TRUE", " 1 "):
+            r = load_any("x.csv", make_csv([row(favorite=on, reprompt=on)])).rows[0]
+            self.assertEqual((r["Favorite"], r["Reprompt"]), ("1", "1"), on)
+        for off in ("", "0", "false", "False", "nein"):
+            r = load_any("x.csv", make_csv([row(favorite=off, reprompt=off)])).rows[0]
+            self.assertEqual((r["Favorite"], r["Reprompt"]), ("0", "0"), off)
+
     def test_empty_export(self):
         self.assertEqual(load_any("x.csv", make_csv([])).rows, [])
 
