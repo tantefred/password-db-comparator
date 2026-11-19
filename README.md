@@ -110,3 +110,12 @@ zählen beim Paaren nicht mit (ohne `Created` entfällt die Stufe „sicher“).
 
 **Achtung:** Echte Exporte und `--export-added`-Dateien enthalten Passwörter im
 Klartext. Alle `*.csv` außer `tests/*.csv` sind per `.gitignore` ausgeschlossen.
+
+## Tests
+
+```
+python3 -m unittest discover -s tests -v
+```
+
+Die Tests starten das Skript wie ein Nutzer über die Kommandozeile und verwenden
+die Beispieldaten in `tests/` (nur Standardbibliothek, kein Netzwerk).
