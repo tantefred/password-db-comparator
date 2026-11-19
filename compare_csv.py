@@ -103,10 +103,43 @@ def display_names(path1, path2):
     return (path1, path2) if n1 == n2 else (n1, n2)
 
 
-def classify(key, old, new, n1, n2):
+def find_moves(old, new, removed, added, ignored):
+    """Findet verschobene/umbenannte Einträge unter den nur einseitig vorhandenen Keys.
+
+    Rückgabe: Liste (alter_key, neuer_key, sicherheit) mit sicherheit 'sicher' oder
+    'wahrscheinlich'. Gepaart wird nur bei eindeutigen 1:1-Treffern.
+    """
+    def same(r, a, col):
+        return col not in ignored and old[r][col] != "" and old[r][col] == new[a][col]
+
+    def strong(r, a):
+        return same(r, a, "Created") and any(
+            same(r, a, c) for c in ("Password", "URL", "Title"))
+
+    def likely(r, a):
+        return all(same(r, a, c) for c in ("Username", "Password", "URL"))
+
+    moves = []
+    left_old, left_new = list(removed), list(added)
+    for matcher, confidence in ((strong, "sicher"), (likely, "wahrscheinlich")):
+        cands = {r: [a for a in left_new if matcher(r, a)] for r in left_old}
+        reverse = defaultdict(list)
+        for r, lst in cands.items():
+            for a in lst:
+                reverse[a].append(r)
+        paired = [(r, lst[0]) for r, lst in cands.items()
+                  if len(lst) == 1 and len(reverse[lst[0]]) == 1]
+        for r, a in paired:
+            moves.append((r, a, confidence))
+        left_old = [r for r in left_old if r not in {m[0] for m in paired}]
+        left_new = [a for a in left_new if a not in {m[1] for m in paired}]
+    return sorted(moves)
+
+
+def classify(key, old, new, n1, n2, new_key=None):
     """Gibt (gruppe, delta_text) zurück. gruppe: 'old_outdated' | 'new_outdated' | 'unclear'."""
     t_old = parse_ts(old[key][TIME_COL])
-    t_new = parse_ts(new[key][TIME_COL])
+    t_new = parse_ts(new[new_key or key][TIME_COL])
     if t_old is None or t_new is None:
         return "unclear", "Zeitstempel nicht auswertbar"
     diff = (t_new - t_old).total_seconds()
@@ -117,17 +150,25 @@ def classify(key, old, new, n1, n2):
     return "unclear", "gleicher Zeitstempel, Inhalt unterschiedlich"
 
 
-def print_changed(k, diffs, delta, old, new, show_secrets, indent="  "):
-    """Gibt einen geänderten Eintrag mit Unterschieden aus."""
+def print_changed(k, diffs, delta, old, new, show_secrets, indent="  ",
+                  new_k=None, header=None):
+    """Gibt einen geänderten Eintrag mit Unterschieden aus.
+
+    new_k: Key des Eintrags in der zweiten Datei, falls er sich von k unterscheidet.
+    """
+    nk = new_k or k
     names = [c for c in diffs if c != TIME_COL]
-    kind = "nur Zeitstempel" if not names else "Unterschiede in: " + ", ".join(names)
-    print(f"{indent}~ {label(k)}")
-    print(f"{indent}    {kind}  ({delta})")
-    print(f"{indent}    Last Modified: {old[k][TIME_COL]}  |  {new[k][TIME_COL]}")
+    print(f"{indent}{header or '~ ' + label(k)}")
+    if not diffs:
+        print(f"{indent}    sonst keine Änderungen")
+    else:
+        kind = "nur Zeitstempel" if not names else "Unterschiede in: " + ", ".join(names)
+        print(f"{indent}    {kind}  ({delta})")
+        print(f"{indent}    Last Modified: {old[k][TIME_COL]}  |  {new[nk][TIME_COL]}")
     for c in names:
         secret = c in SECRET_COLS
         a = short(old[k][c], secret, show_secrets)
-        b = short(new[k][c], secret, show_secrets)
+        b = short(new[nk][c], secret, show_secrets)
         if secret and not show_secrets:
             print(f"{indent}    {c}: geändert ({a} → {b})")
         else:
@@ -180,6 +221,15 @@ def main():
     added = sorted(set(new) - set(old))
 
     compare_cols = [c for c in EXPECTED if c not in KEY_COLS and c not in ignored]
+
+    # Verschobene/umbenannte Einträge aus removed/added herauslösen
+    # (im Suchmodus vorerst deaktiviert)
+    moves = [] if args.search is not None else find_moves(old, new, removed, added, ignored)
+    moved_old = {m[0] for m in moves}
+    moved_new = {m[1] for m in moves}
+    removed = [k for k in removed if k not in moved_old]
+    added = [k for k in added if k not in moved_new]
+
     groups = {"old_outdated": [], "new_outdated": [], "unclear": []}
     for key in sorted(set(old) & set(new)):
         diffs = [c for c in compare_cols if old[key][c] != new[key][c]]
@@ -231,6 +281,17 @@ def main():
             print()
         return
 
+    if moves:
+        print(f"== Verschoben/umbenannt: {len(moves)} ==")
+        for ok, nk, confidence in moves:
+            key_changes = [c for c, a, b in zip(KEY_COLS, ok, nk) if a != b]
+            diffs = [c for c in compare_cols if old[ok][c] != new[nk][c]]
+            _, delta = classify(ok, old, new, n1, n2, new_key=nk)
+            header = (f"↷ {label(ok)}  →  {label(nk)}\n"
+                      f"      geändert in: {', '.join(key_changes)}  [{confidence}]")
+            print_changed(ok, diffs, delta, old, new, args.show_secrets,
+                          new_k=nk, header=header)
+        print()
     if removed:
         print(f"== Nur in {n1} (in {n2} nicht vorhanden): {len(removed)} ==")
         for k in removed:
@@ -265,10 +326,11 @@ def main():
         print(f"{len(export)} neue Einträge nach '{args.export_added}' exportiert "
               f"({skipped} aus Papierkorb ausgelassen; Datei enthält Passwörter im Klartext).\n")
 
-    if not (removed or added or n_changed):
+    if not (removed or added or n_changed or moves):
         print("Keine Unterschiede.")
     else:
         print(f"Zusammenfassung: {len(removed)} nur in {n1}, {len(added)} nur in {n2}, "
+              f"{len(moves)} verschoben/umbenannt, "
               f"{n_changed} geändert "
               f"({len(groups['old_outdated'])} in {n1} zu aktualisieren, "
               f"{len(groups['new_outdated'])} in {n2} zu aktualisieren, "
