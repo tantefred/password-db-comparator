@@ -292,6 +292,40 @@ def print_password_check(old, new, n1, n2, min_length, max_age_days):
         print(f"  TOTP: {totp} von {len(entries)} Einträgen haben TOTP eingerichtet\n")
 
 
+def search_matches(needle, old, new, removed, added, moves, groups):
+    """Sucht needle in Gruppe/Titel/Username beider Dateien.
+
+    Rückgabe: (anzahl_treffer, ergebnisse) mit ergebnisse = Liste (art, daten):
+    'moved' -> move, 'only_old'/'only_new'/'identical' -> key,
+    'changed' -> (key, gruppe, diffs, delta). Ein verschobenes Paar erscheint nur einmal.
+    """
+    needle = needle.strip().lower()
+    changed_by_key = {k: (grp, diffs, delta)
+                      for grp, items in groups.items() for k, diffs, delta in items}
+    matches = sorted(k for k in set(old) | set(new)
+                     if needle in " / ".join(k[:3]).lower())
+    removed_set, added_set = set(removed), set(added)
+    moved_by_key = {k: m for m in moves for k in m[:2]}
+    shown_moves = set()
+    results = []
+    for k in matches:
+        if k in moved_by_key:
+            move = moved_by_key[k]
+            if move not in shown_moves:
+                shown_moves.add(move)
+                results.append(("moved", move))
+        elif k in removed_set:
+            results.append(("only_old", k))
+        elif k in added_set:
+            results.append(("only_new", k))
+        elif k in changed_by_key:
+            grp, diffs, delta = changed_by_key[k]
+            results.append(("changed", (k, grp, diffs, delta)))
+        else:
+            results.append(("identical", k))
+    return len(matches), results
+
+
 def display_names(path1, path2):
     """Dateinamen für die Ausgabe; bei gleichem Namen der volle Pfad."""
     n1, n2 = os.path.basename(path1), os.path.basename(path2)
@@ -523,42 +557,32 @@ def main():
     }
 
     if args.search is not None:
-        needle = args.search.strip().lower()
-        changed_by_key = {k: (grp, diffs, delta)
-                          for grp, items in groups.items() for k, diffs, delta in items}
-        matches = sorted(k for k in set(old) | set(new)
-                         if needle in " / ".join(k[:3]).lower())
-        if not matches:
+        n_matches, results = search_matches(args.search, old, new, removed, added,
+                                            moves, groups)
+        if not n_matches:
             sys.exit(f"Kein Eintrag gefunden, dessen Gruppe, Titel oder Username "
                      f"'{args.search}' enthält.")
-        print(f"Suche nach '{args.search}': {len(matches)} Treffer\n")
-        removed_set, added_set = set(removed), set(added)
-        moved_by_key = {k: m for m in moves for k in m[:2]}
-        shown_moves = set()
-        for k in matches:
-            if k in moved_by_key:
-                move = moved_by_key[k]
-                if move in shown_moves:
-                    continue  # Paar wurde schon über den anderen Key ausgegeben
-                shown_moves.add(move)
+        print(f"Suche nach '{args.search}': {n_matches} Treffer\n")
+        for kind, data in results:
+            if kind == "moved":
                 print(f"  Status: verschoben/umbenannt")
-                print_move(move, compare_cols, old, new, n1, n2, args.show_secrets)
-            elif k in removed_set:
-                print(f"  - {label(k)}")
+                print_move(data, compare_cols, old, new, n1, n2, args.show_secrets)
+            elif kind == "only_old":
+                print(f"  - {label(data)}")
                 print(f"      Status: nur in {n1} (in {n2} nicht vorhanden)")
-                print(f"      Last Modified: {old[k][TIME_COL]}")
-            elif k in added_set:
-                print(f"  + {label(k)}")
+                print(f"      Last Modified: {old[data][TIME_COL]}")
+            elif kind == "only_new":
+                print(f"  + {label(data)}")
                 print(f"      Status: nur in {n2} (in {n1} nicht vorhanden)")
-                print(f"      Last Modified: {new[k][TIME_COL]}")
-            elif k in changed_by_key:
-                grp, diffs, delta = changed_by_key[k]
+                print(f"      Last Modified: {new[data][TIME_COL]}")
+            elif kind == "changed":
+                k, grp, diffs, delta = data
                 print(f"  Status: {titles[grp]}")
                 print_changed(k, diffs, delta, old, new, args.show_secrets)
             else:
-                print(f"  = {label(k)}")
+                print(f"  = {label(data)}")
                 print(f"      Status: identisch in beiden Dateien")
-                print(f"      Last Modified: {old[k][TIME_COL]}")
+                print(f"      Last Modified: {old[data][TIME_COL]}")
             print()
         return
 
