@@ -6,25 +6,17 @@ import io
 import sys
 
 from .constants import EXPECTED, KEY_COLS
+from .importers import CsvError, load_any
 
 
-class CsvError(Exception):
-    """Eine CSV-Datei ist unbrauchbar (z. B. fehlende Spalten)."""
-
-
-def read_entries(fileobj, name):
-    """Liest Einträge aus einem geöffneten CSV-Objekt.
+def entries_from_rows(rows):
+    """Bildet aus Zeilen die Einträge, geordnet nach (Gruppe, Titel, Username, Nummer).
 
     Doppelte Schlüssel werden durchnummeriert, damit nichts verloren geht.
-    Wirft CsvError, wenn Pflichtspalten fehlen.
     """
-    reader = csv.DictReader(fileobj)
-    missing = [c for c in EXPECTED if c not in (reader.fieldnames or [])]
-    if missing:
-        raise CsvError(f"In '{name}' fehlen Spalten: {', '.join(missing)}")
     seen = defaultdict(int)
     entries = {}
-    for row in reader:
+    for row in rows:
         base = tuple(row[c] for c in KEY_COLS)
         seen[base] += 1
         entries[base + (seen[base],)] = row
@@ -32,10 +24,11 @@ def read_entries(fileobj, name):
 
 
 def load(path):
-    """Liest eine CSV-Datei; beendet das Programm mit einer Meldung bei Fehlern."""
+    """Liest eine Datei; beendet das Programm mit einer Meldung bei Fehlern."""
     try:
         with open(path, newline="", encoding="utf-8-sig") as f:
-            return read_entries(f, path)
+            text = f.read()
+        return entries_from_rows(load_any(path, text).rows)
     except CsvError as e:
         sys.exit(f"Fehler: {e}")
     except OSError as e:
@@ -43,8 +36,8 @@ def load(path):
 
 
 def load_text(text, name):
-    """Liest CSV-Inhalt aus einem String (z. B. aus einem Upload). Wirft CsvError."""
-    return read_entries(io.StringIO(text.lstrip("\ufeff"), newline=""), name)
+    """Liest Inhalt aus einem String (z. B. aus einem Upload). Wirft CsvError."""
+    return entries_from_rows(load_any(name, text).rows)
 
 
 def write_rows(fileobj, rows):
