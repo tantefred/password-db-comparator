@@ -118,6 +118,9 @@ details.panel > summary::-webkit-details-marker { display: none; }
 .modes input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
 .modes label:has(input:checked) { background: var(--ink); color: var(--surface); font-weight: 600; }
 .modes label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
+.modes.two { grid-template-columns: repeat(2, 1fr); }
+.modes.is-disabled { opacity: .5; }
+.modes.is-disabled label { cursor: not-allowed; }
 .hint { color: var(--muted); font-size: 13px; margin: 0; }
 .field { display: grid; gap: 4px; }
 .field > span, legend { font-size: 13px; font-weight: 600; }
@@ -328,8 +331,16 @@ pre.json { margin: 0; padding: 14px 16px; max-height: 420px; overflow: auto; fon
     <details class="panel" id="export-panel">
       <summary>Exportieren</summary>
       <div class="body">
-        <label class="check"><input type="checkbox" id="export-added"><span>Neu hinzugefügte Einträge<small>Nur in Datei 2, ohne Papierkorb. Als CSV zum Importieren.</small></span></label>
+        <label class="check"><input type="checkbox" id="export-added"><span>Neu hinzugefügte Einträge<small>Nur in Datei 2, ohne Papierkorb. Zum Importieren in das gewählte Format.</small></span></label>
         <label class="check"><input type="checkbox" id="export-merged"><span>Zusammengeführte Datei<small>Alle Einträge, bei Unterschieden die neuere Version.</small></span></label>
+        <fieldset class="field" id="export-format-field">
+          <legend>Format der Exporte</legend>
+          <div class="modes two" id="export-format-modes" role="radiogroup" aria-label="Format der Exporte">
+            <label><input type="radio" name="export-format" value="keepass-csv" checked><span>KeePass-CSV</span></label>
+            <label><input type="radio" name="export-format" value="bitwarden-json"><span>Bitwarden-JSON</span></label>
+          </div>
+          <p class="hint" id="format-hint"></p>
+        </fieldset>
         <p class="hint" id="export-hint">Exporte gibt es nur im Vergleich. Die Dateien enthalten Passwörter im Klartext.</p>
       </div>
     </details>
@@ -342,7 +353,7 @@ pre.json { margin: 0; padding: 14px 16px; max-height: 420px; overflow: auto; fon
       <h2>Zwei Exporte, ein Überblick</h2>
       <p>Du siehst, was sich zwischen den Dateien unterscheidet und in welcher davon die jeweils neuere Version liegt.</p>
       <ol>
-        <li>Wähle links die beiden CSV-Dateien aus.</li>
+        <li>Wähle links die beiden Dateien aus (CSV oder JSON).</li>
         <li>Lege fest, was du sehen möchtest.</li>
         <li>Klicke auf „Vergleichen“.</li>
       </ol>
@@ -363,6 +374,10 @@ const FORMAT_LABEL = { "keepass-csv": "KeePass-CSV", "bitwarden-json": "Bitwarde
   "bitwarden-csv": "Bitwarden-CSV" };
 const MODE_LABEL = { "compare": "Vergleichen", "search": "Suchen", "stats": "Zählen",
   "check": "Prüfen", "password-check": "Prüfen" };
+const EXPORT_FORMAT_HINT = {
+  "keepass-csv": "Zum Import in KeePassium oder KeePassXC (CSV).",
+  "bitwarden-json": "Unverschlüsselt, zum Import in Bitwarden oder Vaultwarden (Dateityp „Bitwarden (json)“).",
+};
 const MODE_HINT = {
   "compare": "Was ist neu, entfernt, verschoben oder geändert – und in welcher Datei steht die neuere Version?",
   "search": "Findet einen Eintrag über Gruppe, Titel oder Username und zeigt seinen Status.",
@@ -454,8 +469,15 @@ function collectOptions() {
   if (mode === "compare") {
     opts.export_added = $("export-added").checked;
     opts.export_merged = $("export-merged").checked;
+    if (opts.export_added || opts.export_merged) opts.export_format = exportFormat();
   }
   return opts;
+}
+function exportFormat() {
+  return document.querySelector('input[name="export-format"]:checked').value;
+}
+function onExportFormatChange() {
+  $("format-hint").textContent = EXPORT_FORMAT_HINT[exportFormat()];
 }
 function onModeChange() {
   const mode = currentMode();
@@ -467,6 +489,8 @@ function onModeChange() {
     $(id).disabled = !canExport;
     if (!canExport) $(id).checked = false;
   }
+  document.querySelectorAll('input[name="export-format"]').forEach((r) => (r.disabled = !canExport));
+  $("export-format-modes").classList.toggle("is-disabled", !canExport);
   $("export-hint").classList.toggle("is-hidden", canExport);
   refreshRun();
   if (mode === "search") $("search").focus();
@@ -762,6 +786,8 @@ $("swap").addEventListener("click", () => {
   renderDrop("a", $("drop-a")); renderDrop("b", $("drop-b")); refreshRun();
 });
 document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener("change", onModeChange));
+document.querySelectorAll('input[name="export-format"]').forEach((r) => r.addEventListener("change", onExportFormatChange));
+onExportFormatChange();
 $("search").addEventListener("input", refreshRun);
 $("form").addEventListener("submit", (e) => { e.preventDefault(); if (!$("run").disabled) run(); });
 $("theme").addEventListener("click", () => {
