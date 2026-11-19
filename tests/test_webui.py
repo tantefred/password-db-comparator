@@ -123,6 +123,25 @@ class ServerTests(ServerTestCase):
         self.assertEqual(data["report"]["match_count"], 0)
 
 
+class FormatTests(ServerTestCase):
+    def test_json_and_csv_exports_can_be_compared(self):
+        payload = {"old": {"name": "kp.csv", "text": read("keepassium_a.csv")},
+                   "new": {"name": "bw.json", "text": read("bitwarden.json")}, "options": {}}
+        status, _, body = self.post(payload)
+        self.assertEqual(status, 200)
+        files = json.loads(body)["report"]["files"]
+        self.assertEqual((files["old"]["format"], files["new"]["format"]),
+                         ("keepass-csv", "bitwarden-json"))
+        self.assertTrue(files["new"]["notes"])
+
+    def test_encrypted_bitwarden_export_is_a_clear_400(self):
+        payload = {"old": {"name": "a.json", "text": json.dumps({"encrypted": True, "data": "x"})},
+                   "new": {"name": "b.csv", "text": read("keepassium_a.csv")}, "options": {}}
+        status, _, body = self.post(payload)
+        self.assertEqual(status, 400)
+        self.assertIn("verschlüsselter Bitwarden-Export", json.loads(body)["error"])
+
+
 class SecurityTests(ServerTestCase):
     def test_missing_or_wrong_token_is_rejected(self):
         for token in (None, "", "falsch", TOKEN + "x"):
@@ -212,6 +231,38 @@ class StaticPageTests(unittest.TestCase):
     def test_page_does_not_store_anything_in_the_browser(self):
         for storage in ("localStorage", "sessionStorage", "indexedDB", "document.cookie"):
             self.assertNotIn(storage, self.html, storage)
+
+    def test_page_accepts_json_files_and_knows_the_new_columns(self):
+        self.assertEqual(self.html.count('accept=".csv,.json,'), 2)
+        for column in ("Favorite", "Type", "Reprompt", "Fields", "URLs"):
+            self.assertIn(f'"{column}"', self.html)
+        self.assertIn('id="keep-db-name"', self.html)
+        self.assertIn("keep_db_name", self.html)
+
+    def test_format_detection_in_the_page_matches_the_server(self):
+        import re
+        import shutil
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node ist nicht installiert")
+        from csvcompare.importers import load_any
+        func = re.search(r"function sniffFormat\(text\) \{.*?\n\}", self.html, re.S).group(0)
+        samples = {name: read(name) for name in ("alt.csv", "keepassium_a.csv", "bitwarden.json",
+                                                  "bitwarden.csv")}
+        samples["bom.json"] = chr(0xFEFF) + samples["bitwarden.json"]
+        samples["bom.csv"] = chr(0xFEFF) + samples["bitwarden.csv"]
+        samples["blank.json"] = "\n  " + samples["bitwarden.json"]
+        samples["crlf.csv"] = samples["bitwarden.csv"].replace("\n", "\r\n")
+        script = func + "\nconst s = JSON.parse(require('fs').readFileSync(0, 'utf8'));" \
+                        "console.log(JSON.stringify(Object.fromEntries(" \
+                        "Object.entries(s).map(([k, v]) => [k, sniffFormat(v)]))));"
+        proc = subprocess.run([node, "-e", script], input=json.dumps(samples),
+                              capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        in_page = json.loads(proc.stdout)
+        for name, text in samples.items():
+            with self.subTest(name=name):
+                self.assertEqual(in_page[name], load_any(name, text).format)
 
     def test_downloads_have_no_byte_order_mark(self):
         # Die CSV-Downloads müssen byte-gleich zu den Dateien aus dem Terminal sein.
