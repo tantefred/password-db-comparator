@@ -44,9 +44,11 @@ def print_change(cmp, change, show_secrets, header=None, indent="  "):
 
 def print_move(cmp, move, show_secrets, indent="  "):
     """Gibt ein erkanntes Paar aus verschobenem oder umbenanntem Eintrag aus."""
-    header = (f"↷ {entry_label(move.old_key)}  →  {entry_label(move.new_key)}\n"
-              f"{indent}    geändert in: {', '.join(move.key_columns)}  "
-              f"[{CONFIDENCE_LABEL[move.confidence]}]")
+    header = (
+        f"↷ {entry_label(move.old_key)}  →  {entry_label(move.new_key)}\n"
+        f"{indent}    geändert in: {', '.join(move.key_columns)}  "
+        f"[{CONFIDENCE_LABEL[move.confidence]}]"
+    )
     print_change(cmp, cmp.move_change(move), show_secrets, header=header, indent=indent)
 
 
@@ -68,7 +70,7 @@ def print_header(cmp, args):
         if source and source.format != KEEPASS_CSV:
             format_label = FORMAT_LABELS[source.format]
         print(f"{name}: {len(entries)} Einträge" + (f" ({format_label})" if format_label else ""))
-        for note in (source.notes if source else []):
+        for note in source.notes if source else []:
             print(f"  Hinweis: {note}")
     if cmp.ignored:
         print(f"Ignorierte Spalten: {', '.join(cmp.ignored)}")
@@ -90,15 +92,21 @@ def print_stats(cmp):
     width = max([len(name) for name in names] + [len("Gesamt"), len("Gruppe")])
     width_old, width_new = max(len(cmp.old_name), 6), max(len(cmp.new_name), 6)
     rule = "-" * (width + width_old + width_new + 15)
-    print(f"{'Gruppe':<{width}}  {cmp.old_name:>{width_old}}  {cmp.new_name:>{width_new}}  Differenz")
+    print(
+        f"{'Gruppe':<{width}}  {cmp.old_name:>{width_old}}  {cmp.new_name:>{width_new}}  Differenz"
+    )
     print(rule)
     for name, (_, count_old, count_new) in zip(names, rows, strict=True):
-        print(f"{name:<{width}}  {count_old:>{width_old}}  {count_new:>{width_new}}  "
-              f"{count_new - count_old:+d}")
+        print(
+            f"{name:<{width}}  {count_old:>{width_old}}  {count_new:>{width_new}}  "
+            f"{count_new - count_old:+d}"
+        )
     print(rule)
     total_old, total_new = len(cmp.old), len(cmp.new)
-    print(f"{'Gesamt':<{width}}  {total_old:>{width_old}}  {total_new:>{width_new}}  "
-          f"{total_new - total_old:+d}")
+    print(
+        f"{'Gesamt':<{width}}  {total_old:>{width_old}}  {total_new:>{width_new}}  "
+        f"{total_new - total_old:+d}"
+    )
 
 
 def print_check(cmp):
@@ -152,12 +160,16 @@ def print_compare(cmp, show_secrets):
             print_move(cmp, move, show_secrets)
         print()
     if cmp.only_old:
-        print(f"== Nur in {cmp.old_name} (in {cmp.new_name} nicht vorhanden): {len(cmp.only_old)} ==")
+        print(
+            f"== Nur in {cmp.old_name} (in {cmp.new_name} nicht vorhanden): {len(cmp.only_old)} =="
+        )
         for key in cmp.only_old:
             print(f"  - {entry_label(key)}")
         print()
     if cmp.only_new:
-        print(f"== Nur in {cmp.new_name} (in {cmp.old_name} nicht vorhanden): {len(cmp.only_new)} ==")
+        print(
+            f"== Nur in {cmp.new_name} (in {cmp.old_name} nicht vorhanden): {len(cmp.only_new)} =="
+        )
         for key in cmp.only_new:
             print(f"  + {entry_label(key)}")
         print()
@@ -179,10 +191,12 @@ def print_summary(cmp):
         print("Keine Unterschiede.")
         return
     count = {freshness: len(cmp.changes[freshness]) for freshness in FRESHNESS}
-    print(f"Zusammenfassung: {len(cmp.only_old)} nur in {cmp.old_name}, "
-          f"{len(cmp.only_new)} nur in {cmp.new_name}, "
-          f"{len(cmp.moves)} verschoben/umbenannt, "
-          f"{cmp.n_changed} geändert "
-          f"({count[NEWER_IN_NEW]} in {cmp.old_name} zu aktualisieren, "
-          f"{count[NEWER_IN_OLD]} in {cmp.new_name} zu aktualisieren, "
-          f"{count[UNCLEAR]} manuell prüfen).")
+    print(
+        f"Zusammenfassung: {len(cmp.only_old)} nur in {cmp.old_name}, "
+        f"{len(cmp.only_new)} nur in {cmp.new_name}, "
+        f"{len(cmp.moves)} verschoben/umbenannt, "
+        f"{cmp.n_changed} geändert "
+        f"({count[NEWER_IN_NEW]} in {cmp.old_name} zu aktualisieren, "
+        f"{count[NEWER_IN_OLD]} in {cmp.new_name} zu aktualisieren, "
+        f"{count[UNCLEAR]} manuell prüfen)."
+    )

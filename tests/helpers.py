@@ -1,4 +1,5 @@
 """Gemeinsame Hilfen der Tests: Importpfad, Beispieldateien lesen, das Skript aufrufen."""
+
 import json
 import os
 import subprocess
@@ -22,8 +23,9 @@ def read_fixture(name):
 
 def run(*args):
     """Startet das Skript im Projektverzeichnis und gibt (returncode, stdout, stderr) zurück."""
-    proc = subprocess.run([sys.executable, SCRIPT, *args], cwd=ROOT,
-                          capture_output=True, text=True, encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, SCRIPT, *args], cwd=ROOT, capture_output=True, text=True, encoding="utf-8"
+    )
     return proc.returncode, proc.stdout, proc.stderr
 
 

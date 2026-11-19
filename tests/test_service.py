@@ -1,4 +1,5 @@
 """Tests der Service-Schicht (Weboberfläche): gleiches Ergebnis wie die Kommandozeile."""
+
 import copy
 import json
 import os
@@ -37,18 +38,24 @@ class SameAsCommandLineTests(unittest.TestCase):
         ({"ignore": ["Icon", "Notes"]}, ["--ignore", "Icon,Notes"]),
         ({"hide_trash": True}, ["--hide-trash"]),
         ({"group": "web"}, ["--group", "web"]),
-        ({"group": "web", "hide_trash": True, "ignore": ["Icon"]},
-         ["--group", "web", "--hide-trash", "--ignore", "Icon"]),
+        (
+            {"group": "web", "hide_trash": True, "ignore": ["Icon"]},
+            ["--group", "web", "--hide-trash", "--ignore", "Icon"],
+        ),
         ({"detect_moves": False}, ["--no-detect-moves"]),
         ({"mode": "search", "search": "mail"}, ["--search", "mail"]),
         ({"mode": "search", "search": "streaming"}, ["--search", "streaming"]),
         ({"mode": "stats"}, ["--stats"]),
         ({"mode": "stats", "group": "privat"}, ["--stats", "--group", "privat"]),
         ({"mode": "check"}, ["--check"]),
-        ({"mode": "password-check", "max_age_days": 100000},
-         ["--password-check", "--max-age-days", "100000"]),
-        ({"mode": "password-check", "min_length": 25, "max_age_days": 100000},
-         ["--password-check", "--min-length", "25", "--max-age-days", "100000"]),
+        (
+            {"mode": "password-check", "max_age_days": 100000},
+            ["--password-check", "--max-age-days", "100000"],
+        ),
+        (
+            {"mode": "password-check", "min_length": 25, "max_age_days": 100000},
+            ["--password-check", "--min-length", "25", "--max-age-days", "100000"],
+        ),
     ]
 
     def test_reports_match_cli(self):
@@ -67,8 +74,9 @@ class SameAsCommandLineTests(unittest.TestCase):
     def test_exports_match_cli_files(self):
         with tempfile.TemporaryDirectory() as d:
             a, m = os.path.join(d, "a.csv"), os.path.join(d, "m.csv")
-            rc, _, _ = run("tests/alt.csv", "tests/neu.csv", "--export-added", a,
-                           "--export-merged", m)
+            rc, _, _ = run(
+                "tests/alt.csv", "tests/neu.csv", "--export-added", a, "--export-merged", m
+            )
             self.assertEqual(rc, 0)
             result = ui({"export_added": True, "export_merged": True})
             with open(a, encoding="utf-8", newline="") as f:
@@ -81,10 +89,14 @@ class SameAsCommandLineTests(unittest.TestCase):
 
 class ServiceBehaviourTests(unittest.TestCase):
     def test_command_line_equivalent_is_shown(self):
-        cmd = ui({"ignore": ["Icon"], "hide_trash": True, "mode": "search",
-                  "search": "mail server"})["command"]
-        self.assertEqual(cmd, "python3 compare_csv.py alt.csv neu.csv --ignore=Icon "
-                              "--hide-trash '--search=mail server'")
+        cmd = ui(
+            {"ignore": ["Icon"], "hide_trash": True, "mode": "search", "search": "mail server"}
+        )["command"]
+        self.assertEqual(
+            cmd,
+            "python3 compare_csv.py alt.csv neu.csv --ignore=Icon "
+            "--hide-trash '--search=mail server'",
+        )
 
     def test_no_exports_unless_requested(self):
         self.assertEqual(ui({})["exports"], {})

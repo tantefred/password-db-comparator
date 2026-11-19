@@ -21,9 +21,11 @@ DEFAULT_PORT = 8765
 MAX_BODY = 64 * 1024 * 1024  # 64 MiB reichen für sehr große Passwortdatenbanken
 INDEX_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "index.html")
 
-CSP = ("default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; "
-       "connect-src 'self'; img-src data:; base-uri 'none'; form-action 'none'; "
-       "frame-ancestors 'none'")
+CSP = (
+    "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; "
+    "connect-src 'self'; img-src data:; base-uri 'none'; form-action 'none'; "
+    "frame-ancestors 'none'"
+)
 
 
 def load_index(token):
@@ -67,8 +69,12 @@ def make_handler(token, max_body, index_loader=load_index):
                 return self._send(403, b"Forbidden")
             path = self.path.split("?", 1)[0]
             if path in ("/", "/index.html"):
-                return self._send(200, index_loader(token).encode("utf-8"),
-                                  "text/html; charset=utf-8", {"Content-Security-Policy": CSP})
+                return self._send(
+                    200,
+                    index_loader(token).encode("utf-8"),
+                    "text/html; charset=utf-8",
+                    {"Content-Security-Policy": CSP},
+                )
             if path == "/favicon.ico":
                 return self._send(204)
             self._send(404, b"Not found")
@@ -79,8 +85,7 @@ def make_handler(token, max_body, index_loader=load_index):
             if self.path.split("?", 1)[0] != "/api/analyze":
                 return self._send(404, b"Not found")
             if not hmac.compare_digest(self.headers.get("X-Token", ""), token):
-                return self._json(403, {"error": "Ungültiges Sitzungs-Token. "
-                                                 "Lade die Seite neu."})
+                return self._json(403, {"error": "Ungültiges Sitzungs-Token. Lade die Seite neu."})
             if (self.headers.get("Content-Type") or "").split(";")[0].strip() != "application/json":
                 return self._json(415, {"error": "Erwartet application/json."})
             try:
@@ -94,7 +99,9 @@ def make_handler(token, max_body, index_loader=load_index):
                 data = json.loads(raw.decode("utf-8"))
                 old, new, options = data["old"], data["new"], data.get("options", {})
                 names_texts = [old["name"], old["text"], new["name"], new["text"]]
-                if not all(isinstance(x, str) for x in names_texts) or not isinstance(options, dict):
+                if not all(isinstance(x, str) for x in names_texts) or not isinstance(
+                    options, dict
+                ):
                     raise TypeError
             except (ValueError, KeyError, TypeError):
                 return self._json(400, {"error": "Ungültige Anfrage."})
@@ -110,15 +117,17 @@ def make_handler(token, max_body, index_loader=load_index):
     return Handler
 
 
-def make_server(port=DEFAULT_PORT, token=None, max_body=MAX_BODY, tries=20,
-                index_loader=load_index):
+def make_server(
+    port=DEFAULT_PORT, token=None, max_body=MAX_BODY, tries=20, index_loader=load_index
+):
     """Erzeugt den Server (noch nicht gestartet). Probiert bei belegtem Port die nächsten."""
     token = token or secrets.token_urlsafe(24)
     last_error = None
-    for candidate in ([port] if port == 0 else range(port, port + tries)):
+    for candidate in [port] if port == 0 else range(port, port + tries):
         try:
-            server = ThreadingHTTPServer((HOST, candidate),
-                                         make_handler(token, max_body, index_loader))
+            server = ThreadingHTTPServer(
+                (HOST, candidate), make_handler(token, max_body, index_loader)
+            )
         except OSError as e:
             last_error = e
             continue

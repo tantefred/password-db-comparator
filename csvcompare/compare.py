@@ -15,15 +15,18 @@ FRESHNESS = (NEWER_IN_NEW, NEWER_IN_OLD, UNCLEAR)
 # Wie sicher ist die Zuordnung eines verschobenen oder umbenannten Eintrags?
 CERTAIN, LIKELY = "certain", "likely"
 
-TIME_REASON = ("Zeitstempel verschiedener Formate sind nicht vergleichbar, sie bestimmen "
-               "nur, welche Datei aktueller ist")
+TIME_REASON = (
+    "Zeitstempel verschiedener Formate sind nicht vergleichbar, sie bestimmen "
+    "nur, welche Datei aktueller ist"
+)
 
 
 class Move(NamedTuple):
     """Ein Eintrag, der in der zweiten Datei unter anderem Schlüssel steht."""
+
     old_key: tuple
     new_key: tuple
-    confidence: str   # CERTAIN oder LIKELY
+    confidence: str  # CERTAIN oder LIKELY
 
     @property
     def key_columns(self):
@@ -34,27 +37,29 @@ class Move(NamedTuple):
 
 class Change(NamedTuple):
     """Unterschiede eines Eintrags zwischen beiden Dateien."""
+
     key: tuple
-    new_key: tuple    # gleich ``key``, außer bei verschobenen Einträgen
-    columns: list     # Spalten mit Unterschieden (leer: nur der Schlüssel unterscheidet sich)
-    note: str         # welche Datei aktueller ist, z. B. „neu.csv ist 3 Tag(e) neuer“
+    new_key: tuple  # gleich ``key``, außer bei verschobenen Einträgen
+    columns: list  # Spalten mit Unterschieden (leer: nur der Schlüssel unterscheidet sich)
+    note: str  # welche Datei aktueller ist, z. B. „neu.csv ist 3 Tag(e) neuer“
 
 
 @dataclass
 class Comparison:
     """Ergebnis des Vergleichs zweier (bereits gefilterter) Dateien."""
+
     old: dict
     new: dict
     old_name: str
     new_name: str
-    ignored: list            # per Option ignorierte Spalten
-    columns: list            # tatsächlich verglichene Spalten
-    only_old: list = field(default_factory=list)   # Schlüssel nur in der ersten Datei
-    only_new: list = field(default_factory=list)   # Schlüssel nur in der zweiten Datei
-    moves: list = field(default_factory=list)      # Move
+    ignored: list  # per Option ignorierte Spalten
+    columns: list  # tatsächlich verglichene Spalten
+    only_old: list = field(default_factory=list)  # Schlüssel nur in der ersten Datei
+    only_new: list = field(default_factory=list)  # Schlüssel nur in der zweiten Datei
+    moves: list = field(default_factory=list)  # Move
     changes: dict = field(default_factory=lambda: {status: [] for status in FRESHNESS})
-    old_source: object = None   # LoadResult der ersten Datei (Format, Datenbankname, Hinweise)
-    new_source: object = None   # LoadResult der zweiten Datei
+    old_source: object = None  # LoadResult der ersten Datei (Format, Datenbankname, Hinweise)
+    new_source: object = None  # LoadResult der zweiten Datei
     auto_ignored: list = field(default_factory=list)  # [(spalte, grund)]
 
     @property
@@ -101,8 +106,11 @@ def unique_pairs(old_keys, new_keys, matches):
     for old, news in candidates.items():
         for new in news:
             partners[new].append(old)
-    return [(old, news[0]) for old, news in candidates.items()
-            if len(news) == 1 and len(partners[news[0]]) == 1]
+    return [
+        (old, news[0])
+        for old, news in candidates.items()
+        if len(news) == 1 and len(partners[news[0]]) == 1
+    ]
 
 
 def find_moves(old, new, only_old, only_new, ignored):
@@ -111,14 +119,19 @@ def find_moves(old, new, only_old, only_new, ignored):
     Gepaart wird nur bei eindeutigen 1:1-Treffern, zuerst die sicheren, dann die
     wahrscheinlichen.
     """
+
     def same(old_key, new_key, column):
         old_value = old[old_key][column]
-        return (column not in ignored and old_value != ""
-                and values_equal(column, old_value, new[new_key][column]))
+        return (
+            column not in ignored
+            and old_value != ""
+            and values_equal(column, old_value, new[new_key][column])
+        )
 
     def certain(old_key, new_key):  # gleiche Erstellzeit und noch etwas Gemeinsames
         return same(old_key, new_key, "Created") and any(
-            same(old_key, new_key, column) for column in ("Password", "URL", "Title"))
+            same(old_key, new_key, column) for column in ("Password", "URL", "Title")
+        )
 
     def likely(old_key, new_key):  # gleicher Login mit gleicher Adresse
         return all(same(old_key, new_key, column) for column in ("Username", "Password", "URL"))
@@ -161,8 +174,9 @@ def comparable_columns(old_name, new_name, ignored, old_source, new_source):
     return columns, auto_ignored
 
 
-def compare_files(old, new, old_name, new_name, ignored, detect_moves=True,
-                  old_source=None, new_source=None):
+def compare_files(
+    old, new, old_name, new_name, ignored, detect_moves=True, old_source=None, new_source=None
+):
     """Vergleicht zwei Dateien (Dicts {Key: Zeile}) und gibt ein Comparison zurück."""
     columns, auto_ignored = comparable_columns(old_name, new_name, ignored, old_source, new_source)
     only_old = sorted(set(old) - set(new))
@@ -171,11 +185,20 @@ def compare_files(old, new, old_name, new_name, ignored, detect_moves=True,
     moved_old = {move.old_key for move in moves}
     moved_new = {move.new_key for move in moves}
 
-    cmp = Comparison(old, new, old_name, new_name, list(ignored), columns,
-                     only_old=[key for key in only_old if key not in moved_old],
-                     only_new=[key for key in only_new if key not in moved_new],
-                     moves=moves, old_source=old_source, new_source=new_source,
-                     auto_ignored=auto_ignored)
+    cmp = Comparison(
+        old,
+        new,
+        old_name,
+        new_name,
+        list(ignored),
+        columns,
+        only_old=[key for key in only_old if key not in moved_old],
+        only_new=[key for key in only_new if key not in moved_new],
+        moves=moves,
+        old_source=old_source,
+        new_source=new_source,
+        auto_ignored=auto_ignored,
+    )
     for key in sorted(set(old) & set(new)):
         freshness, change = cmp.change_of(key)
         if change.columns:

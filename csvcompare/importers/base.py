@@ -20,8 +20,9 @@ class CsvError(Exception):
 @dataclass
 class LoadResult:
     """Ergebnis des Einlesens einer Datei, unabhängig vom Quellformat."""
-    rows: list                   # ein Dict je Eintrag, Schlüssel sind Spaltennamen
-    format: str                  # Kennung des erkannten Formats (siehe oben)
+
+    rows: list  # ein Dict je Eintrag, Schlüssel sind Spaltennamen
+    format: str  # Kennung des erkannten Formats (siehe oben)
     provided_columns: frozenset  # Spalten, die dieses Format tatsächlich liefert
     notes: list = field(default_factory=list)  # Hinweise für Nutzer (übersprungene Typen …)
-    db_prefix: str = None        # Datenbankname, der aus den Gruppenpfaden entfernt wurde
+    db_prefix: str = None  # Datenbankname, der aus den Gruppenpfaden entfernt wurde

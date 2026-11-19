@@ -18,9 +18,9 @@ UNMAPPED_KEY = "_unmapped"
 @dataclass(frozen=True)
 class Column:
     name: str
-    label: str                # deutsche Beschriftung für Oberfläche und Berichte
-    secret: bool = False      # Werte werden ohne --show-secrets nicht angezeigt
-    defaults: tuple = ("",)   # Werte, die „keine Daten“ bedeuten (für die Verlustmeldung)
+    label: str  # deutsche Beschriftung für Oberfläche und Berichte
+    secret: bool = False  # Werte werden ohne --show-secrets nicht angezeigt
+    defaults: tuple = ("",)  # Werte, die „keine Daten“ bedeuten (für die Verlustmeldung)
 
 
 CORE = (
@@ -49,7 +49,7 @@ ALL_COLUMNS = CORE + EXTENDED
 BY_NAME = {c.name: c for c in ALL_COLUMNS}
 LABELS = {c.name: c.label for c in ALL_COLUMNS}
 
-CORE_NAMES = tuple(c.name for c in CORE)      # die Spalten des KeePass-CSV
+CORE_NAMES = tuple(c.name for c in CORE)  # die Spalten des KeePass-CSV
 ALL_NAMES = tuple(c.name for c in ALL_COLUMNS)
 SECRET_NAMES = tuple(c.name for c in ALL_COLUMNS if c.secret)
 

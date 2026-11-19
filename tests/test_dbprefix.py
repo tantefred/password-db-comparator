@@ -1,4 +1,5 @@
 """Tests für den Datenbanknamen am Anfang der KeePassium-Gruppenpfade."""
+
 import csv
 import os
 import tempfile
@@ -45,10 +46,19 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(r["files"]["old"]["db_prefix"], "Privat-DB")
         self.assertEqual(r["files"]["new"]["db_prefix"], "Familie-DB")
-        self.assertEqual(r["summary"], {
-            "only_in_old": 1, "only_in_new": 1, "moved": 1, "changed": 3,
-            "newer_in_new": 2, "newer_in_old": 1, "unclear": 0, "identical": False,
-        })
+        self.assertEqual(
+            r["summary"],
+            {
+                "only_in_old": 1,
+                "only_in_new": 1,
+                "moved": 1,
+                "changed": 3,
+                "newer_in_new": 2,
+                "newer_in_old": 1,
+                "unclear": 0,
+                "identical": False,
+            },
+        )
         self.assertEqual(titles(r["only_in_old"]), ["Alt-Account"])
         self.assertEqual(titles(r["only_in_new"]), ["Neuer-Account"])
 
@@ -100,8 +110,9 @@ class ComparisonTests(unittest.TestCase):
 
     def test_stats_use_stripped_groups(self):
         _, r = run_json(A, B, "--stats")
-        self.assertEqual([g["group"] for g in r["groups"]],
-                         ["", "Papierkorb", "Privat", "Web", "Web/Shops"])
+        self.assertEqual(
+            [g["group"] for g in r["groups"]], ["", "Papierkorb", "Privat", "Web", "Web/Shops"]
+        )
 
     def test_group_filter_uses_stripped_groups(self):
         _, r = run_json(A, B, "--group", "shops")
@@ -123,13 +134,14 @@ class ExportTests(unittest.TestCase):
             rc, _, _ = run(A, B, "--export-added", added, "--export-merged", merged)
             self.assertEqual(rc, 0)
             rows = self.read(added)
-            self.assertEqual([(r["Title"], r["Group"]) for r in rows],
-                             [("Neuer-Account", "Familie-DB/Web")])
+            self.assertEqual(
+                [(r["Title"], r["Group"]) for r in rows], [("Neuer-Account", "Familie-DB/Web")]
+            )
             groups = {r["Title"]: r["Group"] for r in self.read(merged)}
-            self.assertEqual(groups["Router"], "Familie-DB")           # direkt in der Wurzel
+            self.assertEqual(groups["Router"], "Familie-DB")  # direkt in der Wurzel
             self.assertEqual(groups["Shop"], "Familie-DB/Web/Shops")
             self.assertTrue(all(g.startswith("Familie-DB") for g in groups.values()))
-            self.assertNotIn("Gelöscht", groups)                       # Papierkorb bleibt draußen
+            self.assertNotIn("Gelöscht", groups)  # Papierkorb bleibt draußen
 
     def test_prefix_of_the_first_file_is_used_if_the_second_has_none(self):
         with tempfile.TemporaryDirectory() as d:
@@ -142,17 +154,20 @@ class ExportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             merged = os.path.join(d, "m.csv")
             run(A, A, "--keep-db-name", "--export-merged", merged)
-            self.assertTrue(all(r["Group"].startswith("Privat-DB")
-                                for r in self.read(merged)))
-            self.assertFalse(any(r["Group"].startswith("Privat-DB/Privat-DB")
-                                 for r in self.read(merged)))
+            self.assertTrue(all(r["Group"].startswith("Privat-DB") for r in self.read(merged)))
+            self.assertFalse(
+                any(r["Group"].startswith("Privat-DB/Privat-DB") for r in self.read(merged))
+            )
 
     def test_exporting_the_same_file_reproduces_the_original_groups(self):
         with tempfile.TemporaryDirectory() as d:
             merged = os.path.join(d, "m.csv")
             run(A, A, "--export-merged", merged)
-            original = {(r["Title"], r["Group"]) for r in self.read(os.path.join(ROOT, A))
-                        if "Papierkorb" not in r["Group"]}
+            original = {
+                (r["Title"], r["Group"])
+                for r in self.read(os.path.join(ROOT, A))
+                if "Papierkorb" not in r["Group"]
+            }
             self.assertEqual({(r["Title"], r["Group"]) for r in self.read(merged)}, original)
 
 
@@ -167,8 +182,9 @@ class ServiceTests(unittest.TestCase):
     def test_service_reports_database_names(self):
         a, b = self.texts()
         files = analyze("a.csv", a, "b.csv", b, {})["report"]["files"]
-        self.assertEqual((files["old"]["db_prefix"], files["new"]["db_prefix"]),
-                         ("Privat-DB", "Familie-DB"))
+        self.assertEqual(
+            (files["old"]["db_prefix"], files["new"]["db_prefix"]), ("Privat-DB", "Familie-DB")
+        )
 
     def test_service_can_keep_the_database_name(self):
         a, b = self.texts()
@@ -178,9 +194,13 @@ class ServiceTests(unittest.TestCase):
 
     def test_service_exports_with_prefix(self):
         a, b = self.texts()
-        rows = list(csv.DictReader(
-            analyze("a.csv", a, "b.csv", b, {"export_added": True})["exports"]["added"]["csv"]
-            .splitlines(keepends=True)))
+        rows = list(
+            csv.DictReader(
+                analyze("a.csv", a, "b.csv", b, {"export_added": True})["exports"]["added"][
+                    "csv"
+                ].splitlines(keepends=True)
+            )
+        )
         self.assertEqual(rows[0]["Group"], "Familie-DB/Web")
 
 

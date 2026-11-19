@@ -15,9 +15,9 @@ from .writers import DEFAULT_WRITER, loss_lines, lost_data
 
 @dataclass
 class Export:
-    rows: list                # die Einträge, wie sie geschrieben werden
-    lines: list               # Meldungen, einschließlich dessen, was das Zielformat nicht speichert
-    lost: dict                # {"columns": …, "source": …}, siehe ``writers.lost_data``
+    rows: list  # die Einträge, wie sie geschrieben werden
+    lines: list  # Meldungen, einschließlich dessen, was das Zielformat nicht speichert
+    lost: dict  # {"columns": …, "source": …}, siehe ``writers.lost_data``
     conflicts: list = field(default_factory=list)  # Schlüssel mit unklarer Aktualität (nur Merge)
 
 
@@ -28,8 +28,13 @@ def merge_entries(cmp):
     Inhalt, bei denen die Aktualität nicht bestimmbar ist (gleicher oder fehlender
     Zeitstempel); dort wird die Version aus der zweiten Datei genommen.
     """
-    stats = {"only_old": len(cmp.only_old), "only_new": len(cmp.only_new),
-             "newer_old": 0, "newer_new": 0, "same": 0}
+    stats = {
+        "only_old": len(cmp.only_old),
+        "only_new": len(cmp.only_new),
+        "newer_old": 0,
+        "newer_new": 0,
+        "same": 0,
+    }
     rows, conflicts = [], []
 
     pairs = [(key, key) for key in sorted(set(cmp.old) & set(cmp.new))]
@@ -88,8 +93,10 @@ def prepare_added(cmp, path, writer=DEFAULT_WRITER):
     rows = restore_db_prefix(wanted, db_prefix_for_export(cmp))
     skipped = len(cmp.only_new) - len(rows)
     count = plural(len(rows), "neuer Eintrag", "neue Einträge")
-    lines = [f"{count} nach '{path}' exportiert ({skipped} aus Papierkorb ausgelassen; "
-             f"Datei enthält Passwörter im Klartext)."]
+    lines = [
+        f"{count} nach '{path}' exportiert ({skipped} aus Papierkorb ausgelassen; "
+        f"Datei enthält Passwörter im Klartext)."
+    ]
     return with_losses(rows, lines, writer)
 
 
@@ -102,12 +109,15 @@ def prepare_merged(cmp, path, writer=DEFAULT_WRITER):
         f"{plural(len(rows), 'Eintrag', 'Einträge')} nach '{path}' exportiert "
         f"({len(merged) - len(rows)} aus Papierkorb ausgelassen; "
         f"Datei enthält Passwörter im Klartext).",
-        f"  nur in {cmp.old_name}: {stats['only_old']}, nur in {cmp.new_name}: {stats['only_new']}, "
+        f"  nur in {cmp.old_name}: {stats['only_old']}, "
+        f"nur in {cmp.new_name}: {stats['only_new']}, "
         f"neuere Version aus {cmp.old_name}: {stats['newer_old']}, "
         f"aus {cmp.new_name}: {stats['newer_new']}, unverändert: {stats['same']}",
     ]
     if conflicts:
-        lines.append(f"  {len(conflicts)} Konflikt(e) mit unklarer Aktualität – "
-                     f"Version aus {cmp.new_name} übernommen, bitte prüfen:")
+        lines.append(
+            f"  {len(conflicts)} Konflikt(e) mit unklarer Aktualität – "
+            f"Version aus {cmp.new_name} übernommen, bitte prüfen:"
+        )
         lines += [f"    ! {entry_label(key)}" for key in conflicts]
     return with_losses(rows, lines, writer, conflicts=conflicts)

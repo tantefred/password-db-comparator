@@ -23,7 +23,7 @@ def strip_db_prefix(rows):
         return None
     for row in rows:
         group = row["Group"]
-        row["Group"] = group[len(prefix) + 1:] if group.startswith(prefix + "/") else ""
+        row["Group"] = group[len(prefix) + 1 :] if group.startswith(prefix + "/") else ""
     return prefix
 
 
@@ -36,5 +36,10 @@ def parse(text, name, keep_db_name=False):
     rows = list(reader)
     prefix = None if keep_db_name else strip_db_prefix(rows)
     notes = [f"Datenbankname „{prefix}“ aus den Gruppenpfaden entfernt."] if prefix else []
-    return LoadResult(rows=rows, format=KEEPASS_CSV, provided_columns=frozenset(CORE_NAMES),
-                      notes=notes, db_prefix=prefix)
+    return LoadResult(
+        rows=rows,
+        format=KEEPASS_CSV,
+        provided_columns=frozenset(CORE_NAMES),
+        notes=notes,
+        db_prefix=prefix,
+    )

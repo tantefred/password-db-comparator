@@ -6,6 +6,7 @@ umgebaut oder auf Module verteilt wird.
 
 Ausführen (im Projektverzeichnis):  python3 -m unittest discover -s tests -v
 """
+
 import csv
 import json
 import os
@@ -19,8 +20,18 @@ NEU = fixture_path("neu.csv")
 PROBLEME = fixture_path("probleme.csv")
 PASSWOERTER = fixture_path("passwoerter.csv")
 
-HEADER = ["Group", "Title", "Username", "Password", "URL", "Notes", "TOTP",
-          "Icon", "Last Modified", "Created"]
+HEADER = [
+    "Group",
+    "Title",
+    "Username",
+    "Password",
+    "URL",
+    "Notes",
+    "TOTP",
+    "Icon",
+    "Last Modified",
+    "Created",
+]
 
 
 def write_csv_file(path, rows, header=HEADER, encoding="utf-8"):
@@ -46,10 +57,19 @@ class CompareTests(unittest.TestCase):
     def test_summary_counts(self):
         _, r = run_json(ALT, NEU)
         self.assertEqual(r["mode"], "compare")
-        self.assertEqual(r["summary"], {
-            "only_in_old": 2, "only_in_new": 4, "moved": 1, "changed": 5,
-            "newer_in_new": 2, "newer_in_old": 1, "unclear": 2, "identical": False,
-        })
+        self.assertEqual(
+            r["summary"],
+            {
+                "only_in_old": 2,
+                "only_in_new": 4,
+                "moved": 1,
+                "changed": 5,
+                "newer_in_new": 2,
+                "newer_in_old": 1,
+                "unclear": 2,
+                "identical": False,
+            },
+        )
         self.assertEqual(r["files"]["old"]["entries"], 9)
         self.assertEqual(r["files"]["new"]["entries"], 11)
 
@@ -93,8 +113,10 @@ class MoveDetectionTests(unittest.TestCase):
     def test_ambiguous_candidates_are_not_paired(self):
         _, r = run_json(ALT, NEU)
         self.assertIn("Zwilling", titles(r["only_in_old"]))
-        self.assertEqual([t for t in titles(r["only_in_new"]) if t.startswith("Zwilling")],
-                         ["Zwilling A", "Zwilling B"])
+        self.assertEqual(
+            [t for t in titles(r["only_in_new"]) if t.startswith("Zwilling")],
+            ["Zwilling A", "Zwilling B"],
+        )
 
     def test_no_detect_moves_restores_old_behaviour(self):
         _, r = run_json(ALT, NEU, "--no-detect-moves")
@@ -106,10 +128,40 @@ class MoveDetectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             a, b = os.path.join(d, "a.csv"), os.path.join(d, "b.csv")
             created = "2023-03-03T08:00:00Z"
-            write_csv_file(a, [["Web", "Umbenannt", "max", "pwU", "", "", "", "1",
-                                "2024-01-01T10:00:00Z", created]])
-            write_csv_file(b, [["Web", "Neuer Name", "max", "pwU-NEU", "", "", "", "1",
-                                "2024-06-01T10:00:00Z", created]])
+            write_csv_file(
+                a,
+                [
+                    [
+                        "Web",
+                        "Umbenannt",
+                        "max",
+                        "pwU",
+                        "",
+                        "",
+                        "",
+                        "1",
+                        "2024-01-01T10:00:00Z",
+                        created,
+                    ]
+                ],
+            )
+            write_csv_file(
+                b,
+                [
+                    [
+                        "Web",
+                        "Neuer Name",
+                        "max",
+                        "pwU-NEU",
+                        "",
+                        "",
+                        "",
+                        "1",
+                        "2024-06-01T10:00:00Z",
+                        created,
+                    ]
+                ],
+            )
             _, r = run_json(a, b)
             self.assertEqual(r["summary"]["moved"], 0)
             self.assertEqual(titles(r["only_in_old"]), ["Umbenannt"])
@@ -118,10 +170,40 @@ class MoveDetectionTests(unittest.TestCase):
     def test_likely_match_without_created(self):
         with tempfile.TemporaryDirectory() as d:
             a, b = os.path.join(d, "a.csv"), os.path.join(d, "b.csv")
-            write_csv_file(a, [["Web", "Alt", "max", "pw", "https://x.example.org", "", "", "1",
-                                "2024-01-01T10:00:00Z", "2023-01-01T00:00:00Z"]])
-            write_csv_file(b, [["Web", "Neu", "max", "pw", "https://x.example.org", "", "", "1",
-                                "2024-01-01T10:00:00Z", "2024-02-02T00:00:00Z"]])
+            write_csv_file(
+                a,
+                [
+                    [
+                        "Web",
+                        "Alt",
+                        "max",
+                        "pw",
+                        "https://x.example.org",
+                        "",
+                        "",
+                        "1",
+                        "2024-01-01T10:00:00Z",
+                        "2023-01-01T00:00:00Z",
+                    ]
+                ],
+            )
+            write_csv_file(
+                b,
+                [
+                    [
+                        "Web",
+                        "Neu",
+                        "max",
+                        "pw",
+                        "https://x.example.org",
+                        "",
+                        "",
+                        "1",
+                        "2024-01-01T10:00:00Z",
+                        "2024-02-02T00:00:00Z",
+                    ]
+                ],
+            )
             _, r = run_json(a, b)
             self.assertEqual(len(r["moved"]), 1)
             self.assertEqual(r["moved"][0]["confidence"], "likely")
@@ -202,7 +284,7 @@ class SearchTests(unittest.TestCase):
     def test_search_reports_moved_pair_once(self):
         _, r = run_json(ALT, NEU, "--search", "streaming")
         self.assertEqual([x["status"] for x in r["results"]], ["moved"])
-        self.assertEqual(r["match_count"], 1)   # ein Paar ist ein Treffer, nicht zwei
+        self.assertEqual(r["match_count"], 1)  # ein Paar ist ein Treffer, nicht zwei
         _, out, _ = run(ALT, NEU, "--search", "streaming")
         self.assertIn("1 Treffer", out)
 
@@ -223,8 +305,13 @@ class SearchTests(unittest.TestCase):
         self.assertIn("Kein Eintrag gefunden", err)
 
     def test_search_is_incompatible_with_exports_and_other_modes(self):
-        for extra in (["--export-added"], ["--export-merged"], ["--stats"], ["--check"],
-                      ["--password-check"]):
+        for extra in (
+            ["--export-added"],
+            ["--export-merged"],
+            ["--stats"],
+            ["--check"],
+            ["--password-check"],
+        ):
             rc, _, err = run(ALT, NEU, "--search", "mail", *extra)
             self.assertEqual(rc, 2, extra)
             self.assertIn("können nicht kombiniert werden", err)
@@ -235,21 +322,25 @@ class ModeTests(unittest.TestCase):
         _, r = run_json(ALT, NEU, "--stats")
         self.assertEqual(r["mode"], "stats")
         by_group = {g["group"]: (g["old"], g["new"], g["difference"]) for g in r["groups"]}
-        self.assertEqual(by_group, {"Papierkorb": (0, 1, 1), "Privat": (3, 2, -1),
-                                    "Web": (6, 8, 2)})
+        self.assertEqual(
+            by_group, {"Papierkorb": (0, 1, 1), "Privat": (3, 2, -1), "Web": (6, 8, 2)}
+        )
         self.assertEqual(r["total"], {"old": 9, "new": 11, "difference": 2})
 
     def test_check_finds_all_problem_categories(self):
         _, r = run_json(PROBLEME, ALT, "--check")
         findings = {f["category"]: f["count"] for f in r["results"][0]["findings"]}
-        self.assertEqual(findings, {
-            "Doppelte Einträge (gleiche Gruppe, Titel und Username)": 1,
-            "Gleicher Titel und Username in verschiedenen Gruppen": 1,
-            "Gleiche URL und Username in verschiedenen Einträgen": 1,
-            "Einträge ohne Passwort": 1,
-            "Einträge ohne Titel": 1,
-            "Ungültige URLs": 2,
-        })
+        self.assertEqual(
+            findings,
+            {
+                "Doppelte Einträge (gleiche Gruppe, Titel und Username)": 1,
+                "Gleicher Titel und Username in verschiedenen Gruppen": 1,
+                "Gleiche URL und Username in verschiedenen Einträgen": 1,
+                "Einträge ohne Passwort": 1,
+                "Einträge ohne Titel": 1,
+                "Ungültige URLs": 2,
+            },
+        )
         self.assertEqual(r["results"][1]["findings"], [])
 
     def test_check_accepts_localhost_ip_and_schemeless_urls(self):
@@ -262,22 +353,25 @@ class ModeTests(unittest.TestCase):
             self.assertNotIn(f"'{ok}'", text)
 
     def test_password_check_findings_and_no_leaks(self):
-        rc, out, _ = run(PASSWOERTER, ALT, "--password-check", "--format", "json",
-                         "--max-age-days", "100000")
+        rc, out, _ = run(
+            PASSWOERTER, ALT, "--password-check", "--format", "json", "--max-age-days", "100000"
+        )
         self.assertEqual(rc, 0)
         for secret in ("Sehr-langes", "gleiches-Passwort", "abc123", "Noch-ein"):
             self.assertNotIn(secret, out)
         r = json.loads(out)
         res = r["results"][0]
         cats = {f["category"]: f["count"] for f in res["findings"]}
-        self.assertEqual(cats, {"Wiederverwendete Passwörter": 1,
-                                "Kurze Passwörter (< 10 Zeichen)": 1})
+        self.assertEqual(
+            cats, {"Wiederverwendete Passwörter": 1, "Kurze Passwörter (< 10 Zeichen)": 1}
+        )
         self.assertEqual(res["totp"], {"with_totp": 1, "entries": 6})
         self.assertEqual(r["thresholds"], {"min_length": 10, "max_age_days": 100000})
 
     def test_password_check_thresholds_are_configurable(self):
-        _, r = run_json(PASSWOERTER, ALT, "--password-check", "--min-length", "25",
-                        "--max-age-days", "100000")
+        _, r = run_json(
+            PASSWOERTER, ALT, "--password-check", "--min-length", "25", "--max-age-days", "100000"
+        )
         cats = {f["category"]: f["count"] for f in r["results"][0]["findings"]}
         self.assertEqual(cats["Kurze Passwörter (< 25 Zeichen)"], 5)
 
@@ -287,9 +381,13 @@ class ModeTests(unittest.TestCase):
         self.assertIn("Lange nicht geändert (> 730 Tage)", cats)
 
     def test_modes_are_mutually_exclusive(self):
-        for args in (["--stats", "--check"], ["--check", "--password-check"],
-                     ["--stats", "--export-added"], ["--check", "--export-merged"],
-                     ["--password-check", "--export-added"]):
+        for args in (
+            ["--stats", "--check"],
+            ["--check", "--password-check"],
+            ["--stats", "--export-added"],
+            ["--check", "--export-merged"],
+            ["--password-check", "--export-added"],
+        ):
             rc, _, err = run(ALT, NEU, *args)
             self.assertEqual(rc, 2, args)
             self.assertIn("können nicht kombiniert werden", err)
@@ -307,8 +405,9 @@ class ExportTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertIn("1 aus Papierkorb ausgelassen", stdout)
             rows = read_csv_file(out)
-            self.assertEqual(sorted(r["Title"] for r in rows),
-                             ["Neuer-Account", "Zwilling A", "Zwilling B"])
+            self.assertEqual(
+                sorted(r["Title"] for r in rows), ["Neuer-Account", "Zwilling A", "Zwilling B"]
+            )
             with open(out, newline="", encoding="utf-8") as f:
                 self.assertEqual(next(csv.reader(f)), HEADER)
 
@@ -321,7 +420,7 @@ class ExportTests(unittest.TestCase):
             rows = {r["Title"]: r for r in read_csv_file(out)}
             self.assertEqual(len(rows), 12)
             self.assertNotIn("Gelöscht", rows)
-            self.assertEqual(rows["Mail"]["Password"], "pw-mail-2")      # neu.csv ist neuer
+            self.assertEqual(rows["Mail"]["Password"], "pw-mail-2")  # neu.csv ist neuer
             self.assertEqual(rows["Shop"]["Notes"], "Zeile 1\nZeile 2")  # alt.csv ist neuer
             self.assertEqual(rows["Forum"]["Last Modified"], "2024-02-01T10:00:00Z")
             self.assertIn("Streaming-Abo", rows)
@@ -338,9 +437,16 @@ class ExportTests(unittest.TestCase):
 
     def test_json_stdout_stays_valid_when_exporting(self):
         with tempfile.TemporaryDirectory() as d:
-            rc, out, err = run(ALT, NEU, "--format", "json",
-                               "--export-added", os.path.join(d, "a.csv"),
-                               "--export-merged", os.path.join(d, "m.csv"))
+            rc, out, err = run(
+                ALT,
+                NEU,
+                "--format",
+                "json",
+                "--export-added",
+                os.path.join(d, "a.csv"),
+                "--export-merged",
+                os.path.join(d, "m.csv"),
+            )
             self.assertEqual(rc, 0)
             self.assertEqual(json.loads(out)["mode"], "compare")
             self.assertIn("exportiert", err)
@@ -379,8 +485,18 @@ class InputTests(unittest.TestCase):
     def test_utf8_bom_and_umlauts(self):
         with tempfile.TemporaryDirectory() as d:
             a, b = os.path.join(d, "a.csv"), os.path.join(d, "b.csv")
-            row = ["Büro", "Größe", "ü@example.org", "pw", "", "", "", "1",
-                   "2024-01-01T10:00:00Z", "2023-01-01T00:00:00Z"]
+            row = [
+                "Büro",
+                "Größe",
+                "ü@example.org",
+                "pw",
+                "",
+                "",
+                "",
+                "1",
+                "2024-01-01T10:00:00Z",
+                "2023-01-01T00:00:00Z",
+            ]
             write_csv_file(a, [row], encoding="utf-8-sig")
             write_csv_file(b, [row], encoding="utf-8")
             _, r = run_json(a, b)
@@ -392,8 +508,18 @@ class InputTests(unittest.TestCase):
             sub1, sub2 = os.path.join(d, "eins"), os.path.join(d, "zwei")
             os.makedirs(sub1)
             os.makedirs(sub2)
-            row = ["Web", "X", "u", "pw", "", "", "", "1",
-                   "2024-01-01T10:00:00Z", "2023-01-01T00:00:00Z"]
+            row = [
+                "Web",
+                "X",
+                "u",
+                "pw",
+                "",
+                "",
+                "",
+                "1",
+                "2024-01-01T10:00:00Z",
+                "2023-01-01T00:00:00Z",
+            ]
             a, b = os.path.join(sub1, "export.csv"), os.path.join(sub2, "export.csv")
             write_csv_file(a, [row])
             write_csv_file(b, [row])

@@ -1,4 +1,5 @@
 """Tests der Writer-Schnittstelle und der Meldung über nicht speicherbare Daten."""
+
 import csv
 import dataclasses
 import json
@@ -59,39 +60,47 @@ class HasDataTests(unittest.TestCase):
 
 class LostDataTests(unittest.TestCase):
     def test_keepass_rows_lose_nothing(self):
-        self.assertEqual(lost_data(load_any("a.csv", KP_A).rows),
-                         {"columns": {}, "source": {}})
+        self.assertEqual(lost_data(load_any("a.csv", KP_A).rows), {"columns": {}, "source": {}})
         self.assertEqual(loss_lines(lost_data(load_any("a.csv", KP_A).rows)), [])
 
     def test_bitwarden_json_rows_lose_extra_columns_and_source_data(self):
         lost = lost_data(load_any("bw.json", BW_JSON).rows)
-        self.assertEqual(lost["columns"], {"Favorite": 1, "Type": 1, "Reprompt": 1,
-                                           "Fields": 1, "URLs": 1})
-        self.assertEqual(lost["source"], {"Passwort-Verlauf": 1, "Typ eigener Felder": 1,
-                                          "Löschdatum": 1})
+        self.assertEqual(
+            lost["columns"], {"Favorite": 1, "Type": 1, "Reprompt": 1, "Fields": 1, "URLs": 1}
+        )
+        self.assertEqual(
+            lost["source"], {"Passwort-Verlauf": 1, "Typ eigener Felder": 1, "Löschdatum": 1}
+        )
 
     def test_bitwarden_csv_rows_lose_extra_columns_only(self):
         lost = lost_data(load_any("bw.csv", BW_CSV).rows)
-        self.assertEqual(lost["columns"], {"Favorite": 1, "Type": 1, "Reprompt": 1,
-                                           "Fields": 1, "URLs": 1})
+        self.assertEqual(
+            lost["columns"], {"Favorite": 1, "Type": 1, "Reprompt": 1, "Fields": 1, "URLs": 1}
+        )
         self.assertEqual(lost["source"], {})
 
     def test_a_writer_that_restores_the_source_does_not_count_source_data(self):
-        writer = dataclasses.replace(KEEPASS_CSV_WRITER, format="bitwarden-json",
-                                     label="Bitwarden-JSON", restores_source=True)
+        writer = dataclasses.replace(
+            KEEPASS_CSV_WRITER,
+            format="bitwarden-json",
+            label="Bitwarden-JSON",
+            restores_source=True,
+        )
         lost = lost_data(load_any("bw.json", BW_JSON).rows, writer)
         self.assertEqual(lost["source"], {})
 
     def test_unmapped_labels_of_the_json_importer(self):
         data = json.loads(BW_JSON)
-        item = data["items"][1]                      # Shop: nichts Besonderes
+        item = data["items"][1]  # Shop: nichts Besonderes
         item["login"]["fido2Credentials"] = [{"credentialId": "x"}]
         item["collectionIds"] = ["c1"]
         item["organizationId"] = "o1"
         item["login"]["uris"][0]["match"] = 1
         rows = {r["Title"]: r for r in load_any("bw.json", json.dumps(data)).rows}
-        self.assertEqual(sorted(rows["Shop"][UNMAPPED_KEY]),
-                         ["Organisation", "Passkeys", "Sammlungen", "URL-Abgleichsmodus"])
+        self.assertEqual(
+            sorted(rows["Shop"][UNMAPPED_KEY]),
+            ["Organisation", "Passkeys", "Sammlungen", "URL-Abgleichsmodus"],
+        )
         self.assertEqual(rows["Forum"][UNMAPPED_KEY], [])
 
     def test_extra_csv_columns_with_content_are_reported(self):
@@ -107,47 +116,76 @@ class LostDataTests(unittest.TestCase):
 class ExportMessageTests(unittest.TestCase):
     def test_terminal_names_what_the_export_loses(self):
         with tempfile.TemporaryDirectory() as d:
-            rc, out, _ = run("tests/keepassium_a.csv", "tests/bitwarden.json",
-                                      "--export-merged", os.path.join(d, "m.csv"))
+            rc, out, _ = run(
+                "tests/keepassium_a.csv",
+                "tests/bitwarden.json",
+                "--export-merged",
+                os.path.join(d, "m.csv"),
+            )
         self.assertEqual(rc, 0)
-        self.assertIn("Im KeePass-CSV nicht speicherbar (Anzahl betroffener Einträge): "
-                      "Passwort-Nachfrage (1), Typ (1), Favorit (1), Eigene Felder (1), "
-                      "Alle URLs (1), Passwort-Verlauf (1), Typ eigener Felder (1)", out)
+        self.assertIn(
+            "Im KeePass-CSV nicht speicherbar (Anzahl betroffener Einträge): "
+            "Passwort-Nachfrage (1), Typ (1), Favorit (1), Eigene Felder (1), "
+            "Alle URLs (1), Passwort-Verlauf (1), Typ eigener Felder (1)",
+            out,
+        )
 
     def test_loss_line_comes_before_the_blank_line(self):
         with tempfile.TemporaryDirectory() as d:
-            _, out, _ = run("tests/keepassium_a.csv", "tests/bitwarden.json",
-                                     "--export-merged", os.path.join(d, "m.csv"))
+            _, out, _ = run(
+                "tests/keepassium_a.csv",
+                "tests/bitwarden.json",
+                "--export-merged",
+                os.path.join(d, "m.csv"),
+            )
         lines = out.split("\n")
         i = next(n for n, line in enumerate(lines) if "nicht speicherbar" in line)
         self.assertEqual(lines[i + 1], "")
 
     def test_export_added_reports_losses_too(self):
         with tempfile.TemporaryDirectory() as d:
-            _, out, _ = run("tests/keepassium_a.csv", "tests/bitwarden.json",
-                                     "--export-added", os.path.join(d, "a.csv"))
-        self.assertIn("nicht speicherbar", out)          # die Notiz ist „note“, nur im Bitwarden-Export
+            _, out, _ = run(
+                "tests/keepassium_a.csv",
+                "tests/bitwarden.json",
+                "--export-added",
+                os.path.join(d, "a.csv"),
+            )
+        self.assertIn("nicht speicherbar", out)  # die Notiz ist „note“, nur im Bitwarden-Export
 
     def test_no_message_when_nothing_is_lost(self):
         with tempfile.TemporaryDirectory() as d:
-            _, out, _ = run("tests/keepassium_a.csv", "tests/keepassium_b.csv",
-                                     "--export-merged", os.path.join(d, "m.csv"),
-                                     "--export-added", os.path.join(d, "a.csv"))
+            _, out, _ = run(
+                "tests/keepassium_a.csv",
+                "tests/keepassium_b.csv",
+                "--export-merged",
+                os.path.join(d, "m.csv"),
+                "--export-added",
+                os.path.join(d, "a.csv"),
+            )
         self.assertNotIn("nicht speicherbar", out)
 
     def test_losses_only_count_rows_that_are_exported(self):
         # Der gelöschte Eintrag (Löschdatum) steht im Papierkorb und wird nicht exportiert.
         with tempfile.TemporaryDirectory() as d:
-            _, out, _ = run("tests/bitwarden.json", "tests/bitwarden.json",
-                                     "--export-merged", os.path.join(d, "m.csv"))
+            _, out, _ = run(
+                "tests/bitwarden.json",
+                "tests/bitwarden.json",
+                "--export-merged",
+                os.path.join(d, "m.csv"),
+            )
         self.assertNotIn("Löschdatum", out)
         self.assertIn("Passwort-Verlauf (1)", out)
 
     def test_json_mode_sends_the_message_to_stderr(self):
         with tempfile.TemporaryDirectory() as d:
-            rc, out, err = run("tests/keepassium_a.csv", "tests/bitwarden.json",
-                                        "--format", "json", "--export-merged",
-                                        os.path.join(d, "m.csv"))
+            rc, out, err = run(
+                "tests/keepassium_a.csv",
+                "tests/bitwarden.json",
+                "--format",
+                "json",
+                "--export-merged",
+                os.path.join(d, "m.csv"),
+            )
         self.assertEqual(json.loads(out)["mode"], "compare")
         self.assertIn("nicht speicherbar", err)
         self.assertNotIn("nicht speicherbar", out)

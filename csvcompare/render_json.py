@@ -29,8 +29,11 @@ def change_json(cmp, change, show_secrets):
     for column in change.columns:
         old_value, new_value = old_row[column], new_row[column]
         if column in SECRET_NAMES and not show_secrets:
-            changes[column] = {"old": mask_secret(old_value), "new": mask_secret(new_value),
-                               "masked": True}
+            changes[column] = {
+                "old": mask_secret(old_value),
+                "new": mask_secret(new_value),
+                "masked": True,
+            }
         else:
             changes[column] = {"old": old_value, "new": new_value}
     result = {"entry": entry_ref(change.key)}
@@ -54,11 +57,16 @@ def move_json(cmp, move, show_secrets):
 
 def base_report(cmp, args):
     """Gemeinsamer Kopf aller Berichte: Dateien und aktive Filter."""
+
     def side(name, path, entries, source):
-        return {"name": name, "path": path, "entries": len(entries),
-                "format": source.format if source else None,
-                "db_prefix": source.db_prefix if source else None,
-                "notes": list(source.notes) if source else []}
+        return {
+            "name": name,
+            "path": path,
+            "entries": len(entries),
+            "format": source.format if source else None,
+            "db_prefix": source.db_prefix if source else None,
+            "notes": list(source.notes) if source else [],
+        }
 
     return {
         "files": {
@@ -67,8 +75,9 @@ def base_report(cmp, args):
         },
         "filters": {
             "ignored_columns": cmp.ignored,
-            "auto_ignored": [{"column": column, "reason": reason}
-                             for column, reason in cmp.auto_ignored],
+            "auto_ignored": [
+                {"column": column, "reason": reason} for column, reason in cmp.auto_ignored
+            ],
             "hide_trash": args.hide_trash,
             "group": args.group.strip() if args.group is not None else None,
             "detect_moves": not args.no_detect_moves,
@@ -82,29 +91,50 @@ def findings_json(findings):
 
 def stats_report(base, cmp):
     rows = stats_rows(cmp.old, cmp.new)
-    return {"mode": "stats", **base,
-            "groups": [{"group": group, "old": old, "new": new, "difference": new - old}
-                       for group, old, new in rows],
-            "total": {"old": len(cmp.old), "new": len(cmp.new),
-                      "difference": len(cmp.new) - len(cmp.old)}}
+    return {
+        "mode": "stats",
+        **base,
+        "groups": [
+            {"group": group, "old": old, "new": new, "difference": new - old}
+            for group, old, new in rows
+        ],
+        "total": {
+            "old": len(cmp.old),
+            "new": len(cmp.new),
+            "difference": len(cmp.new) - len(cmp.old),
+        },
+    }
 
 
 def check_report(base, cmp):
     sides = ((cmp.old_name, cmp.old), (cmp.new_name, cmp.new))
-    return {"mode": "check", **base,
-            "results": [{"file": name, "findings": findings_json(check_entries(entries))}
-                        for name, entries in sides]}
+    return {
+        "mode": "check",
+        **base,
+        "results": [
+            {"file": name, "findings": findings_json(check_entries(entries))}
+            for name, entries in sides
+        ],
+    }
 
 
 def password_report(base, cmp, min_length, max_age_days):
     results = []
     for name, entries in ((cmp.old_name, cmp.old), (cmp.new_name, cmp.new)):
         findings, totp_count = audit_entries(entries, min_length, max_age_days)
-        results.append({"file": name, "findings": findings_json(findings),
-                        "totp": {"with_totp": totp_count, "entries": len(entries)}})
-    return {"mode": "password-check", **base,
-            "thresholds": {"min_length": min_length, "max_age_days": max_age_days},
-            "results": results}
+        results.append(
+            {
+                "file": name,
+                "findings": findings_json(findings),
+                "totp": {"with_totp": totp_count, "entries": len(entries)},
+            }
+        )
+    return {
+        "mode": "password-check",
+        **base,
+        "thresholds": {"min_length": min_length, "max_age_days": max_age_days},
+        "results": results,
+    }
 
 
 def search_report(base, cmp, query, hits, show_secrets):
@@ -116,10 +146,14 @@ def search_report(base, cmp, query, hits, show_secrets):
             results.append({"status": hit.status, **change_json(cmp, hit.item, show_secrets)})
         else:  # nur in einer Datei oder identisch
             entries = cmp.new if hit.status == ONLY_IN_NEW else cmp.old
-            results.append({"status": hit.status, "entry": entry_ref(hit.item),
-                            "last_modified": entries[hit.item][MODIFIED]})
-    return {"mode": "search", **base, "query": query,
-            "match_count": len(hits), "results": results}
+            results.append(
+                {
+                    "status": hit.status,
+                    "entry": entry_ref(hit.item),
+                    "last_modified": entries[hit.item][MODIFIED],
+                }
+            )
+    return {"mode": "search", **base, "query": query, "match_count": len(hits), "results": results}
 
 
 def compare_report(base, cmp, show_secrets):
@@ -130,12 +164,15 @@ def compare_report(base, cmp, show_secrets):
         "moved": [move_json(cmp, move, show_secrets) for move in cmp.moves],
         "only_in_old": [entry_ref(key) for key in cmp.only_old],
         "only_in_new": [entry_ref(key) for key in cmp.only_new],
-        "changed": {freshness: [change_json(cmp, change, show_secrets)
-                                for change in cmp.changes[freshness]]
-                    for freshness in FRESHNESS},
+        "changed": {
+            freshness: [change_json(cmp, change, show_secrets) for change in cmp.changes[freshness]]
+            for freshness in FRESHNESS
+        },
         "summary": {
-            "only_in_old": len(cmp.only_old), "only_in_new": len(cmp.only_new),
-            "moved": len(cmp.moves), "changed": cmp.n_changed,
+            "only_in_old": len(cmp.only_old),
+            "only_in_new": len(cmp.only_new),
+            "moved": len(cmp.moves),
+            "changed": cmp.n_changed,
             "newer_in_new": count[NEWER_IN_NEW],
             "newer_in_old": count[NEWER_IN_OLD],
             "unclear": count[UNCLEAR],

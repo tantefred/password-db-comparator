@@ -1,4 +1,5 @@
 """Tests für den Vergleich über Formatgrenzen hinweg (KeePass-CSV, Bitwarden-JSON/-CSV)."""
+
 import copy
 import json
 import os
@@ -46,8 +47,9 @@ class KeePassAgainstBitwardenJsonTests(unittest.TestCase):
 
     def test_only_the_extra_note_differs(self):
         s = self.r["summary"]
-        self.assertEqual((s["only_in_old"], s["only_in_new"], s["moved"], s["changed"]),
-                         (0, 1, 0, 0))
+        self.assertEqual(
+            (s["only_in_old"], s["only_in_new"], s["moved"], s["changed"]), (0, 1, 0, 0)
+        )
         self.assertEqual(titles(self.r["only_in_new"]), ["WLAN-Zugang"])
 
     def test_formats_are_reported(self):
@@ -56,8 +58,10 @@ class KeePassAgainstBitwardenJsonTests(unittest.TestCase):
 
     def test_columns_one_side_lacks_are_skipped_with_a_reason(self):
         skipped = auto_ignored(self.r)
-        self.assertEqual(set(skipped), {"Icon", "Last Modified", "Created", "Favorite", "Type",
-                                        "Reprompt", "Fields", "URLs"})
+        self.assertEqual(
+            set(skipped),
+            {"Icon", "Last Modified", "Created", "Favorite", "Type", "Reprompt", "Fields", "URLs"},
+        )
         self.assertIn("bw.json nicht vor", skipped["Icon"])
         self.assertIn("kp.csv nicht vor", skipped["Fields"])
         self.assertIn("nicht vergleichbar", skipped["Created"])
@@ -73,10 +77,17 @@ class KeePassAgainstBitwardenJsonTests(unittest.TestCase):
     def test_text_header_explains_the_skipped_columns(self):
         with tempfile.TemporaryDirectory() as d:
             out = subprocess.run(
-                [sys.executable, os.path.join(ROOT, "compare_csv.py"),
-                 os.path.join(ROOT, "tests", "keepassium_a.csv"),
-                 os.path.join(ROOT, "tests", "bitwarden.json")],
-                capture_output=True, text=True, encoding="utf-8", cwd=d).stdout
+                [
+                    sys.executable,
+                    os.path.join(ROOT, "compare_csv.py"),
+                    os.path.join(ROOT, "tests", "keepassium_a.csv"),
+                    os.path.join(ROOT, "tests", "bitwarden.json"),
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                cwd=d,
+            ).stdout
         self.assertIn("(Bitwarden-JSON)", out)
         self.assertIn("Automatisch ausgelassen (kommt in bitwarden.json nicht vor): Icon", out)
         self.assertIn("Favorite, Type, Reprompt, Fields, URLs", out)
@@ -85,12 +96,13 @@ class KeePassAgainstBitwardenJsonTests(unittest.TestCase):
 class KeePassAgainstBitwardenCsvTests(unittest.TestCase):
     def test_differences_are_only_what_the_formats_cannot_hold(self):
         r = compare("kp.csv", KP_A, "bw.csv", BW_CSV)
-        self.assertEqual(titles(r["only_in_old"]), ["Gelöscht"])   # CSV-Export hat keinen Papierkorb
+        self.assertEqual(titles(r["only_in_old"]), ["Gelöscht"])  # CSV-Export hat keinen Papierkorb
         self.assertEqual(titles(r["only_in_new"]), ["WLAN-Zugang"])
         self.assertEqual(r["summary"]["changed"], 0)
-        self.assertEqual(set(auto_ignored(r)),
-                         {"Icon", "Last Modified", "Created", "Favorite", "Type", "Reprompt",
-                          "Fields", "URLs"})
+        self.assertEqual(
+            set(auto_ignored(r)),
+            {"Icon", "Last Modified", "Created", "Favorite", "Type", "Reprompt", "Fields", "URLs"},
+        )
 
 
 class BitwardenJsonAgainstCsvTests(unittest.TestCase):
@@ -120,6 +132,7 @@ class RealDifferencesAcrossFormatsTests(unittest.TestCase):
             m = item(data, "Mail")
             m["login"]["password"] = "pw-mail-2"
             m["revisionDate"] = "2025-01-01T00:00:00.000Z"
+
         r = compare("kp.csv", KP_A, "bw.json", with_json(change))
         self.assertEqual(titles(i["entry"] for i in r["changed"]["newer_in_new"]), ["Mail"])
         mail = r["changed"]["newer_in_new"][0]
@@ -127,7 +140,9 @@ class RealDifferencesAcrossFormatsTests(unittest.TestCase):
         self.assertTrue(mail["changes"]["Password"]["masked"])
 
     def test_edit_in_the_keepass_file_after_the_import_is_recognised(self):
-        kp = KP_A.replace("pw-mail-1,https://mail.example.org", "pw-mail-9,https://mail.example.org")
+        kp = KP_A.replace(
+            "pw-mail-1,https://mail.example.org", "pw-mail-9,https://mail.example.org"
+        )
         kp = kp.replace("2024-01-10T10:00:00Z", "2025-06-01T10:00:00Z")
         r = compare("kp.csv", kp, "bw.json", BW_JSON)
         self.assertEqual(titles(i["entry"] for i in r["changed"]["newer_in_old"]), ["Mail"])
@@ -135,19 +150,22 @@ class RealDifferencesAcrossFormatsTests(unittest.TestCase):
     def test_timestamps_alone_are_no_difference_between_formats(self):
         def change(data):
             item(data, "Forum")["revisionDate"] = "2030-01-01T00:00:00.000Z"
+
         r = compare("kp.csv", KP_A, "bw.json", with_json(change))
         self.assertEqual(r["summary"]["changed"], 0)
 
     def test_timestamps_alone_are_a_difference_within_one_format(self):
         def change(data):
             item(data, "Forum")["revisionDate"] = "2030-01-01T00:00:00.000Z"
+
         r = compare("a.json", BW_JSON, "b.json", with_json(change))
         self.assertEqual(r["summary"]["changed"], 1)
         self.assertTrue(r["changed"]["newer_in_new"][0]["only_timestamp"])
 
     def test_renamed_folder_is_a_certain_move(self):
         def change(data):
-            data["folders"][2]["name"] = "Finanzen"          # Ordner "Privat" umbenannt
+            data["folders"][2]["name"] = "Finanzen"  # Ordner "Privat" umbenannt
+
         r = compare("kp.csv", KP_A, "bw.json", with_json(change))
         moved = {m["entry"]["title"]: m for m in r["moved"]}
         self.assertEqual(set(moved), {"Bank", "Streaming"})
@@ -171,7 +189,9 @@ class ExtendedColumnsTests(unittest.TestCase):
     def changed_columns(self, mutator):
         r = compare("a.json", BW_JSON, "b.json", with_json(mutator))
         self.assertEqual(r["summary"]["changed"], 1)
-        change = r["changed"]["newer_in_new"] + r["changed"]["newer_in_old"] + r["changed"]["unclear"]
+        change = (
+            r["changed"]["newer_in_new"] + r["changed"]["newer_in_old"] + r["changed"]["unclear"]
+        )
         return change[0]["entry"]["title"], change[0]["differing_columns"], change[0]["changes"]
 
     def test_favorite(self):
@@ -188,7 +208,10 @@ class ExtendedColumnsTests(unittest.TestCase):
 
     def test_additional_url(self):
         def change(d):
-            item(d, "Forum")["login"]["uris"].append({"match": None, "uri": "https://forum2.example"})
+            item(d, "Forum")["login"]["uris"].append(
+                {"match": None, "uri": "https://forum2.example"}
+            )
+
         _, cols, changes = self.changed_columns(change)
         self.assertEqual(cols, ["URLs"])
         self.assertIn("forum2.example", changes["URLs"]["new"])
@@ -196,6 +219,7 @@ class ExtendedColumnsTests(unittest.TestCase):
     def test_custom_field_changes_are_found_and_masked(self):
         def change(d):
             item(d, "Mail")["fields"][0]["value"] = "9999"
+
         _, cols, changes = self.changed_columns(change)
         self.assertEqual(cols, ["Fields"])
         self.assertTrue(changes["Fields"]["masked"])
@@ -205,15 +229,22 @@ class ExtendedColumnsTests(unittest.TestCase):
     def test_custom_field_changes_show_with_secrets_enabled(self):
         def change(d):
             item(d, "Mail")["fields"][0]["value"] = "9999"
-        r = analyze("a.json", BW_JSON, "b.json", with_json(change), {"show_secrets": True})["report"]
-        changes = r["changed"]["newer_in_new"][0]["changes"] if r["changed"]["newer_in_new"] \
+
+        r = analyze("a.json", BW_JSON, "b.json", with_json(change), {"show_secrets": True})[
+            "report"
+        ]
+        changes = (
+            r["changed"]["newer_in_new"][0]["changes"]
+            if r["changed"]["newer_in_new"]
             else r["changed"]["unclear"][0]["changes"]
+        )
         self.assertEqual(changes["Fields"]["old"], "PIN: 1234 Konto: Haupt konto")
         self.assertEqual(changes["Fields"]["new"], "PIN: 9999 Konto: Haupt konto")
 
     def test_extended_columns_can_be_ignored(self):
         def change(d):
             item(d, "Forum")["favorite"] = True
+
         r = compare("a.json", BW_JSON, "b.json", with_json(change), {"ignore": ["favorite"]})
         self.assertEqual(r["summary"]["changed"], 0)
         self.assertEqual(r["filters"]["ignored_columns"], ["Favorite"])
@@ -222,7 +253,7 @@ class ExtendedColumnsTests(unittest.TestCase):
         with self.assertRaises(Exception) as ctx:
             analyze("a.json", BW_JSON, "b.json", BW_JSON, {"ignore": ["Foo"]})
         self.assertIn("Unbekannte Spalte", str(ctx.exception))
-        self.assertIn("Fields", str(ctx.exception))   # neue Spalten stehen in der Liste
+        self.assertIn("Fields", str(ctx.exception))  # neue Spalten stehen in der Liste
 
     def test_user_ignored_columns_are_not_listed_as_automatic(self):
         r = compare("kp.csv", KP_A, "bw.json", BW_JSON, {"ignore": ["Icon"]})
@@ -237,7 +268,9 @@ class ComparableColumnsTests(unittest.TestCase):
     def test_same_format_keeps_all_columns(self):
         old, new = self.sources(KP_A, KP_B)
         cols, auto = comparable_columns("a", "b", [], old, new)
-        self.assertEqual(cols, ["Password", "URL", "Notes", "TOTP", "Icon", "Last Modified", "Created"])
+        self.assertEqual(
+            cols, ["Password", "URL", "Notes", "TOTP", "Icon", "Last Modified", "Created"]
+        )
         self.assertEqual(auto, [])
 
     def test_without_sources_the_core_columns_are_compared(self):
@@ -254,14 +287,32 @@ class ComparableColumnsTests(unittest.TestCase):
 class ExportAcrossFormatsTests(unittest.TestCase):
     def test_merged_export_of_keepass_against_bitwarden(self):
         result = analyze("kp.csv", KP_A, "bw.json", BW_JSON, {"export_merged": True})
-        rows = {r["Title"]: r for r in __import__("csv").DictReader(
-            result["exports"]["merged"]["csv"].splitlines(keepends=True))}
-        self.assertEqual(len(rows), 8 + 1 - 1)       # 8 + Notiz, ohne Papierkorb
-        self.assertEqual(rows["WLAN-Zugang"]["Group"], "Privat-DB/Privat")  # Präfix aus der KeePass-Datei
+        rows = {
+            r["Title"]: r
+            for r in __import__("csv").DictReader(
+                result["exports"]["merged"]["csv"].splitlines(keepends=True)
+            )
+        }
+        self.assertEqual(len(rows), 8 + 1 - 1)  # 8 + Notiz, ohne Papierkorb
+        self.assertEqual(
+            rows["WLAN-Zugang"]["Group"], "Privat-DB/Privat"
+        )  # Präfix aus der KeePass-Datei
         self.assertEqual(rows["Router"]["Group"], "Privat-DB")
-        self.assertEqual(list(rows["Mail"].keys()),
-                         ["Group", "Title", "Username", "Password", "URL", "Notes", "TOTP",
-                          "Icon", "Last Modified", "Created"])
+        self.assertEqual(
+            list(rows["Mail"].keys()),
+            [
+                "Group",
+                "Title",
+                "Username",
+                "Password",
+                "URL",
+                "Notes",
+                "TOTP",
+                "Icon",
+                "Last Modified",
+                "Created",
+            ],
+        )
 
 
 if __name__ == "__main__":

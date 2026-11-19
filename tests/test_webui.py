@@ -1,4 +1,5 @@
 """Tests des lokalen Webservers: Verhalten und Schutzmaßnahmen."""
+
 import http.client
 import json
 import os
@@ -52,8 +53,11 @@ class ServerTestCase(unittest.TestCase):
 
     @staticmethod
     def payload(options=None):
-        return {"old": {"name": "alt.csv", "text": ALT},
-                "new": {"name": "neu.csv", "text": NEU}, "options": options or {}}
+        return {
+            "old": {"name": "alt.csv", "text": ALT},
+            "new": {"name": "neu.csv", "text": NEU},
+            "options": options or {},
+        }
 
 
 class ServerTests(ServerTestCase):
@@ -79,8 +83,9 @@ class ServerTests(ServerTestCase):
         status, headers, body = self.post(self.payload({"ignore": ["Icon"], "export_added": True}))
         self.assertEqual(status, 200)
         self.assertTrue(headers["content-type"].startswith("application/json"))
-        expected = analyze("alt.csv", ALT, "neu.csv", NEU,
-                           {"ignore": ["Icon"], "export_added": True})
+        expected = analyze(
+            "alt.csv", ALT, "neu.csv", NEU, {"ignore": ["Icon"], "export_added": True}
+        )
         self.assertEqual(json.loads(body), expected)
 
     def test_usage_errors_are_reported_as_400_with_message(self):
@@ -96,9 +101,15 @@ class ServerTests(ServerTestCase):
         self.assertIn("fehlen Spalten", json.loads(body)["error"])
 
     def test_malformed_requests(self):
-        for raw in (b"not json", b"{}", b'{"old": 1, "new": 2}',
-                    json.dumps({"old": {"name": "a", "text": 1}, "new": {"name": "b", "text": ""}}).encode(),
-                    json.dumps({**self.payload(), "options": []}).encode()):
+        for raw in (
+            b"not json",
+            b"{}",
+            b'{"old": 1, "new": 2}',
+            json.dumps(
+                {"old": {"name": "a", "text": 1}, "new": {"name": "b", "text": ""}}
+            ).encode(),
+            json.dumps({**self.payload(), "options": []}).encode(),
+        ):
             with self.subTest(raw=raw[:30]):
                 status, _, _ = self.post(None, raw=raw)
                 self.assertEqual(status, 400)
@@ -117,18 +128,25 @@ class ServerTests(ServerTestCase):
 
 class FormatTests(ServerTestCase):
     def test_json_and_csv_exports_can_be_compared(self):
-        payload = {"old": {"name": "kp.csv", "text": read_fixture("keepassium_a.csv")},
-                   "new": {"name": "bw.json", "text": read_fixture("bitwarden.json")}, "options": {}}
+        payload = {
+            "old": {"name": "kp.csv", "text": read_fixture("keepassium_a.csv")},
+            "new": {"name": "bw.json", "text": read_fixture("bitwarden.json")},
+            "options": {},
+        }
         status, _, body = self.post(payload)
         self.assertEqual(status, 200)
         files = json.loads(body)["report"]["files"]
-        self.assertEqual((files["old"]["format"], files["new"]["format"]),
-                         ("keepass-csv", "bitwarden-json"))
+        self.assertEqual(
+            (files["old"]["format"], files["new"]["format"]), ("keepass-csv", "bitwarden-json")
+        )
         self.assertTrue(files["new"]["notes"])
 
     def test_encrypted_bitwarden_export_is_a_clear_400(self):
-        payload = {"old": {"name": "a.json", "text": json.dumps({"encrypted": True, "data": "x"})},
-                   "new": {"name": "b.csv", "text": read_fixture("keepassium_a.csv")}, "options": {}}
+        payload = {
+            "old": {"name": "a.json", "text": json.dumps({"encrypted": True, "data": "x"})},
+            "new": {"name": "b.csv", "text": read_fixture("keepassium_a.csv")},
+            "options": {},
+        }
         status, _, body = self.post(payload)
         self.assertEqual(status, 400)
         self.assertIn("verschlüsselter Bitwarden-Export", json.loads(body)["error"])
@@ -143,8 +161,12 @@ class SecurityTests(ServerTestCase):
                 self.assertNotIn("Eintrag", body.decode("utf-8"))
 
     def test_foreign_host_header_is_rejected(self):
-        for host in ("evil.example.com", "evil.example.com:80", "192.168.1.5:8765",
-                     "127.0.0.1.evil.com"):
+        for host in (
+            "evil.example.com",
+            "evil.example.com:80",
+            "192.168.1.5:8765",
+            "127.0.0.1.evil.com",
+        ):
             with self.subTest(host=host):
                 self.assertEqual(self.post(self.payload(), host=host)[0], 403)
                 self.assertEqual(self.request("GET", "/", headers={"Host": host})[0], 403)
@@ -168,11 +190,16 @@ class SecurityTests(ServerTestCase):
 
     def test_server_does_not_log_requests(self):
         proc = subprocess.run(
-            [sys.executable, "-c",
-             f"import sys; sys.path.insert(0, {ROOT!r}); "
-             "from csvcompare.webui import make_handler; "
-             "h = make_handler('t', 1); print(h.log_message.__qualname__)"],
-            capture_output=True, text=True)
+            [
+                sys.executable,
+                "-c",
+                f"import sys; sys.path.insert(0, {ROOT!r}); "
+                "from csvcompare.webui import make_handler; "
+                "h = make_handler('t', 1); print(h.log_message.__qualname__)",
+            ],
+            capture_output=True,
+            text=True,
+        )
         self.assertIn("log_message", proc.stdout)
         self.assertEqual(proc.stderr, "")
 
@@ -210,14 +237,22 @@ class StaticPageTests(unittest.TestCase):
 
     def test_page_loads_nothing_from_outside(self):
         import re
+
         self.assertEqual(re.findall(r"https?://", self.html), [])
         self.assertEqual(re.findall(r"""\b(?:src|href)\s*=\s*["'](?!#)""", self.html), [])
         self.assertNotIn("@import", self.html)
         self.assertNotIn("url(", self.html)
 
     def test_file_contents_are_never_inserted_as_html(self):
-        for risky in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write",
-                      "eval(", "new Function", "srcdoc"):
+        for risky in (
+            "innerHTML",
+            "outerHTML",
+            "insertAdjacentHTML",
+            "document.write",
+            "eval(",
+            "new Function",
+            "srcdoc",
+        ):
             self.assertNotIn(risky, self.html, risky)
 
     def test_page_does_not_store_anything_in_the_browser(self):
@@ -234,22 +269,33 @@ class StaticPageTests(unittest.TestCase):
     def test_format_detection_in_the_page_matches_the_server(self):
         import re
         import shutil
+
         node = shutil.which("node")
         if not node:
             self.skipTest("node ist nicht installiert")
         from csvcompare.importers import load_any
+
         func = re.search(r"function sniffFormat\(text\) \{.*?\n\}", self.html, re.S).group(0)
-        samples = {name: read_fixture(name) for name in ("alt.csv", "keepassium_a.csv", "bitwarden.json",
-                                                  "bitwarden.csv")}
+        samples = {
+            name: read_fixture(name)
+            for name in ("alt.csv", "keepassium_a.csv", "bitwarden.json", "bitwarden.csv")
+        }
         samples["bom.json"] = chr(0xFEFF) + samples["bitwarden.json"]
         samples["bom.csv"] = chr(0xFEFF) + samples["bitwarden.csv"]
         samples["blank.json"] = "\n  " + samples["bitwarden.json"]
         samples["crlf.csv"] = samples["bitwarden.csv"].replace("\n", "\r\n")
-        script = func + "\nconst s = JSON.parse(require('fs').readFileSync(0, 'utf8'));" \
-                        "console.log(JSON.stringify(Object.fromEntries(" \
-                        "Object.entries(s).map(([k, v]) => [k, sniffFormat(v)]))));"
-        proc = subprocess.run([node, "-e", script], input=json.dumps(samples),
-                              capture_output=True, text=True, encoding="utf-8")
+        script = (
+            func + "\nconst s = JSON.parse(require('fs').readFileSync(0, 'utf8'));"
+            "console.log(JSON.stringify(Object.fromEntries("
+            "Object.entries(s).map(([k, v]) => [k, sniffFormat(v)]))));"
+        )
+        proc = subprocess.run(
+            [node, "-e", script],
+            input=json.dumps(samples),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
         self.assertEqual(proc.returncode, 0, proc.stderr)
         in_page = json.loads(proc.stdout)
         for name, text in samples.items():
@@ -264,6 +310,7 @@ class StaticPageTests(unittest.TestCase):
         import re
         import shutil
         import tempfile
+
         node = shutil.which("node")
         if not node:
             self.skipTest("node ist nicht installiert")
@@ -279,22 +326,41 @@ class StaticPageTests(unittest.TestCase):
 
 class CommandLineEntryTests(unittest.TestCase):
     def test_ui_rejects_files(self):
-        proc = subprocess.run([sys.executable, os.path.join(ROOT, "compare_csv.py"), "--ui",
-                               "tests/alt.csv"], cwd=ROOT, capture_output=True, text=True)
+        proc = subprocess.run(
+            [sys.executable, os.path.join(ROOT, "compare_csv.py"), "--ui", "tests/alt.csv"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
         self.assertEqual(proc.returncode, 2)
         self.assertIn("--ui braucht keine Dateien", proc.stderr)
 
     def test_files_are_still_required_without_ui(self):
         for args in ([], ["tests/alt.csv"]):
-            proc = subprocess.run([sys.executable, os.path.join(ROOT, "compare_csv.py"), *args],
-                                  cwd=ROOT, capture_output=True, text=True)
+            proc = subprocess.run(
+                [sys.executable, os.path.join(ROOT, "compare_csv.py"), *args],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+            )
             self.assertEqual(proc.returncode, 2)
             self.assertIn("required: alt, neu", proc.stderr)
 
     def test_ui_starts_and_serves_on_loopback(self):
         proc = subprocess.Popen(
-            [sys.executable, os.path.join(ROOT, "compare_csv.py"), "--ui", "--no-browser",
-             "--port", "0"], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            [
+                sys.executable,
+                os.path.join(ROOT, "compare_csv.py"),
+                "--ui",
+                "--no-browser",
+                "--port",
+                "0",
+            ],
+            cwd=ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
         try:
             line = proc.stdout.readline()
             self.assertIn("http://127.0.0.1:", line)

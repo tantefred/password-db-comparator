@@ -18,7 +18,7 @@ from .importers import KEEPASS_CSV
 class CsvWriter:
     format: str
     label: str
-    columns: tuple                 # Spalten, die das Zielformat speichern kann
+    columns: tuple  # Spalten, die das Zielformat speichern kann
     restores_source: bool = False  # kann nicht abgebildete Originaldaten (_source) wiederherstellen
 
     def _write(self, fileobj, rows):
@@ -71,5 +71,6 @@ def loss_lines(lost, writer=DEFAULT_WRITER):
     parts += [f"{label} ({count})" for label, count in lost["source"].items()]
     if not parts:
         return []
-    return [f"  Im {writer.label} nicht speicherbar (Anzahl betroffener Einträge): "
-            + ", ".join(parts)]
+    return [
+        f"  Im {writer.label} nicht speicherbar (Anzahl betroffener Einträge): " + ", ".join(parts)
+    ]

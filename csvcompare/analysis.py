@@ -15,6 +15,7 @@ from .values import parse_time
 
 class Finding(NamedTuple):
     """Ein Fund einer Prüfung: Überschrift und die betroffenen Einträge als Zeilen."""
+
     title: str
     lines: list
 
@@ -23,11 +24,14 @@ def stats_rows(old, new):
     """Einträge pro Gruppe in beiden Dateien: Liste (gruppe, anzahl_alt, anzahl_neu)."""
     count_old = Counter(row["Group"] for row in old.values())
     count_new = Counter(row["Group"] for row in new.values())
-    return [(group, count_old[group], count_new[group])
-            for group in sorted(set(count_old) | set(count_new))]
+    return [
+        (group, count_old[group], count_new[group])
+        for group in sorted(set(count_old) | set(count_new))
+    ]
 
 
 # ---------------------------------------------------------------- Dubletten und kaputte Einträge
+
 
 def url_problem(url):
     """Grund, falls die URL offensichtlich ungültig ist, sonst None."""
@@ -49,8 +53,11 @@ def duplicate_entries(entries):
     keys_by_identity = defaultdict(list)
     for key in entries:
         keys_by_identity[key.identity].append(key)
-    return sorted(f"{entry_label(keys[0])}  ({len(keys)}×)"
-                  for keys in keys_by_identity.values() if len(keys) > 1)
+    return sorted(
+        f"{entry_label(keys[0])}  ({len(keys)}×)"
+        for keys in keys_by_identity.values()
+        if len(keys) > 1
+    )
 
 
 def same_title_in_several_groups(entries):
@@ -116,20 +123,26 @@ def check_entries(entries):
 
 # ---------------------------------------------------------------- Passwortqualität
 
+
 def reused_passwords(entries):
     keys_by_password = defaultdict(list)
     for key, row in entries.items():
         if row["Password"]:
             keys_by_password[row["Password"]].append(key)
-    return sorted(f"{len(keys)} Einträge teilen ein Passwort: "
-                  + "; ".join(entry_label(key) for key in sorted(keys))
-                  for keys in keys_by_password.values() if len(keys) > 1)
+    return sorted(
+        f"{len(keys)} Einträge teilen ein Passwort: "
+        + "; ".join(entry_label(key) for key in sorted(keys))
+        for keys in keys_by_password.values()
+        if len(keys) > 1
+    )
 
 
 def short_passwords(entries, min_length):
-    return [f"{entry_label(key)}  ({len(row['Password'])} Zeichen)"
-            for key, row in sorted(entries.items())
-            if row["Password"] and len(row["Password"]) < min_length]
+    return [
+        f"{entry_label(key)}  ({len(row['Password'])} Zeichen)"
+        for key, row in sorted(entries.items())
+        if row["Password"] and len(row["Password"]) < min_length
+    ]
 
 
 def stale_entries(entries, max_age_days, now):
@@ -137,8 +150,10 @@ def stale_entries(entries, max_age_days, now):
     for key, row in sorted(entries.items()):
         modified = parse_time(row[MODIFIED])
         if modified is not None and (now - modified).days > max_age_days:
-            lines.append(f"{entry_label(key)}  (zuletzt geändert {modified.date().isoformat()}, "
-                         f"vor {(now - modified).days} Tagen)")
+            lines.append(
+                f"{entry_label(key)}  (zuletzt geändert {modified.date().isoformat()}, "
+                f"vor {(now - modified).days} Tagen)"
+            )
     return lines
 
 
@@ -151,8 +166,10 @@ def audit_entries(entries, min_length, max_age_days, now=None):
     findings = [
         Finding("Wiederverwendete Passwörter", reused_passwords(entries)),
         Finding(f"Kurze Passwörter (< {min_length} Zeichen)", short_passwords(entries, min_length)),
-        Finding(f"Lange nicht geändert (> {max_age_days} Tage)",
-                stale_entries(entries, max_age_days, now)),
+        Finding(
+            f"Lange nicht geändert (> {max_age_days} Tage)",
+            stale_entries(entries, max_age_days, now),
+        ),
     ]
     totp_count = sum(1 for row in entries.values() if row["TOTP"].strip())
     return [finding for finding in findings if finding.lines], totp_count

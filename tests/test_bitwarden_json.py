@@ -1,4 +1,5 @@
 """Tests des Bitwarden/Vaultwarden-JSON-Importers."""
+
 import copy
 import json
 import unittest
@@ -50,7 +51,9 @@ class MappingTests(unittest.TestCase):
         self.assertEqual(mail["Password"], "pw-mail-1")
         self.assertEqual(mail["URL"], "https://mail.example.org")
         self.assertEqual(mail["Notes"], "")
-        self.assertEqual(mail["TOTP"], "otpauth://totp/Mail:max?secret=JBSWY3DPEHPK3PXP&issuer=Mail")
+        self.assertEqual(
+            mail["TOTP"], "otpauth://totp/Mail:max?secret=JBSWY3DPEHPK3PXP&issuer=Mail"
+        )
         self.assertEqual(mail["Icon"], "")
 
     def test_timestamps_are_normalised(self):
@@ -120,8 +123,9 @@ class NothingIsLostTests(unittest.TestCase):
         imported = {row[SOURCE_KEY]["id"] for row in result.rows}
         for item in DATA["items"]:
             if item["id"] in imported:
-                row_source = next(r[SOURCE_KEY] for r in result.rows
-                                  if r[SOURCE_KEY]["id"] == item["id"])
+                row_source = next(
+                    r[SOURCE_KEY] for r in result.rows if r[SOURCE_KEY]["id"] == item["id"]
+                )
                 self.assertEqual(set(row_source), set(item))
 
     def test_source_never_appears_in_reports(self):
@@ -144,17 +148,25 @@ class ErrorTests(unittest.TestCase):
         self.assertIn("kein gültiges JSON", str(ctx.exception))
 
     def test_json_that_is_not_a_bitwarden_export(self):
-        for text in ('{"foo": 1}', '[1, 2]', '{"items": "x"}'):
+        for text in ('{"foo": 1}', "[1, 2]", '{"items": "x"}'):
             with self.subTest(text=text):
                 with self.assertRaises(CsvError) as ctx:
                     load_any("x.json", text)
                 self.assertIn("nicht wie ein Bitwarden", str(ctx.exception))
 
     def test_incomplete_items_do_not_crash(self):
-        text = json.dumps({"folders": None, "items": [
-            {"type": 1}, {"type": 1, "name": None, "login": None, "fields": "kaputt"},
-            "kein Objekt", {"type": 1, "name": "X", "login": {"uris": [None, {"uri": None}, 5]}},
-            {"type": 99, "name": "Unbekannt"}]})
+        text = json.dumps(
+            {
+                "folders": None,
+                "items": [
+                    {"type": 1},
+                    {"type": 1, "name": None, "login": None, "fields": "kaputt"},
+                    "kein Objekt",
+                    {"type": 1, "name": "X", "login": {"uris": [None, {"uri": None}, 5]}},
+                    {"type": 99, "name": "Unbekannt"},
+                ],
+            }
+        )
         result = load_any("x.json", text)
         self.assertEqual(len(result.rows), 3)
         self.assertEqual(result.rows[2]["URL"], "")
@@ -185,6 +197,7 @@ class IntegrationTests(unittest.TestCase):
             by_name["Mail"]["revisionDate"] = "2025-01-01T00:00:00.000Z"
             by_name["Forum"]["notes"] = "Hallo"
             del data["items"][data["items"].index(by_name["Router"])]
+
         report = analyze("a.json", TEXT, "b.json", modified(change), {})["report"]
         s = report["summary"]
         self.assertEqual((s["only_in_old"], s["only_in_new"], s["changed"]), (1, 0, 2))

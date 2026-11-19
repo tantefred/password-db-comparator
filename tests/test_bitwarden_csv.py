@@ -1,4 +1,5 @@
 """Tests des Bitwarden/Vaultwarden-CSV-Importers."""
+
 import csv
 import io
 import json
@@ -9,8 +10,19 @@ from csvcompare.importers import CsvError, load_any
 from csvcompare.service import analyze
 from tests.helpers import read_fixture
 
-HEADER = ["folder", "favorite", "type", "name", "notes", "fields", "reprompt",
-          "login_uri", "login_username", "login_password", "login_totp"]
+HEADER = [
+    "folder",
+    "favorite",
+    "type",
+    "name",
+    "notes",
+    "fields",
+    "reprompt",
+    "login_uri",
+    "login_username",
+    "login_password",
+    "login_totp",
+]
 
 
 CSV_TEXT = read_fixture("bitwarden.csv")
@@ -25,8 +37,19 @@ def make_csv(rows, header=HEADER):
     return buf.getvalue()
 
 
-def row(folder="", favorite="", type_="login", name="X", notes="", fields="", reprompt="0",
-        uri="", user="", pw="", totp=""):
+def row(
+    folder="",
+    favorite="",
+    type_="login",
+    name="X",
+    notes="",
+    fields="",
+    reprompt="0",
+    uri="",
+    user="",
+    pw="",
+    totp="",
+):
     return [folder, favorite, type_, name, notes, fields, reprompt, uri, user, pw, totp]
 
 
@@ -42,8 +65,10 @@ class MappingTests(unittest.TestCase):
 
     def test_format_and_provided_columns(self):
         self.assertEqual(self.result.format, "bitwarden-csv")
-        self.assertEqual(self.result.provided_columns,
-                         frozenset(ALL_NAMES) - {"Icon", "Last Modified", "Created"})
+        self.assertEqual(
+            self.result.provided_columns,
+            frozenset(ALL_NAMES) - {"Icon", "Last Modified", "Created"},
+        )
 
     def test_logins_and_notes_are_imported(self):
         self.assertEqual(len(self.result.rows), 8)
@@ -55,8 +80,10 @@ class MappingTests(unittest.TestCase):
 
     def test_login_fields(self):
         mail = self.rows["Mail"]
-        self.assertEqual((mail["Group"], mail["Username"], mail["Password"]),
-                         ("Web", "max@example.org", "pw-mail-1"))
+        self.assertEqual(
+            (mail["Group"], mail["Username"], mail["Password"]),
+            ("Web", "max@example.org", "pw-mail-1"),
+        )
         self.assertEqual(mail["URL"], "https://mail.example.org")
         self.assertEqual(mail["Favorite"], "1")
         self.assertEqual(mail["Type"], "login")
@@ -80,8 +107,9 @@ class MappingTests(unittest.TestCase):
 
     def test_secure_note(self):
         note = self.rows["WLAN-Zugang"]
-        self.assertEqual((note["Type"], note["Password"], note["Notes"]),
-                         ("note", "", "SSID: Heimnetz"))
+        self.assertEqual(
+            (note["Type"], note["Password"], note["Notes"]), ("note", "", "SSID: Heimnetz")
+        )
 
     def test_note_explains_missing_timestamps(self):
         self.assertIn("keine Zeitstempel", self.result.notes[-1])
@@ -110,8 +138,20 @@ class FieldsTests(unittest.TestCase):
 class MatchesJsonImportTests(unittest.TestCase):
     """Dieselben Einträge aus JSON und CSV müssen in allen gemeinsamen Spalten gleich sein."""
 
-    COMMON = ["Group", "Title", "Username", "Password", "URL", "URLs", "Notes", "TOTP",
-              "Favorite", "Type", "Reprompt", "Fields"]
+    COMMON = [
+        "Group",
+        "Title",
+        "Username",
+        "Password",
+        "URL",
+        "URLs",
+        "Notes",
+        "TOTP",
+        "Favorite",
+        "Type",
+        "Reprompt",
+        "Fields",
+    ]
 
     def test_rows_agree(self):
         _, csv_rows = by_title(CSV_TEXT)
@@ -127,8 +167,14 @@ class MatchesJsonImportTests(unittest.TestCase):
 
 class RobustnessTests(unittest.TestCase):
     def test_other_types_are_skipped_and_counted(self):
-        text = make_csv([row(name="A"), row(type_="card", name="Karte"),
-                         row(type_="identity", name="Person"), row(type_="card", name="K2")])
+        text = make_csv(
+            [
+                row(name="A"),
+                row(type_="card", name="Karte"),
+                row(type_="identity", name="Person"),
+                row(type_="card", name="K2"),
+            ]
+        )
         result = load_any("x.csv", text)
         self.assertEqual([r["Title"] for r in result.rows], ["A"])
         self.assertIn("3 Einträge übersprungen (2 card, 1 identity)", result.notes[0])

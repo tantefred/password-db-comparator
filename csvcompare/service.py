@@ -41,8 +41,11 @@ def filter_arguments(options):
     group = options.get("group")
     if isinstance(group, str) and group.strip():
         argv.append("--group=" + group)
-    for key, flag in (("hide_trash", "--hide-trash"), ("keep_db_name", "--keep-db-name"),
-                      ("show_secrets", "--show-secrets")):
+    for key, flag in (
+        ("hide_trash", "--hide-trash"),
+        ("keep_db_name", "--keep-db-name"),
+        ("show_secrets", "--show-secrets"),
+    ):
         if options.get(key):
             argv.append(flag)
     if options.get("detect_moves") is False:
@@ -58,16 +61,21 @@ def mode_arguments(options, mode):
             raise UsageError("Für die Suche fehlt der Suchbegriff.")
         return ["--search=" + query]
     if mode == "password-check":
-        return ["--password-check",
-                f"--min-length={_as_int(options, 'min_length', 10)}",
-                f"--max-age-days={_as_int(options, 'max_age_days', 730)}"]
+        return [
+            "--password-check",
+            f"--min-length={_as_int(options, 'min_length', 10)}",
+            f"--max-age-days={_as_int(options, 'max_age_days', 730)}",
+        ]
     return {"stats": ["--stats"], "check": ["--check"]}.get(mode, [])
 
 
 def export_arguments(options):
     """Exporte kommen zuletzt: ihre Optionen ohne Wert dürfen kein Argument verschlucken."""
-    return [flag for key, flag in (("export_added", "--export-added"),
-                                   ("export_merged", "--export-merged")) if options.get(key)]
+    return [
+        flag
+        for key, flag in (("export_added", "--export-added"), ("export_merged", "--export-merged"))
+        if options.get(key)
+    ]
 
 
 def options_to_argv(options):
@@ -80,10 +88,15 @@ def options_to_argv(options):
 
 def export_payload(export, filename):
     """Ein Export als Antwort für die Weboberfläche (der Inhalt wird dort zum Download)."""
-    return {"filename": filename, "csv": DEFAULT_WRITER.text(export.rows),
-            "entries": len(export.rows), "lines": export.lines, "lost": export.lost,
-            "target": DEFAULT_WRITER.label,
-            "conflicts": [entry_ref(key) for key in export.conflicts]}
+    return {
+        "filename": filename,
+        "csv": DEFAULT_WRITER.text(export.rows),
+        "entries": len(export.rows),
+        "lines": export.lines,
+        "lost": export.lost,
+        "target": DEFAULT_WRITER.label,
+        "conflicts": [entry_ref(key) for key in export.conflicts],
+    }
 
 
 def analyze(old_name, old_text, new_name, new_text, options):
@@ -119,8 +132,9 @@ def analyze(old_name, old_text, new_name, new_text, options):
     if args.export_added:
         exports["added"] = export_payload(prepare_added(cmp, args.export_added), args.export_added)
     if args.export_merged:
-        exports["merged"] = export_payload(prepare_merged(cmp, args.export_merged),
-                                           args.export_merged)
+        exports["merged"] = export_payload(
+            prepare_merged(cmp, args.export_merged), args.export_merged
+        )
 
     command = shlex.join(["python3", "compare_csv.py", old_name, new_name, *argv])
     return {"report": report, "status": status, "command": command, "exports": exports}

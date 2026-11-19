@@ -17,7 +17,7 @@ class Key(NamedTuple):
     group: str
     title: str
     username: str
-    number: int = 1   # unterscheidet Einträge mit sonst gleichem Schlüssel
+    number: int = 1  # unterscheidet Einträge mit sonst gleichem Schlüssel
 
     @property
     def identity(self):

@@ -31,9 +31,19 @@ def read_file(path, keep_db_name=False):
     except OSError as e:
         raise CsvError(f"'{path}' kann nicht gelesen werden: {e}") from None
     except UnicodeDecodeError:
-        raise CsvError(f"'{path}' ist keine UTF-8-Textdatei und kann nicht gelesen werden.") from None
+        raise CsvError(
+            f"'{path}' ist keine UTF-8-Textdatei und kann nicht gelesen werden."
+        ) from None
     return load_any(path, text, keep_db_name=keep_db_name)
 
 
-__all__ = ["BITWARDEN_CSV", "BITWARDEN_JSON", "FORMAT_LABELS", "KEEPASS_CSV", "CsvError",
-           "LoadResult", "load_any", "read_file"]
+__all__ = [
+    "BITWARDEN_CSV",
+    "BITWARDEN_JSON",
+    "FORMAT_LABELS",
+    "KEEPASS_CSV",
+    "CsvError",
+    "LoadResult",
+    "load_any",
+    "read_file",
+]

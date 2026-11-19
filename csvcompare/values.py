@@ -6,8 +6,15 @@ from urllib.parse import parse_qs, urlsplit
 from .columns import TIME_NAMES
 
 # Zeitformate, die zusätzlich zu ISO 8601 gelesen werden
-TIME_FORMATS = ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%d.%m.%Y %H:%M:%S",
-                "%d.%m.%Y %H:%M", "%d.%m.%Y", "%Y-%m-%d", "%m/%d/%Y %H:%M:%S")
+TIME_FORMATS = (
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%d %H:%M",
+    "%d.%m.%Y %H:%M:%S",
+    "%d.%m.%Y %H:%M",
+    "%d.%m.%Y",
+    "%Y-%m-%d",
+    "%m/%d/%Y %H:%M:%S",
+)
 
 
 def parse_time(text):
@@ -57,8 +64,12 @@ def totp_key(value):
         params = {k.lower(): v[0] for k, v in parse_qs(urlsplit(value).query).items()}
         secret = params.get("secret", "")
     secret = "".join(secret.split()).replace("-", "").upper()
-    return (secret, params.get("digits", "6"), params.get("period", "30"),
-            params.get("algorithm", "SHA1").upper())
+    return (
+        secret,
+        params.get("digits", "6"),
+        params.get("period", "30"),
+        params.get("algorithm", "SHA1").upper(),
+    )
 
 
 def values_equal(column, a, b):
@@ -72,8 +83,11 @@ def values_equal(column, a, b):
         return True
     if column in TIME_NAMES:
         time_a, time_b = parse_time(a), parse_time(b)
-        return (time_a is not None and time_b is not None
-                and time_a.replace(microsecond=0) == time_b.replace(microsecond=0))
+        return (
+            time_a is not None
+            and time_b is not None
+            and time_a.replace(microsecond=0) == time_b.replace(microsecond=0)
+        )
     if column == "TOTP":
         key_a, key_b = totp_key(a), totp_key(b)
         return key_a is not None and key_a == key_b
