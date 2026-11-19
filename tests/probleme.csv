@@ -1,0 +1,13 @@
+Group,Title,Username,Password,URL,Notes,TOTP,Icon,Last Modified,Created
+Web,Dup,max,pw1,https://a.example.org,,,1,2024-01-01T10:00:00Z,2023-01-01
+Web,Dup,max,pw2,https://a.example.org,,,1,2024-01-01T10:00:00Z,2023-01-01
+Privat,Dup,max,pw3,,,,1,2024-01-01T10:00:00Z,2023-01-01
+Web,Kopie,max,pw4,https://B.example.org/,,,1,2024-01-01T10:00:00Z,2023-01-01
+Web,Original,max,pw5,https://b.example.org,,,1,2024-01-01T10:00:00Z,2023-01-01
+Web,KeinPw,max,,,,,1,2024-01-01T10:00:00Z,2023-01-01
+Web,,max,pw6,,,,1,2024-01-01T10:00:00Z,2023-01-01
+Web,BadUrl,max,pw7,http://kaputt url,,,1,2024-01-01T10:00:00Z,2023-01-01
+Web,NoDot,max,pw8,intranet,,,1,2024-01-01T10:00:00Z,2023-01-01
+Web,Lokal,max,pw9,http://localhost:8080,,,1,2024-01-01T10:00:00Z,2023-01-01
+Web,IP,max,pw10,192.168.0.1,,,1,2024-01-01T10:00:00Z,2023-01-01
+Web,Sauber,max,pw11,example.org,,,1,2024-01-01T10:00:00Z,2023-01-01
