@@ -7,7 +7,7 @@ import argparse
 import csv
 import os
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
 KEY_COLS = ("Group", "Title", "Username")
@@ -148,6 +148,24 @@ def build_merged(old, new, removed, added, moves, compare_cols):
     return rows, stats, conflicts
 
 
+def print_stats(old, new, n1, n2):
+    """Gibt die Anzahl der Einträge pro Gruppe für beide Dateien aus."""
+    c_old = Counter(r["Group"] for r in old.values())
+    c_new = Counter(r["Group"] for r in new.values())
+    groups = sorted(set(c_old) | set(c_new))
+    names = [g or "(ohne Gruppe)" for g in groups]
+    w = max([len(x) for x in names] + [len("Gesamt"), len("Gruppe")])
+    w1, w2 = max(len(n1), 6), max(len(n2), 6)
+    print(f"{'Gruppe':<{w}}  {n1:>{w1}}  {n2:>{w2}}  Differenz")
+    print("-" * (w + w1 + w2 + 15))
+    for g, name in zip(groups, names):
+        a, b = c_old[g], c_new[g]
+        print(f"{name:<{w}}  {a:>{w1}}  {b:>{w2}}  {b - a:+d}")
+    print("-" * (w + w1 + w2 + 15))
+    a, b = len(old), len(new)
+    print(f"{'Gesamt':<{w}}  {a:>{w1}}  {b:>{w2}}  {b - a:+d}")
+
+
 def display_names(path1, path2):
     """Dateinamen für die Ausgabe; bei gleichem Namen der volle Pfad."""
     n1, n2 = os.path.basename(path1), os.path.basename(path2)
@@ -259,6 +277,9 @@ def main():
                    help="Nur Einträge betrachten, deren Gruppenpfad TEXT enthält "
                         "(Groß-/Kleinschreibung egal), z. B. --group Privat. "
                         "Gilt für Vergleich, Suche und Exporte.")
+    p.add_argument("--stats", action="store_true",
+                   help="Nur die Anzahl der Einträge pro Gruppe in beiden Dateien anzeigen "
+                        "(nicht kombinierbar mit --search, --export-added, --export-merged)")
     p.add_argument("--no-detect-moves", action="store_true",
                    help="Verschobene/umbenannte Einträge nicht erkennen "
                         "(sie erscheinen dann als 'entfernt' plus 'hinzugefügt')")
@@ -278,6 +299,9 @@ def main():
         p.error("--search und --export-added können nicht kombiniert werden.")
     if args.search is not None and args.export_merged:
         p.error("--search und --export-merged können nicht kombiniert werden.")
+    if args.stats and (args.search is not None or args.export_added or args.export_merged):
+        p.error("--stats kann nicht mit --search, --export-added oder --export-merged "
+                "kombiniert werden.")
     if args.search is not None and not args.search.strip():
         p.error("--search benötigt einen nicht-leeren Suchbegriff.")
 
@@ -334,6 +358,10 @@ def main():
         print("Papierkorb-Gruppen ausgeblendet")
     if args.group is not None:
         print(f"Gruppenfilter: '{args.group.strip()}'")
+    if args.stats:
+        print()
+        print_stats(old, new, n1, n2)
+        return
     print()
 
     titles = {
