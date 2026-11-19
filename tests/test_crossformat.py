@@ -290,7 +290,7 @@ class ExportAcrossFormatsTests(unittest.TestCase):
         rows = {
             r["Title"]: r
             for r in __import__("csv").DictReader(
-                result["exports"]["merged"]["csv"].splitlines(keepends=True)
+                result["exports"]["merged"]["content"].splitlines(keepends=True)
             )
         }
         self.assertEqual(len(rows), 8 + 1 - 1)  # 8 + Notiz, ohne Papierkorb

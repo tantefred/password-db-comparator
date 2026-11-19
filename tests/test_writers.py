@@ -22,7 +22,11 @@ class WriterTests(unittest.TestCase):
         self.assertIs(DEFAULT_WRITER, KEEPASS_CSV_WRITER)
         self.assertEqual(KEEPASS_CSV_WRITER.format, "keepass-csv")
         self.assertEqual(KEEPASS_CSV_WRITER.columns, CORE_NAMES)
-        self.assertFalse(KEEPASS_CSV_WRITER.restores_source)
+        self.assertFalse(KEEPASS_CSV_WRITER.keeps_source({"_format": "bitwarden-json"}))
+        self.assertTrue(KEEPASS_CSV_WRITER.prefix_groups)
+        self.assertEqual(
+            (KEEPASS_CSV_WRITER.extension, KEEPASS_CSV_WRITER.mime), (".csv", "text/csv")
+        )
 
     def test_text_and_file_output_agree(self):
         rows = load_any("a.csv", KP_A).rows
@@ -60,11 +64,15 @@ class HasDataTests(unittest.TestCase):
 
 class LostDataTests(unittest.TestCase):
     def test_keepass_rows_lose_nothing(self):
-        self.assertEqual(lost_data(load_any("a.csv", KP_A).rows), {"columns": {}, "source": {}})
-        self.assertEqual(loss_lines(lost_data(load_any("a.csv", KP_A).rows)), [])
+        self.assertEqual(
+            lost_data(load_any("a.csv", KP_A).rows, DEFAULT_WRITER), {"columns": {}, "source": {}}
+        )
+        self.assertEqual(
+            loss_lines(lost_data(load_any("a.csv", KP_A).rows, DEFAULT_WRITER), DEFAULT_WRITER), []
+        )
 
     def test_bitwarden_json_rows_lose_extra_columns_and_source_data(self):
-        lost = lost_data(load_any("bw.json", BW_JSON).rows)
+        lost = lost_data(load_any("bw.json", BW_JSON).rows, DEFAULT_WRITER)
         self.assertEqual(
             lost["columns"], {"Favorite": 1, "Type": 1, "Reprompt": 1, "Fields": 1, "URLs": 1}
         )
@@ -73,19 +81,19 @@ class LostDataTests(unittest.TestCase):
         )
 
     def test_bitwarden_csv_rows_lose_extra_columns_only(self):
-        lost = lost_data(load_any("bw.csv", BW_CSV).rows)
+        lost = lost_data(load_any("bw.csv", BW_CSV).rows, DEFAULT_WRITER)
         self.assertEqual(
             lost["columns"], {"Favorite": 1, "Type": 1, "Reprompt": 1, "Fields": 1, "URLs": 1}
         )
         self.assertEqual(lost["source"], {})
 
     def test_a_writer_that_restores_the_source_does_not_count_source_data(self):
-        writer = dataclasses.replace(
-            KEEPASS_CSV_WRITER,
-            format="bitwarden-json",
-            label="Bitwarden-JSON",
-            restores_source=True,
-        )
+
+        class KeepsEverything(type(KEEPASS_CSV_WRITER)):
+            def keeps_source(self, row):
+                return True
+
+        writer = KeepsEverything(**dataclasses.asdict(KEEPASS_CSV_WRITER))
         lost = lost_data(load_any("bw.json", BW_JSON).rows, writer)
         self.assertEqual(lost["source"], {})
 
@@ -216,7 +224,7 @@ class ServiceTests(unittest.TestCase):
         result = analyze("kp.csv", KP_A, "bw.json", BW_JSON, {"export_added": True})
         added = result["exports"]["added"]
         self.assertEqual(added["lost"]["columns"], {"Type": 1})
-        self.assertEqual(added["csv"].splitlines()[0], ",".join(CORE_NAMES))
+        self.assertEqual(added["content"].splitlines()[0], ",".join(CORE_NAMES))
 
     def test_nothing_lost_between_keepass_files(self):
         result = analyze("a.csv", KP_A, "b.csv", KP_B, {"export_merged": True})
@@ -224,7 +232,7 @@ class ServiceTests(unittest.TestCase):
 
     def test_private_keys_never_reach_the_csv_or_the_report(self):
         result = analyze("kp.csv", KP_A, "bw.json", BW_JSON, {"export_merged": True})
-        blob = json.dumps(result["report"]) + result["exports"]["merged"]["csv"]
+        blob = json.dumps(result["report"]) + result["exports"]["merged"]["content"]
         for secret_key in ("_source", "_unmapped", "passwordHistory", "pw-mail-0"):
             self.assertNotIn(secret_key, blob)
 

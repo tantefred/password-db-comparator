@@ -18,6 +18,7 @@ class Export:
     rows: list  # die Einträge, wie sie geschrieben werden
     lines: list  # Meldungen, einschließlich dessen, was das Zielformat nicht speichert
     lost: dict  # {"columns": …, "source": …}, siehe ``writers.lost_data``
+    writer: object  # das Zielformat, in dem die Einträge geschrieben werden
     conflicts: list = field(default_factory=list)  # Schlüssel mit unklarer Aktualität (nur Merge)
 
 
@@ -81,16 +82,22 @@ def restore_db_prefix(rows, prefix):
     return restored
 
 
+def prefix_rows(cmp, rows, writer):
+    """Setzt bei Zielformaten, die das brauchen, den Datenbanknamen vor die Gruppenpfade."""
+    return restore_db_prefix(rows, db_prefix_for_export(cmp) if writer.prefix_groups else None)
+
+
 def with_losses(rows, lines, writer, **extra):
     """Hängt an die Meldungen an, was das Zielformat nicht speichern kann."""
     lost = lost_data(rows, writer)
-    return Export(rows, lines + loss_lines(lost, writer), lost, **extra)
+    lines = lines + writer.notes(rows) + loss_lines(lost, writer)
+    return Export(rows, lines, lost, writer, **extra)
 
 
 def prepare_added(cmp, path, writer=DEFAULT_WRITER):
     """Die nur in der zweiten Datei vorhandenen Einträge (ohne Papierkorb)."""
     wanted = [cmp.new[key] for key in cmp.only_new if not is_trash(cmp.new[key])]
-    rows = restore_db_prefix(wanted, db_prefix_for_export(cmp))
+    rows = prefix_rows(cmp, wanted, writer)
     skipped = len(cmp.only_new) - len(rows)
     count = plural(len(rows), "neuer Eintrag", "neue Einträge")
     lines = [
@@ -104,7 +111,7 @@ def prepare_merged(cmp, path, writer=DEFAULT_WRITER):
     """Alle Einträge beider Dateien; bei Unterschieden gewinnt die neuere Version."""
     merged, stats, conflicts = merge_entries(cmp)
     wanted = [row for row in merged if not is_trash(row)]
-    rows = restore_db_prefix(wanted, db_prefix_for_export(cmp))
+    rows = prefix_rows(cmp, wanted, writer)
     lines = [
         f"{plural(len(rows), 'Eintrag', 'Einträge')} nach '{path}' exportiert "
         f"({len(merged) - len(rows)} aus Papierkorb ausgelassen; "

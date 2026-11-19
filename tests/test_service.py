@@ -80,9 +80,9 @@ class SameAsCommandLineTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             result = ui({"export_added": True, "export_merged": True})
             with open(a, encoding="utf-8", newline="") as f:
-                self.assertEqual(result["exports"]["added"]["csv"], f.read())
+                self.assertEqual(result["exports"]["added"]["content"], f.read())
             with open(m, encoding="utf-8", newline="") as f:
-                self.assertEqual(result["exports"]["merged"]["csv"], f.read())
+                self.assertEqual(result["exports"]["merged"]["content"], f.read())
         self.assertEqual(result["exports"]["merged"]["filename"], "merged.csv")
         self.assertEqual(len(result["exports"]["merged"]["conflicts"]), 2)
 

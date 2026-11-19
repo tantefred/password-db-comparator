@@ -11,7 +11,6 @@ from .cli import build_comparison, build_parser, validate_args
 from .exports import prepare_added, prepare_merged
 from .importers import CsvError, load_any
 from .render_json import build_report, entry_ref
-from .writers import DEFAULT_WRITER
 
 MODES = ("compare", "search", "stats", "check", "password-check")
 
@@ -90,11 +89,12 @@ def export_payload(export, filename):
     """Ein Export als Antwort für die Weboberfläche (der Inhalt wird dort zum Download)."""
     return {
         "filename": filename,
-        "csv": DEFAULT_WRITER.text(export.rows),
+        "content": export.writer.text(export.rows),
+        "mime": export.writer.mime,
         "entries": len(export.rows),
         "lines": export.lines,
         "lost": export.lost,
-        "target": DEFAULT_WRITER.label,
+        "target": export.writer.label,
         "conflicts": [entry_ref(key) for key in export.conflicts],
     }
 

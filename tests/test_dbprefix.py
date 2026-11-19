@@ -194,13 +194,8 @@ class ServiceTests(unittest.TestCase):
 
     def test_service_exports_with_prefix(self):
         a, b = self.texts()
-        rows = list(
-            csv.DictReader(
-                analyze("a.csv", a, "b.csv", b, {"export_added": True})["exports"]["added"][
-                    "csv"
-                ].splitlines(keepends=True)
-            )
-        )
+        export = analyze("a.csv", a, "b.csv", b, {"export_added": True})["exports"]["added"]
+        rows = list(csv.DictReader(export["content"].splitlines(keepends=True)))
         self.assertEqual(rows[0]["Group"], "Familie-DB/Web")
 
 

@@ -656,7 +656,7 @@ function exportsPanel(exps) {
   if (!keys.length) return null;
   const items = keys.map((k) => {
     const e = exps[k];
-    const url = URL.createObjectURL(new Blob([e.csv], { type: "text/csv;charset=utf-8" }));
+    const url = URL.createObjectURL(new Blob([e.content], { type: `${e.mime};charset=utf-8` }));
     state.urls.push(url);
     const title = k === "added" ? "Neu hinzugefügte Einträge" : "Zusammengeführte Datei";
     const lost = [

@@ -20,7 +20,6 @@ from .render_text import (
     print_summary,
 )
 from .search import search
-from .writers import DEFAULT_WRITER
 
 
 def build_parser():
@@ -258,7 +257,7 @@ def run_exports(args, cmp, log):
             continue
         export = prepare(cmp, path)
         try:
-            DEFAULT_WRITER.write(path, export.rows)
+            export.writer.write(path, export.rows)
         except OSError as e:
             sys.exit(f"Fehler: '{path}' kann nicht geschrieben werden: {e}")
         for line in export.lines:

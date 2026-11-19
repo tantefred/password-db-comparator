@@ -13,6 +13,8 @@ SOURCE_KEY = "_source"
 # Bezeichnungen für Daten des Originaleintrags, die in keiner Spalte stehen (z. B.
 # „Passwort-Verlauf“). Wird beim Einlesen gefüllt und von Exporten gemeldet.
 UNMAPPED_KEY = "_unmapped"
+# Kennung des Formats, aus dem die Zeile gelesen wurde (z. B. "bitwarden-json")
+FORMAT_KEY = "_format"
 
 
 @dataclass(frozen=True)

@@ -1,45 +1,41 @@
-"""Zielformate für Exporte und die Meldung, was ein Zielformat nicht speichern kann.
+"""Gemeinsame Grundlage der Writer und die Meldung, was ein Zielformat nicht speichern kann."""
 
-Aktuell gibt es nur das KeePass-CSV. Ein weiteres Format (z. B. Bitwarden-JSON) bekommt
-einen eigenen Writer mit denselben Methoden ``text`` und ``write`` sowie der Liste der Spalten,
-die er speichern kann; ``lost_data`` meldet dann automatisch, was beim Schreiben verloren ginge.
-"""
-
-import csv
-import io
 from collections import Counter
 from dataclasses import dataclass
 
-from .columns import ALL_NAMES, BY_NAME, CORE_NAMES, LABELS, UNMAPPED_KEY
-from .importers import KEEPASS_CSV
+from ..columns import ALL_NAMES, BY_NAME, LABELS, UNMAPPED_KEY
 
 
 @dataclass(frozen=True)
-class CsvWriter:
-    format: str
-    label: str
-    columns: tuple  # Spalten, die das Zielformat speichern kann
-    restores_source: bool = False  # kann nicht abgebildete Originaldaten (_source) wiederherstellen
+class Writer:
+    """Ein Zielformat für Exporte.
 
-    def _write(self, fileobj, rows):
-        writer = csv.DictWriter(fileobj, fieldnames=self.columns, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(rows)
+    Ein konkreter Writer überschreibt ``text`` und nennt die Spalten, die er speichern kann.
+    """
+
+    format: str  # Kennung, siehe importers.base
+    label: str  # Name für Anzeigen, z. B. „KeePass-CSV“
+    extension: str  # Dateiendung samt Punkt
+    mime: str  # Medientyp für Downloads
+    columns: tuple  # Spalten, die das Zielformat speichern kann
+    prefix_groups: bool = False  # setzt den Datenbanknamen wieder vor die Gruppenpfade
 
     def text(self, rows):
         """Die Einträge als Dateiinhalt (String)."""
-        buffer = io.StringIO(newline="")
-        self._write(buffer, rows)
-        return buffer.getvalue()
+        raise NotImplementedError
 
     def write(self, path, rows):
         """Schreibt die Einträge in eine Datei. Wirft OSError, wenn das nicht gelingt."""
         with open(path, "w", newline="", encoding="utf-8") as f:
-            self._write(f, rows)
+            f.write(self.text(rows))
 
+    def keeps_source(self, row):
+        """Kann das Format die nicht abgebildeten Originaldaten dieser Zeile wiederherstellen?"""
+        return False
 
-KEEPASS_CSV_WRITER = CsvWriter(KEEPASS_CSV, "KeePass-CSV", CORE_NAMES)
-DEFAULT_WRITER = KEEPASS_CSV_WRITER
+    def notes(self, rows):
+        """Zusätzliche Hinweise zur Meldung nach einem Export (z. B. Unsicherheiten)."""
+        return []
 
 
 def has_data(column, row):
@@ -50,7 +46,7 @@ def has_data(column, row):
     return value not in BY_NAME[column].defaults
 
 
-def lost_data(rows, writer=DEFAULT_WRITER):
+def lost_data(rows, writer):
     """Zählt, bei wie vielen Einträgen das Zielformat Daten nicht speichern kann.
 
     Rückgabe: {"columns": {spalte: anzahl}, "source": {bezeichnung: anzahl}}.
@@ -60,12 +56,12 @@ def lost_data(rows, writer=DEFAULT_WRITER):
         for column in ALL_NAMES:
             if column not in writer.columns and has_data(column, row):
                 columns[column] += 1
-        if not writer.restores_source:
+        if not writer.keeps_source(row):
             source.update(row.get(UNMAPPED_KEY) or [])
     return {"columns": dict(columns), "source": dict(source)}
 
 
-def loss_lines(lost, writer=DEFAULT_WRITER):
+def loss_lines(lost, writer):
     """Zeilen für die Exportmeldung; leer, wenn nichts verloren geht."""
     parts = [f"{LABELS[column]} ({count})" for column, count in lost["columns"].items()]
     parts += [f"{label} ({count})" for label, count in lost["source"].items()]
