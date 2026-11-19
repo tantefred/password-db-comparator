@@ -4,9 +4,9 @@ import os
 import tempfile
 import unittest
 
-from tests.helpers import ROOT, run, run_json, titles
 from csvcompare.importers.keepass_csv import strip_db_prefix
 from csvcompare.service import analyze
+from tests.helpers import ROOT, run, run_json, titles
 
 A = os.path.join("tests", "keepassium_a.csv")
 B = os.path.join("tests", "keepassium_b.csv")

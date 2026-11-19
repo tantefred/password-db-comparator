@@ -2,8 +2,8 @@
 import unittest
 
 import tests.helpers  # noqa: F401  (richtet den Importpfad ein)
-from csvcompare.values import differing_columns, totp_key, values_equal
 from csvcompare.service import analyze
+from csvcompare.values import differing_columns, totp_key, values_equal
 
 HEADER = "Group,Title,Username,Password,URL,Notes,TOTP,Icon,Last Modified,Created\n"
 

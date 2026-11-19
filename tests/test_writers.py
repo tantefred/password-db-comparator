@@ -6,13 +6,11 @@ import os
 import tempfile
 import unittest
 
-from tests.helpers import read_fixture, run
 from csvcompare.columns import CORE_NAMES, UNMAPPED_KEY
 from csvcompare.importers import load_any
 from csvcompare.service import analyze
-from csvcompare.writers import (DEFAULT_WRITER, KEEPASS_CSV_WRITER, has_data, loss_lines,
-                                lost_data)
-
+from csvcompare.writers import DEFAULT_WRITER, KEEPASS_CSV_WRITER, has_data, loss_lines, lost_data
+from tests.helpers import read_fixture, run
 
 KP_A, KP_B = read_fixture("keepassium_a.csv"), read_fixture("keepassium_b.csv")
 BW_JSON, BW_CSV = read_fixture("bitwarden.json"), read_fixture("bitwarden.csv")

@@ -10,9 +10,15 @@ from .entries import entries_from_rows, is_trash
 from .exports import prepare_added, prepare_merged
 from .importers import CsvError, read_file
 from .render_json import build_report, dump
-from .render_text import (print_check, print_compare, print_header,
-                          print_password_check, print_search, print_stats,
-                          print_summary)
+from .render_text import (
+    print_check,
+    print_compare,
+    print_header,
+    print_password_check,
+    print_search,
+    print_stats,
+    print_summary,
+)
 from .search import search
 from .writers import DEFAULT_WRITER
 

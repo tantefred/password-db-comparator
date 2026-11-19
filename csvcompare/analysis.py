@@ -4,7 +4,7 @@ Alle Prüfungen geben nur Einträge aus, nie Passwörter.
 """
 
 from collections import Counter, defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import NamedTuple
 from urllib.parse import urlsplit
 
@@ -147,7 +147,7 @@ def audit_entries(entries, min_length, max_age_days, now=None):
 
     Rückgabe: (funde, anzahl_totp); ``funde`` enthält nur Prüfungen mit Treffern.
     """
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     findings = [
         Finding("Wiederverwendete Passwörter", reused_passwords(entries)),
         Finding(f"Kurze Passwörter (< {min_length} Zeichen)", short_passwords(entries, min_length)),

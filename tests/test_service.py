@@ -5,8 +5,8 @@ import os
 import tempfile
 import unittest
 
-from tests.helpers import read_fixture, run
 from csvcompare.service import UsageError, analyze, options_to_argv
+from tests.helpers import read_fixture, run
 
 ALT, NEU = read_fixture("alt.csv"), read_fixture("neu.csv")
 
@@ -118,9 +118,8 @@ class ServiceBehaviourTests(unittest.TestCase):
             {"mode": "password-check", "max_age_days": True},
         ]
         for options in bad:
-            with self.subTest(options=options):
-                with self.assertRaises(UsageError):
-                    ui(options)
+            with self.subTest(options=options), self.assertRaises(UsageError):
+                ui(options)
 
     def test_unusable_csv_raises_usage_error(self):
         with self.assertRaises(UsageError) as ctx:

@@ -7,11 +7,10 @@ import sys
 import tempfile
 import unittest
 
-from tests.helpers import ROOT, read_fixture
 from csvcompare.compare import comparable_columns
 from csvcompare.importers import load_any
 from csvcompare.service import analyze
-
+from tests.helpers import ROOT, read_fixture
 
 KP_A, KP_B = read_fixture("keepassium_a.csv"), read_fixture("keepassium_b.csv")
 BW_JSON, BW_CSV = read_fixture("bitwarden.json"), read_fixture("bitwarden.csv")

@@ -92,7 +92,7 @@ def print_stats(cmp):
     rule = "-" * (width + width_old + width_new + 15)
     print(f"{'Gruppe':<{width}}  {cmp.old_name:>{width_old}}  {cmp.new_name:>{width_new}}  Differenz")
     print(rule)
-    for name, (_, count_old, count_new) in zip(names, rows):
+    for name, (_, count_old, count_new) in zip(names, rows, strict=True):
         print(f"{name:<{width}}  {count_old:>{width_old}}  {count_new:>{width_new}}  "
               f"{count_new - count_old:+d}")
     print(rule)

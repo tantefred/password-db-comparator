@@ -3,10 +3,10 @@ import copy
 import json
 import unittest
 
-from tests.helpers import read_fixture, run
 from csvcompare.columns import ALL_NAMES, SOURCE_KEY
 from csvcompare.importers import CsvError, load_any
 from csvcompare.service import analyze
+from tests.helpers import read_fixture, run
 
 TEXT = read_fixture("bitwarden.json")
 DATA = json.loads(TEXT)

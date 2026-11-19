@@ -28,8 +28,8 @@ class Move(NamedTuple):
     @property
     def key_columns(self):
         """Welche Schlüsselspalten (Gruppe, Titel, Username) sich geändert haben."""
-        return [name for name, old, new in zip(KEY_NAMES, self.old_key, self.new_key)
-                if old != new]
+        pairs = zip(KEY_NAMES, self.old_key.identity, self.new_key.identity, strict=True)
+        return [name for name, old, new in pairs if old != new]
 
 
 class Change(NamedTuple):

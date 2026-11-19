@@ -7,9 +7,9 @@ import sys
 import threading
 import unittest
 
-from tests.helpers import ROOT, read_fixture
 from csvcompare.service import analyze
 from csvcompare.webui import make_server
+from tests.helpers import ROOT, read_fixture
 
 ALT, NEU = read_fixture("alt.csv"), read_fixture("neu.csv")
 TOKEN = "test-token"
@@ -169,9 +169,9 @@ class SecurityTests(ServerTestCase):
     def test_server_does_not_log_requests(self):
         proc = subprocess.run(
             [sys.executable, "-c",
-             "import sys; sys.path.insert(0, %r); "
+             f"import sys; sys.path.insert(0, {ROOT!r}); "
              "from csvcompare.webui import make_handler; "
-             "h = make_handler('t', 1); print(h.log_message.__qualname__)" % ROOT],
+             "h = make_handler('t', 1); print(h.log_message.__qualname__)"],
             capture_output=True, text=True)
         self.assertIn("log_message", proc.stdout)
         self.assertEqual(proc.stderr, "")

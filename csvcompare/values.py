@@ -1,6 +1,6 @@
 """Werte inhaltlich vergleichen und normalisieren (Zeiten, TOTP, Leerraum)."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import parse_qs, urlsplit
 
 from .columns import TIME_NAMES
@@ -27,13 +27,13 @@ def parse_time(text):
                 continue
     if moment is None:
         return None
-    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
 
 
 def normalize_time(text):
     """Zeit als ``YYYY-MM-DDTHH:MM:SSZ`` (UTC); nicht lesbare Werte bleiben unverändert."""
     moment = parse_time(text)
-    return moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if moment else text
+    return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ") if moment else text
 
 
 def collapse_whitespace(text):

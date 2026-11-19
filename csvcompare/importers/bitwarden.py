@@ -57,7 +57,7 @@ def canonical_fields(fields):
 def make_row(source, unmapped, *, group, title, username, password, uris, notes, totp,
              favorite, kind, reprompt, fields, modified="", created=""):
     """Eine Zeile mit allen Spalten; was ein Format nicht liefert, bleibt leer."""
-    row = {name: "" for name in ALL_NAMES}
+    row = dict.fromkeys(ALL_NAMES, "")
     row.update({
         "Group": group, "Title": title, "Username": username, "Password": password,
         "URL": uris[0] if uris else "", "URLs": "\n".join(uris),

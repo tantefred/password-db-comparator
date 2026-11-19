@@ -4,10 +4,10 @@ import io
 import json
 import unittest
 
-from tests.helpers import read_fixture
 from csvcompare.columns import ALL_NAMES, SOURCE_KEY
 from csvcompare.importers import CsvError, load_any
 from csvcompare.service import analyze
+from tests.helpers import read_fixture
 
 HEADER = ["folder", "favorite", "type", "name", "notes", "fields", "reprompt",
           "login_uri", "login_username", "login_password", "login_totp"]
