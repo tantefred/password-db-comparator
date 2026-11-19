@@ -33,7 +33,8 @@ def added_export(cmp):
     rows = restore_db_prefix([cmp.new[k] for k in cmp.added if not is_excluded(cmp.new[k])],
                              export_prefix(cmp))
     skipped = len(cmp.added) - len(rows)
-    message = (f"{len(rows)} neue Einträge nach '{{path}}' exportiert "
+    n = len(rows)
+    message = (f"{'1 neuer Eintrag' if n == 1 else f'{n} neue Einträge'} nach '{{path}}' exportiert "
                f"({skipped} aus Papierkorb ausgelassen; Datei enthält Passwörter im Klartext).\n")
     return rows, message
 
@@ -47,7 +48,7 @@ def merged_export(cmp):
                                           cmp.moves, cmp.compare_cols)
     export = restore_db_prefix([r for r in rows if not is_excluded(r)], export_prefix(cmp))
     lines = [
-        f"{len(export)} Einträge nach '{{path}}' exportiert "
+        f"{'1 Eintrag' if len(export) == 1 else f'{len(export)} Einträge'} nach '{{path}}' exportiert "
         f"({len(rows) - len(export)} aus Papierkorb ausgelassen; "
         f"Datei enthält Passwörter im Klartext).",
         f"  nur in {cmp.n1}: {stats['nur_alt']}, nur in {cmp.n2}: {stats['nur_neu']}, "

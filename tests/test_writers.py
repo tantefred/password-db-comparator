@@ -169,6 +169,18 @@ class ExportMessageTests(unittest.TestCase):
         self.assertNotIn("nicht speicherbar", out)
 
 
+class WordingTests(unittest.TestCase):
+    def test_singular_and_plural_in_export_messages(self):
+        one = analyze("kp.csv", KP_A, "bw.json", BW_JSON, {"export_added": True})
+        self.assertTrue(one["exports"]["added"]["lines"][0].startswith("1 neuer Eintrag nach "))
+        many = analyze("a.csv", KP_A, "b.csv", KP_B, {"export_merged": True})
+        self.assertTrue(many["exports"]["merged"]["lines"][0].startswith("8 Einträge nach "))
+        single = KP_A.splitlines(keepends=True)
+        single = "".join(single[:2])
+        merged = analyze("a.csv", single, "b.csv", single, {"export_merged": True})
+        self.assertTrue(merged["exports"]["merged"]["lines"][0].startswith("1 Eintrag nach "))
+
+
 class ServiceTests(unittest.TestCase):
     def test_service_returns_structured_losses(self):
         result = analyze("kp.csv", KP_A, "bw.json", BW_JSON, {"export_merged": True})
