@@ -7,13 +7,14 @@ from .columns import ALL_NAMES, KEY_NAMES, VALUE_NAMES
 from .compare import compare_files
 from .display import display_names
 from .entries import entries_from_rows, is_trash
-from .exports import export_added, export_merged
+from .exports import prepare_added, prepare_merged
 from .importers import CsvError, read_file
 from .render_json import build_report, dump
 from .render_text import (print_check, print_compare, print_header,
                           print_password_check, print_search, print_stats,
                           print_summary)
 from .search import search
+from .writers import DEFAULT_WRITER
 
 
 IGNORABLE = VALUE_NAMES
@@ -153,10 +154,19 @@ def run_search(args, cmp):
 
 
 def run_exports(args, cmp, log):
-    if args.export_added:
-        export_added(cmp, args.export_added, log)
-    if args.export_merged:
-        export_merged(cmp, args.export_merged, log)
+    """Schreibt die angeforderten Exporte und meldet, was dabei passiert ist."""
+    requested = ((args.export_added, prepare_added), (args.export_merged, prepare_merged))
+    for path, prepare in requested:
+        if not path:
+            continue
+        export = prepare(cmp, path)
+        try:
+            DEFAULT_WRITER.write(path, export.rows)
+        except OSError as e:
+            sys.exit(f"Fehler: '{path}' kann nicht geschrieben werden: {e}")
+        for line in export.lines:
+            log(line)
+        log()
 
 
 def main():

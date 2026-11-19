@@ -10,7 +10,7 @@ import shlex
 from .cli import build_parser, filter_entries, validate_args
 from .compare import compare_files
 from .entries import entries_from_rows
-from .exports import added_export, loss_report, merged_export
+from .exports import prepare_added, prepare_merged
 from .importers import CsvError, load_any
 from .render_json import build_report, entry_ref
 from .writers import DEFAULT_WRITER
@@ -78,6 +78,14 @@ def options_to_argv(options):
     return argv
 
 
+def export_payload(export, filename):
+    """Ein Export als Antwort für die Weboberfläche (der Inhalt wird dort zum Download)."""
+    return {"filename": filename, "csv": DEFAULT_WRITER.text(export.rows),
+            "entries": len(export.rows), "lines": export.lines, "lost": export.lost,
+            "target": DEFAULT_WRITER.label,
+            "conflicts": [entry_ref(key) for key in export.conflicts]}
+
+
 def analyze(old_name, old_text, new_name, new_text, options):
     """Vergleicht zwei CSV-Inhalte und gibt das Ergebnis als Dict zurück.
 
@@ -113,21 +121,10 @@ def analyze(old_name, old_text, new_name, new_text, options):
 
     exports = {}
     if args.export_added:
-        rows, message = added_export(cmp)
-        loss_lines, lost = loss_report(rows)
-        exports["added"] = {"filename": args.export_added, "csv": DEFAULT_WRITER.text(rows),
-                            "entries": len(rows),
-                            "lines": [message.format(path=args.export_added).strip()] + loss_lines,
-                            "lost": lost, "target": DEFAULT_WRITER.label}
+        exports["added"] = export_payload(prepare_added(cmp, args.export_added), args.export_added)
     if args.export_merged:
-        rows, lines, conflicts = merged_export(cmp)
-        loss_lines, lost = loss_report(rows)
-        exports["merged"] = {"filename": args.export_merged, "csv": DEFAULT_WRITER.text(rows),
-                             "entries": len(rows),
-                             "lines": [ln.format(path=args.export_merged)
-                                       for ln in lines + loss_lines],
-                             "conflicts": [entry_ref(k) for k in conflicts],
-                             "lost": lost, "target": DEFAULT_WRITER.label}
+        exports["merged"] = export_payload(prepare_merged(cmp, args.export_merged),
+                                           args.export_merged)
 
     command = shlex.join(["python3", "compare_csv.py", old_name, new_name, *argv])
     return {"report": report, "status": status, "command": command, "exports": exports}

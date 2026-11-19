@@ -1,5 +1,6 @@
 """Tests der Writer-Schnittstelle und der Meldung über nicht speicherbare Daten."""
 import csv
+import dataclasses
 import json
 import os
 import subprocess
@@ -13,7 +14,7 @@ sys.path.insert(0, ROOT)
 from csvcompare.columns import CORE_NAMES, UNMAPPED_KEY  # noqa: E402
 from csvcompare.importers import load_any  # noqa: E402
 from csvcompare.service import analyze  # noqa: E402
-from csvcompare.writers import (DEFAULT_WRITER, KEEPASS_CSV, WRITERS, has_data,  # noqa: E402
+from csvcompare.writers import (DEFAULT_WRITER, KEEPASS_CSV_WRITER, has_data,  # noqa: E402
                                 loss_lines, lost_data)
 
 
@@ -26,24 +27,24 @@ KP_A, KP_B = read("keepassium_a.csv"), read("keepassium_b.csv")
 BW_JSON, BW_CSV = read("bitwarden.json"), read("bitwarden.csv")
 
 
-class RegistryTests(unittest.TestCase):
+class WriterTests(unittest.TestCase):
     def test_keepass_csv_is_the_default_writer(self):
-        self.assertIs(DEFAULT_WRITER, KEEPASS_CSV)
-        self.assertEqual(WRITERS["keepass-csv"], KEEPASS_CSV)
-        self.assertEqual(KEEPASS_CSV.columns, CORE_NAMES)
-        self.assertFalse(KEEPASS_CSV.restores_source)
+        self.assertIs(DEFAULT_WRITER, KEEPASS_CSV_WRITER)
+        self.assertEqual(KEEPASS_CSV_WRITER.format, "keepass-csv")
+        self.assertEqual(KEEPASS_CSV_WRITER.columns, CORE_NAMES)
+        self.assertFalse(KEEPASS_CSV_WRITER.restores_source)
 
     def test_text_and_file_output_agree(self):
         rows = load_any("a.csv", KP_A).rows
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "out.csv")
-            KEEPASS_CSV.write(path, rows)
+            KEEPASS_CSV_WRITER.write(path, rows)
             with open(path, encoding="utf-8", newline="") as f:
-                self.assertEqual(f.read(), KEEPASS_CSV.text(rows))
+                self.assertEqual(f.read(), KEEPASS_CSV_WRITER.text(rows))
 
     def test_output_has_only_the_core_columns(self):
         rows = load_any("bw.json", BW_JSON).rows
-        reader = csv.DictReader(KEEPASS_CSV.text(rows).splitlines(keepends=True))
+        reader = csv.DictReader(KEEPASS_CSV_WRITER.text(rows).splitlines(keepends=True))
         self.assertEqual(reader.fieldnames, list(CORE_NAMES))
         self.assertEqual(len(list(reader)), 9)
 
@@ -87,9 +88,8 @@ class LostDataTests(unittest.TestCase):
         self.assertEqual(lost["source"], {})
 
     def test_a_writer_that_restores_the_source_does_not_count_source_data(self):
-        class Json(type(KEEPASS_CSV)):
-            pass
-        writer = Json("bitwarden-json", "Bitwarden-JSON", CORE_NAMES, restores_source=True)
+        writer = dataclasses.replace(KEEPASS_CSV_WRITER, format="bitwarden-json",
+                                     label="Bitwarden-JSON", restores_source=True)
         lost = lost_data(load_any("bw.json", BW_JSON).rows, writer)
         self.assertEqual(lost["source"], {})
 

@@ -1,58 +1,45 @@
 """Zielformate für Exporte und die Meldung, was ein Zielformat nicht speichern kann.
 
-Aktuell gibt es nur das KeePass-CSV. Weitere Formate (Bitwarden-CSV/-JSON) lassen sich hier
-ergänzen: Ein ``Writer`` nennt die Spalten, die er speichern kann, und ``lost_data`` meldet
-für beliebige Zeilen, was beim Schreiben verloren ginge.
+Aktuell gibt es nur das KeePass-CSV. Ein weiteres Format (z. B. Bitwarden-JSON) bekommt
+einen eigenen Writer mit denselben Methoden ``text`` und ``write`` sowie der Liste der Spalten,
+die er speichern kann; ``lost_data`` meldet dann automatisch, was beim Schreiben verloren ginge.
 """
 
 import csv
 import io
-import sys
 from collections import Counter
 from dataclasses import dataclass
 
 from .columns import ALL_NAMES, BY_NAME, CORE_NAMES, LABELS, UNMAPPED_KEY
+from .importers import KEEPASS_CSV
 
 
 @dataclass(frozen=True)
-class Writer:
+class CsvWriter:
     format: str
     label: str
-    columns: tuple           # Spalten, die das Zielformat speichern kann
+    columns: tuple                 # Spalten, die das Zielformat speichern kann
     restores_source: bool = False  # kann nicht abgebildete Originaldaten (_source) wiederherstellen
+
+    def _write(self, fileobj, rows):
+        writer = csv.DictWriter(fileobj, fieldnames=self.columns, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
 
     def text(self, rows):
         """Die Einträge als Dateiinhalt (String)."""
-        raise NotImplementedError
-
-    def write(self, path, rows):
-        """Schreibt die Einträge in eine Datei."""
-        raise NotImplementedError
-
-
-def write_csv_rows(fileobj, rows):
-    writer = csv.DictWriter(fileobj, fieldnames=CORE_NAMES, extrasaction="ignore")
-    writer.writeheader()
-    writer.writerows(rows)
-
-
-class KeePassCsvWriter(Writer):
-    def text(self, rows):
         buffer = io.StringIO(newline="")
-        write_csv_rows(buffer, rows)
+        self._write(buffer, rows)
         return buffer.getvalue()
 
     def write(self, path, rows):
-        try:
-            with open(path, "w", newline="", encoding="utf-8") as f:
-                write_csv_rows(f, rows)
-        except OSError as e:
-            sys.exit(f"Fehler: '{path}' kann nicht geschrieben werden: {e}")
+        """Schreibt die Einträge in eine Datei. Wirft OSError, wenn das nicht gelingt."""
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            self._write(f, rows)
 
 
-KEEPASS_CSV = KeePassCsvWriter("keepass-csv", "KeePass-CSV", CORE_NAMES)
-WRITERS = {KEEPASS_CSV.format: KEEPASS_CSV}
-DEFAULT_WRITER = KEEPASS_CSV
+KEEPASS_CSV_WRITER = CsvWriter(KEEPASS_CSV, "KeePass-CSV", CORE_NAMES)
+DEFAULT_WRITER = KEEPASS_CSV_WRITER
 
 
 def has_data(column, row):
@@ -70,19 +57,18 @@ def lost_data(rows, writer=DEFAULT_WRITER):
     """
     columns, source = Counter(), Counter()
     for row in rows:
-        for col in ALL_NAMES:
-            if col not in writer.columns and has_data(col, row):
-                columns[col] += 1
+        for column in ALL_NAMES:
+            if column not in writer.columns and has_data(column, row):
+                columns[column] += 1
         if not writer.restores_source:
-            for label in row.get(UNMAPPED_KEY) or []:
-                source[label] += 1
+            source.update(row.get(UNMAPPED_KEY) or [])
     return {"columns": dict(columns), "source": dict(source)}
 
 
 def loss_lines(lost, writer=DEFAULT_WRITER):
     """Zeilen für die Exportmeldung; leer, wenn nichts verloren geht."""
-    parts = [f"{LABELS[col]} ({n})" for col, n in lost["columns"].items()]
-    parts += [f"{label} ({n})" for label, n in lost["source"].items()]
+    parts = [f"{LABELS[column]} ({count})" for column, count in lost["columns"].items()]
+    parts += [f"{label} ({count})" for label, count in lost["source"].items()]
     if not parts:
         return []
     return [f"  Im {writer.label} nicht speicherbar (Anzahl betroffener Einträge): "
