@@ -8,8 +8,8 @@ from .compare import compare_files, search_matches
 from .constants import EXPECTED, KEY_COLS
 from .csvio import load
 from .exports import export_added, export_merged
-from .render_json import (base_report, check_report, compare_report, dump,
-                          password_report, search_report, stats_report)
+from .render_json import base_report, dump
+from .report import build_report
 from .render_text import (print_check, print_compare, print_header,
                           print_password_check, print_search, print_stats,
                           print_summary)
@@ -121,29 +121,20 @@ def load_filtered(p, args):
     return old, new
 
 
-def run_search(args, cmp, base, as_json):
+def run_search(args, cmp):
     n_matches, results = search_matches(args.search, cmp.old, cmp.new, cmp.removed,
                                         cmp.added, cmp.moves, cmp.groups)
-    if as_json:
-        dump(search_report(base, cmp, args.search, n_matches, results, args.show_secrets))
-        sys.exit(0 if n_matches else 1)
     if not n_matches:
         sys.exit(f"Kein Eintrag gefunden, dessen Gruppe, Titel oder Username "
                  f"'{args.search}' enthält.")
     print_search(args.search, n_matches, results, cmp, args.show_secrets)
 
 
-def run_compare(args, cmp, base, as_json, log):
-    if not as_json:
-        print_compare(cmp, args.show_secrets)
+def run_exports(args, cmp, log):
     if args.export_added:
         export_added(cmp, args.export_added, log)
     if args.export_merged:
         export_merged(cmp, args.export_merged, log)
-    if as_json:
-        dump(compare_report(base, cmp, args.show_secrets))
-    else:
-        print_summary(cmp)
 
 
 def main():
@@ -160,20 +151,23 @@ def main():
     base = base_report(cmp, args.alt, args.neu, args.hide_trash, args.group,
                        not args.no_detect_moves)
 
-    if not as_json:
-        print_header(cmp, args.hide_trash, args.group)
-        print()
+    if as_json:
+        run_exports(args, cmp, log)
+        report, status = build_report(args, cmp, base)
+        dump(report)
+        sys.exit(status)
 
+    print_header(cmp, args.hide_trash, args.group)
+    print()
     if args.stats:
-        dump(stats_report(base, cmp)) if as_json else print_stats(old, new, n1, n2)
+        print_stats(old, new, n1, n2)
     elif args.check:
-        dump(check_report(base, cmp)) if as_json else print_check(old, new, n1, n2)
+        print_check(old, new, n1, n2)
     elif args.password_check:
-        if as_json:
-            dump(password_report(base, cmp, args.min_length, args.max_age_days))
-        else:
-            print_password_check(old, new, n1, n2, args.min_length, args.max_age_days)
+        print_password_check(old, new, n1, n2, args.min_length, args.max_age_days)
     elif args.search is not None:
-        run_search(args, cmp, base, as_json)
+        run_search(args, cmp)
     else:
-        run_compare(args, cmp, base, as_json, log)
+        print_compare(cmp, args.show_secrets)
+        run_exports(args, cmp, log)
+        print_summary(cmp)
