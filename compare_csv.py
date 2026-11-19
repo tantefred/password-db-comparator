@@ -1,0 +1,279 @@
+#!/usr/bin/env python3
+"""Vergleicht zwei KeePassium-CSV-Exporte und zeigt die Unterschiede.
+
+Aufruf: python3 compare_csv.py alt.csv neu.csv [--show-secrets] [--export-added [DATEI]]
+"""
+import argparse
+import csv
+import os
+import sys
+from collections import defaultdict
+from datetime import datetime, timezone
+
+KEY_COLS = ("Group", "Title", "Username")
+SECRET_COLS = ("Password", "TOTP")
+TIME_COL = "Last Modified"
+EXPECTED = ["Group", "Title", "Username", "Password", "URL", "Notes",
+            "TOTP", "Icon", "Last Modified", "Created"]
+# Einträge in Gruppen, deren Pfad eines dieser Muster enthält, werden nicht exportiert
+EXCLUDE_GROUP_PATTERNS = ("papierkorb",)
+
+TS_FORMATS = ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%d.%m.%Y %H:%M:%S",
+              "%d.%m.%Y %H:%M", "%d.%m.%Y", "%Y-%m-%d", "%m/%d/%Y %H:%M:%S")
+
+
+def load(path):
+    try:
+        with open(path, newline="", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            missing = [c for c in EXPECTED if c not in (reader.fieldnames or [])]
+            if missing:
+                sys.exit(f"Fehler: In '{path}' fehlen Spalten: {', '.join(missing)}")
+            rows = list(reader)
+    except OSError as e:
+        sys.exit(f"Fehler: '{path}' kann nicht gelesen werden: {e}")
+
+    # Doppelte Schlüssel durchnummerieren, damit nichts verloren geht
+    seen = defaultdict(int)
+    entries = {}
+    for row in rows:
+        base = tuple(row[c] for c in KEY_COLS)
+        seen[base] += 1
+        entries[base + (seen[base],)] = row
+    return entries
+
+
+def parse_ts(s):
+    """Zeitstempel -> aware datetime (UTC) oder None, wenn nicht lesbar."""
+    s = (s or "").strip()
+    if not s:
+        return None
+    dt = None
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        for fmt in TS_FORMATS:
+            try:
+                dt = datetime.strptime(s, fmt)
+                break
+            except ValueError:
+                pass
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def human_delta(seconds):
+    seconds = int(abs(seconds))
+    for unit, size in (("Tag(e)", 86400), ("Stunde(n)", 3600), ("Minute(n)", 60)):
+        if seconds >= size:
+            return f"{seconds // size} {unit}"
+    return f"{seconds} Sekunde(n)"
+
+
+def label(key):
+    group, title, user, n = key
+    s = f"{group or '(ohne Gruppe)'} / {title or '(ohne Titel)'}"
+    if user:
+        s += f"  [{user}]"
+    if n > 1:
+        s += f"  #{n}"
+    return s
+
+
+def short(value, secret, show_secrets):
+    if secret and not show_secrets:
+        return "(gesetzt)" if value else "(leer)"
+    value = value.replace("\r", "").replace("\n", " ⏎ ")
+    if len(value) > 80:
+        value = value[:77] + "..."
+    return repr(value) if value == "" else value
+
+
+def is_excluded(row):
+    g = row["Group"].lower()
+    return any(p in g for p in EXCLUDE_GROUP_PATTERNS)
+
+
+def display_names(path1, path2):
+    """Dateinamen für die Ausgabe; bei gleichem Namen der volle Pfad."""
+    n1, n2 = os.path.basename(path1), os.path.basename(path2)
+    return (path1, path2) if n1 == n2 else (n1, n2)
+
+
+def classify(key, old, new, n1, n2):
+    """Gibt (gruppe, delta_text) zurück. gruppe: 'old_outdated' | 'new_outdated' | 'unclear'."""
+    t_old = parse_ts(old[key][TIME_COL])
+    t_new = parse_ts(new[key][TIME_COL])
+    if t_old is None or t_new is None:
+        return "unclear", "Zeitstempel nicht auswertbar"
+    diff = (t_new - t_old).total_seconds()
+    if diff > 0:
+        return "old_outdated", f"{n2} ist {human_delta(diff)} neuer"
+    if diff < 0:
+        return "new_outdated", f"{n1} ist {human_delta(diff)} neuer"
+    return "unclear", "gleicher Zeitstempel, Inhalt unterschiedlich"
+
+
+def print_changed(k, diffs, delta, old, new, show_secrets, indent="  "):
+    """Gibt einen geänderten Eintrag mit Unterschieden aus."""
+    names = [c for c in diffs if c != TIME_COL]
+    kind = "nur Zeitstempel" if not names else "Unterschiede in: " + ", ".join(names)
+    print(f"{indent}~ {label(k)}")
+    print(f"{indent}    {kind}  ({delta})")
+    print(f"{indent}    Last Modified: {old[k][TIME_COL]}  |  {new[k][TIME_COL]}")
+    for c in names:
+        secret = c in SECRET_COLS
+        a = short(old[k][c], secret, show_secrets)
+        b = short(new[k][c], secret, show_secrets)
+        if secret and not show_secrets:
+            print(f"{indent}    {c}: geändert ({a} → {b})")
+        else:
+            print(f"{indent}    {c}: {a}  →  {b}")
+
+
+def main():
+    p = argparse.ArgumentParser(description="KeePassium-CSV-Exporte vergleichen")
+    p.add_argument("alt", help="Erste CSV-Datei")
+    p.add_argument("neu", help="Zweite CSV-Datei")
+    p.add_argument("--show-secrets", action="store_true",
+                   help="Passwörter/TOTP im Klartext anzeigen")
+    p.add_argument("-i", "--ignore", nargs="+", default=[], metavar="SPALTE",
+                   help="Spalten, die beim Vergleich ignoriert werden "
+                        "(z. B. --ignore Icon \"Last Modified\" oder --ignore Icon,Notes). "
+                        f"Mögliche Werte: {', '.join(c for c in EXPECTED if c not in KEY_COLS)}")
+    p.add_argument("-s", "--search", metavar="TEXT",
+                   help="Nur Einträge anzeigen, deren Gruppe, Titel oder Username TEXT enthält "
+                        "(Groß-/Kleinschreibung egal), samt Status. "
+                        "Nicht kombinierbar mit --export-added.")
+    p.add_argument("--export-added", nargs="?", const="neue_eintraege.csv",
+                   metavar="DATEI",
+                   help="Neu hinzugefügte Einträge als CSV schreiben "
+                        "(Standard: neue_eintraege.csv). Enthält Passwörter im Klartext! "
+                        "Einträge aus Papierkorb-Gruppen werden ausgelassen.")
+    args = p.parse_args()
+
+    if args.search is not None and args.export_added:
+        p.error("--search und --export-added können nicht kombiniert werden.")
+    if args.search is not None and not args.search.strip():
+        p.error("--search benötigt einen nicht-leeren Suchbegriff.")
+
+    by_lower = {c.lower(): c for c in EXPECTED}
+    ignored = []
+    for part in (s.strip() for item in args.ignore for s in item.split(",")):
+        if not part:
+            continue
+        col = by_lower.get(part.lower())
+        if col is None:
+            p.error(f"Unbekannte Spalte '{part}'. Gültig: "
+                    f"{', '.join(c for c in EXPECTED if c not in KEY_COLS)}")
+        if col in KEY_COLS:
+            p.error(f"Die Spalte '{col}' identifiziert die Einträge und kann nicht ignoriert werden.")
+        if col not in ignored:
+            ignored.append(col)
+
+    old, new = load(args.alt), load(args.neu)
+    n1, n2 = display_names(args.alt, args.neu)
+    removed = sorted(set(old) - set(new))
+    added = sorted(set(new) - set(old))
+
+    compare_cols = [c for c in EXPECTED if c not in KEY_COLS and c not in ignored]
+    groups = {"old_outdated": [], "new_outdated": [], "unclear": []}
+    for key in sorted(set(old) & set(new)):
+        diffs = [c for c in compare_cols if old[key][c] != new[key][c]]
+        if diffs:
+            grp, delta = classify(key, old, new, n1, n2)
+            groups[grp].append((key, diffs, delta))
+    n_changed = sum(len(v) for v in groups.values())
+
+    print(f"{n1}: {len(old)} Einträge")
+    print(f"{n2}: {len(new)} Einträge")
+    if ignored:
+        print(f"Ignorierte Spalten: {', '.join(ignored)}")
+    print()
+
+    titles = {
+        "old_outdated": f"Geändert – {n2} ist aktueller ({n1} muss aktualisiert werden)",
+        "new_outdated": f"Geändert – {n1} ist aktueller ({n2} muss aktualisiert werden)",
+        "unclear": "Geändert – Aktualität unklar (manuell prüfen)",
+    }
+
+    if args.search is not None:
+        needle = args.search.strip().lower()
+        changed_by_key = {k: (grp, diffs, delta)
+                          for grp, items in groups.items() for k, diffs, delta in items}
+        matches = sorted(k for k in set(old) | set(new)
+                         if needle in " / ".join(k[:3]).lower())
+        if not matches:
+            sys.exit(f"Kein Eintrag gefunden, dessen Gruppe, Titel oder Username "
+                     f"'{args.search}' enthält.")
+        print(f"Suche nach '{args.search}': {len(matches)} Treffer\n")
+        removed_set, added_set = set(removed), set(added)
+        for k in matches:
+            if k in removed_set:
+                print(f"  - {label(k)}")
+                print(f"      Status: nur in {n1} (in {n2} nicht vorhanden)")
+                print(f"      Last Modified: {old[k][TIME_COL]}")
+            elif k in added_set:
+                print(f"  + {label(k)}")
+                print(f"      Status: nur in {n2} (in {n1} nicht vorhanden)")
+                print(f"      Last Modified: {new[k][TIME_COL]}")
+            elif k in changed_by_key:
+                grp, diffs, delta = changed_by_key[k]
+                print(f"  Status: {titles[grp]}")
+                print_changed(k, diffs, delta, old, new, args.show_secrets)
+            else:
+                print(f"  = {label(k)}")
+                print(f"      Status: identisch in beiden Dateien")
+                print(f"      Last Modified: {old[k][TIME_COL]}")
+            print()
+        return
+
+    if removed:
+        print(f"== Nur in {n1} (in {n2} nicht vorhanden): {len(removed)} ==")
+        for k in removed:
+            print(f"  - {label(k)}")
+        print()
+    if added:
+        print(f"== Nur in {n2} (in {n1} nicht vorhanden): {len(added)} ==")
+        for k in added:
+            print(f"  + {label(k)}")
+        print()
+
+    for grp in ("old_outdated", "new_outdated", "unclear"):
+        items = groups[grp]
+        if not items:
+            continue
+        print(f"== {titles[grp]}: {len(items)} ==")
+        for k, diffs, delta in items:
+            print_changed(k, diffs, delta, old, new, args.show_secrets)
+        print()
+
+    if args.export_added:
+        export = [k for k in added if not is_excluded(new[k])]
+        skipped = len(added) - len(export)
+        try:
+            with open(args.export_added, "w", newline="", encoding="utf-8") as f:
+                w = csv.DictWriter(f, fieldnames=EXPECTED, extrasaction="ignore")
+                w.writeheader()
+                for k in export:
+                    w.writerow(new[k])
+        except OSError as e:
+            sys.exit(f"Fehler: '{args.export_added}' kann nicht geschrieben werden: {e}")
+        print(f"{len(export)} neue Einträge nach '{args.export_added}' exportiert "
+              f"({skipped} aus Papierkorb ausgelassen; Datei enthält Passwörter im Klartext).\n")
+
+    if not (removed or added or n_changed):
+        print("Keine Unterschiede.")
+    else:
+        print(f"Zusammenfassung: {len(removed)} nur in {n1}, {len(added)} nur in {n2}, "
+              f"{n_changed} geändert "
+              f"({len(groups['old_outdated'])} in {n1} zu aktualisieren, "
+              f"{len(groups['new_outdated'])} in {n2} zu aktualisieren, "
+              f"{len(groups['unclear'])} manuell prüfen).")
+
+
+if __name__ == "__main__":
+    main()
