@@ -110,3 +110,14 @@ def values_equal(col, a, b):
 def differing_columns(row_a, row_b, columns):
     """Spalten aus columns, in denen sich beide Zeilen inhaltlich unterscheiden."""
     return [c for c in columns if not values_equal(c, row_a[c], row_b[c])]
+
+
+def normalize_timestamp(value):
+    """Zeit als ``YYYY-MM-DDTHH:MM:SSZ`` (UTC); nicht lesbare Werte bleiben unverändert."""
+    dt = parse_ts(value)
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if dt else value
+
+
+def collapse_whitespace(value):
+    """Mehrfache Leerzeichen, Tabs und Zeilenumbrüche zu einem Leerzeichen zusammenfassen."""
+    return " ".join((value or "").split())

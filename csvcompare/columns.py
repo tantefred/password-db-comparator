@@ -1,0 +1,49 @@
+"""Alle Spalten, die die unterstützten Formate kennen.
+
+Die ersten zehn sind das KeePass-CSV-Format (KeePassium/KeePassXC). Die weiteren stammen
+aus Bitwarden/Vaultwarden. Jede Zeile eines eingelesenen Eintrags enthält alle diese
+Spalten (nicht gelieferte bleiben leer); welche ein Format wirklich liefert, steht in
+``LoadResult.provided_columns``. Den unveränderten Originaleintrag trägt die Zeile unter
+``SOURCE_KEY``, damit spätere Exporte auch Daten ausgeben können, die nicht verglichen werden.
+"""
+
+from dataclasses import dataclass
+
+SOURCE_KEY = "_source"
+
+
+@dataclass(frozen=True)
+class Column:
+    name: str
+    label: str            # deutsche Beschriftung für Oberfläche und Berichte
+    secret: bool = False  # Werte werden ohne --show-secrets nicht angezeigt
+
+
+CORE = (
+    Column("Group", "Gruppe"),
+    Column("Title", "Titel"),
+    Column("Username", "Username"),
+    Column("Password", "Passwort", secret=True),
+    Column("URL", "URL"),
+    Column("Notes", "Notizen"),
+    Column("TOTP", "TOTP", secret=True),
+    Column("Icon", "Icon"),
+    Column("Last Modified", "Geändert am"),
+    Column("Created", "Erstellt am"),
+)
+
+EXTENDED = (
+    Column("Favorite", "Favorit"),
+    Column("Type", "Typ"),
+    Column("Reprompt", "Passwort-Nachfrage"),
+    # Im CSV-Export ist nicht erkennbar, welche Felder „verborgen“ sind: alles gilt als geheim.
+    Column("Fields", "Eigene Felder", secret=True),
+    Column("URLs", "Alle URLs"),
+)
+
+ALL_COLUMNS = CORE + EXTENDED
+CORE_NAMES = tuple(c.name for c in CORE)
+EXTENDED_NAMES = tuple(c.name for c in EXTENDED)
+ALL_NAMES = tuple(c.name for c in ALL_COLUMNS)
+SECRET_NAMES = tuple(c.name for c in ALL_COLUMNS if c.secret)
+LABELS = {c.name: c.label for c in ALL_COLUMNS}
