@@ -266,6 +266,14 @@ class StaticPageTests(unittest.TestCase):
         self.assertIn('id="keep-db-name"', self.html)
         self.assertIn("keep_db_name", self.html)
 
+    def test_page_offers_both_export_formats_and_sends_the_choice(self):
+        from csvcompare.writers import WRITERS
+
+        for format_id in WRITERS:
+            self.assertIn(f'name="export-format" value="{format_id}"', self.html)
+        self.assertIn("opts.export_format = exportFormat()", self.html)
+        self.assertIn("e.mime", self.html)  # Download mit dem Medientyp des Formats
+
     def test_format_detection_in_the_page_matches_the_server(self):
         import re
         import shutil
