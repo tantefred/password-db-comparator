@@ -1,0 +1,7 @@
+Group,Title,Username,Password,URL,Notes,TOTP,Icon,Last Modified,Created
+Web,Mail,max@example.org,Sehr-langes-Passwort-1!,https://mail.example.org,,JBSWY3DPEHPK3PXP,1,2026-10-01T10:00:00Z,2023-01-01T09:00:00Z
+Web,Shop,max,gleiches-Passwort-123,https://shop.example.org,,,1,2026-10-01T10:00:00Z,2023-01-01T09:00:00Z
+Web,Forum,max,gleiches-Passwort-123,https://forum.example.org,,,1,2026-10-01T10:00:00Z,2023-01-01T09:00:00Z
+Privat,Kurz,max,abc123,,,,1,2026-10-01T10:00:00Z,2023-01-01T09:00:00Z
+Privat,Altes Konto,max,Noch-ein-langes-Pw-77,,,,1,2020-01-01T10:00:00Z,2019-01-01T09:00:00Z
+Privat,Ohne Passwort,max,,,,,1,2026-10-01T10:00:00Z,2023-01-01T09:00:00Z
