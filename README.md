@@ -16,6 +16,9 @@ python3 compare_csv.py tests/alt.csv tests/neu.csv
 | `-g`, `--group TEXT` | Nur Einträge betrachten, deren Gruppenpfad `TEXT` enthält (Groß-/Kleinschreibung egal) |
 | `--stats` | Nur die Anzahl der Einträge pro Gruppe in beiden Dateien samt Differenz anzeigen (mit `--group`/`--hide-trash` kombinierbar, nicht mit `--search` oder den Exporten) |
 | `--check` | Jede Datei einzeln auf Dubletten und kaputte Einträge prüfen (ohne Passwörter anzuzeigen; mit `--group`/`--hide-trash` kombinierbar, nicht mit `--search`, `--stats` oder den Exporten) |
+| `--password-check` | Passwortqualität je Datei prüfen (Passwörter werden nie angezeigt; nicht kombinierbar mit `--search`, `--stats`, `--check` oder den Exporten) |
+| `--min-length N` | Mindestlänge für `--password-check` (Standard: 10) |
+| `--max-age-days TAGE` | Maximales Alter seit der letzten Änderung für `--password-check` (Standard: 730) |
 | `--no-detect-moves` | Verschobene/umbenannte Einträge nicht erkennen (sie erscheinen dann als „entfernt“ plus „hinzugefügt“) |
 | `--export-added [DATEI]` | Neu hinzugefügte Einträge als CSV schreiben (Standard: `neue_eintraege.csv`; Papierkorb-Gruppen werden ausgelassen; verschobene Einträge zählen nicht als neu) |
 | `--export-merged [DATEI]` | Zusammengeführte CSV schreiben (Standard: `merged.csv`): alle Einträge beider Dateien, bei Unterschieden die jeweils neuere Version; Papierkorb-Gruppen werden ausgelassen (nicht mit `--search` kombinierbar) |
@@ -42,6 +45,19 @@ Prüft beide Dateien jeweils für sich und listet:
   `localhost`, IP-Adressen und URLs ohne Schema sind erlaubt).
 
 Passwörter werden dabei nie ausgegeben. Beispieldaten: `tests/probleme.csv`.
+
+## Passwortqualität (`--password-check`)
+
+Pro Datei werden gemeldet:
+
+- wiederverwendete Passwörter (nur die betroffenen Einträge, nie das Passwort),
+- Passwörter unter `--min-length` Zeichen (mit Längenangabe),
+- Einträge, deren `Last Modified` länger als `--max-age-days` Tage zurückliegt,
+- wie viele Einträge TOTP eingerichtet haben (fehlendes TOTP wird nicht bemängelt,
+  da nicht jeder Dienst es anbietet).
+
+Das „Alter“ wird relativ zum heutigen Datum berechnet, die Ausgabe für
+`tests/passwoerter.csv` ändert sich daher mit der Zeit.
 
 ## Merge-Export
 
