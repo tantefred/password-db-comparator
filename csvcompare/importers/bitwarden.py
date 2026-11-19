@@ -156,7 +156,8 @@ def parse_json(content, name):
     elif deleted:
         notes.append(f"{deleted} gelöschte Einträge sind enthalten und stehen in der Gruppe "
                      f"„{TRASH_GROUP}“.")
-    return LoadResult(rows=rows, format=BITWARDEN_JSON, provided_columns=PROVIDED_JSON, notes=notes)
+    return LoadResult(rows=rows, format=BITWARDEN_JSON, provided_columns=PROVIDED_JSON,
+                      notes=notes)
 
 
 # ---------------------------------------------------------------- CSV

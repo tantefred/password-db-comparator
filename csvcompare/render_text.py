@@ -13,9 +13,10 @@ CONFIDENCE_LABEL = {CERTAIN: "sicher", LIKELY: "wahrscheinlich"}
 
 def freshness_titles(cmp):
     """Abschnittsüberschriften für geänderte Einträge, mit den echten Dateinamen."""
+    old, new = cmp.old_name, cmp.new_name
     return {
-        NEWER_IN_NEW: f"Geändert – {cmp.new_name} ist aktueller ({cmp.old_name} muss aktualisiert werden)",
-        NEWER_IN_OLD: f"Geändert – {cmp.old_name} ist aktueller ({cmp.new_name} muss aktualisiert werden)",
+        NEWER_IN_NEW: f"Geändert – {new} ist aktueller ({old} muss aktualisiert werden)",
+        NEWER_IN_OLD: f"Geändert – {old} ist aktueller ({new} muss aktualisiert werden)",
         UNCLEAR: "Geändert – Aktualität unklar (manuell prüfen)",
     }
 
