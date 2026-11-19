@@ -111,6 +111,20 @@ zählen beim Paaren nicht mit (ohne `Created` entfällt die Stufe „sicher“).
 **Achtung:** Echte Exporte und `--export-added`-Dateien enthalten Passwörter im
 Klartext. Alle `*.csv` außer `tests/*.csv` sind per `.gitignore` ausgeschlossen.
 
+## Projektaufbau
+
+`compare_csv.py` ist nur der Einstiegspunkt; die Logik liegt im Paket `csvcompare/`:
+
+| Modul | Aufgabe |
+|---|---|
+| `cli.py` | Optionen, Validierung, Ablauf |
+| `csvio.py` | CSV lesen und schreiben |
+| `compare.py` | Vergleich (`compare_files`), Verschoben-Erkennung, Aktualität, Merge, Suche |
+| `analysis.py` | Statistik, Prüfung (`--check`), Passwortqualität |
+| `exports.py` | `--export-added` und `--export-merged` |
+| `render_text.py` / `render_json.py` | Textausgabe bzw. JSON-Berichte |
+| `common.py`, `constants.py` | Hilfsfunktionen, Spaltendefinitionen und Konfiguration |
+
 ## Tests
 
 ```
