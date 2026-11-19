@@ -20,6 +20,9 @@ python3 compare_csv.py tests/alt.csv tests/neu.csv
 | `--min-length N` | Mindestlänge für `--password-check` (Standard: 10) |
 | `--max-age-days TAGE` | Maximales Alter seit der letzten Änderung für `--password-check` (Standard: 730) |
 | `--format text\|json` | Ausgabeformat (Standard: `text`). Mit `json` steht nur JSON auf stdout; Hinweise zu Exporten gehen nach stderr |
+| `--ui` | Weboberfläche starten statt im Terminal zu arbeiten (siehe unten; ohne Dateiangabe) |
+| `--port N` | Port für `--ui` (Standard: 8765; bei belegtem Port wird der nächste freie genommen) |
+| `--no-browser` | Mit `--ui` den Browser nicht automatisch öffnen |
 | `--no-detect-moves` | Verschobene/umbenannte Einträge nicht erkennen (sie erscheinen dann als „entfernt“ plus „hinzugefügt“) |
 | `--export-added [DATEI]` | Neu hinzugefügte Einträge als CSV schreiben (Standard: `neue_eintraege.csv`; Papierkorb-Gruppen werden ausgelassen; verschobene Einträge zählen nicht als neu) |
 | `--export-merged [DATEI]` | Zusammengeführte CSV schreiben (Standard: `merged.csv`): alle Einträge beider Dateien, bei Unterschieden die jeweils neuere Version; Papierkorb-Gruppen werden ausgelassen (nicht mit `--search` kombinierbar) |
@@ -111,6 +114,38 @@ zählen beim Paaren nicht mit (ohne `Created` entfällt die Stufe „sicher“).
 **Achtung:** Echte Exporte und `--export-added`-Dateien enthalten Passwörter im
 Klartext. Alle `*.csv` außer `tests/*.csv` sind per `.gitignore` ausgeschlossen.
 
+## Weboberfläche (`--ui`)
+
+```
+python3 compare_csv.py --ui
+```
+
+Das öffnet im Browser eine schlichte Oberfläche, die alles kann, was das Terminal kann:
+Vergleich, Suche, Statistik, Dubletten-Prüfung und Passwortqualität, dazu alle Filter,
+das Ignorieren von Spalten und beide Exporte als Download. Die Ergebnisse erscheinen
+übersichtlich statt als Text: jede Datei hat ihre feste Farbe, ein Balken zeigt die
+Verteilung (identisch, geändert, verschoben, nur in einer Datei), und bei jedem Unterschied
+steht der Wert aus Datei 1 neben dem aus Datei 2. Unter dem Ergebnis steht, wie du dasselbe
+im Terminal aufrufst, und der JSON-Bericht lässt sich speichern.
+
+Beide Wege nutzen dieselbe Logik und dieselbe Optionsprüfung. Ein Test stellt sicher, dass
+die Oberfläche für gleiche Einstellungen exakt den Bericht der Kommandozeile liefert.
+
+**Datenschutz und Sicherheit**
+
+- Der Server lauscht nur auf `127.0.0.1` und ist von anderen Rechnern nicht erreichbar.
+- Die Dateien werden nur im Arbeitsspeicher ausgewertet; es wird nichts gespeichert,
+  protokolliert oder nachgeladen. Die Seite funktioniert ohne Internetzugang.
+- Anfragen brauchen ein zufälliges Token, das nur die ausgelieferte Seite kennt, und der
+  `Host`-Header wird geprüft. Das schützt davor, dass eine andere Webseite im Browser den
+  lokalen Server anspricht.
+- Inhalte aus den CSV-Dateien werden nie als HTML eingesetzt.
+- Passwörter und TOTP bleiben verborgen, außer du aktivierst „Passwörter im Klartext zeigen“.
+  Die exportierten CSV-Dateien enthalten Passwörter im Klartext.
+- Eine Anfrage darf höchstens 64 MiB groß sein.
+
+Mit Strg+C im Terminal beendest du die Oberfläche.
+
 ## Projektaufbau
 
 `compare_csv.py` ist nur der Einstiegspunkt; die Logik liegt im Paket `csvcompare/`:
@@ -122,6 +157,9 @@ Klartext. Alle `*.csv` außer `tests/*.csv` sind per `.gitignore` ausgeschlossen
 | `compare.py` | Vergleich (`compare_files`), Verschoben-Erkennung, Aktualität, Merge, Suche |
 | `analysis.py` | Statistik, Prüfung (`--check`), Passwortqualität |
 | `exports.py` | `--export-added` und `--export-merged` |
+| `report.py` | wählt den JSON-Bericht zum gewählten Modus (Terminal und Oberfläche) |
+| `service.py` | Auswertung aus CSV-Text und Optionen, ohne Dateipfade (für die Oberfläche) |
+| `webui.py`, `web/index.html` | lokaler Server und die Oberfläche selbst |
 | `render_text.py` / `render_json.py` | Textausgabe bzw. JSON-Berichte |
 | `common.py`, `constants.py` | Hilfsfunktionen, Spaltendefinitionen und Konfiguration |
 
