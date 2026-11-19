@@ -108,6 +108,46 @@ def write_csv(path, rows):
         sys.exit(f"Fehler: '{path}' kann nicht geschrieben werden: {e}")
 
 
+def build_merged(old, new, removed, added, moves, compare_cols):
+    """Vereinigt beide Dateien; bei Unterschieden gewinnt die jeweils neuere Version.
+
+    Rückgabe: (zeilen, statistik, konflikte). Konflikte sind Einträge mit
+    unterschiedlichem Inhalt, bei denen die Aktualität nicht bestimmbar ist
+    (gleicher/fehlender Zeitstempel); dort wird die Version aus Datei 2 genommen.
+    """
+    stats = {"nur_alt": 0, "nur_neu": 0, "alt_neuer": 0, "neu_neuer": 0, "gleich": 0}
+    conflicts = []
+    rows = []
+
+    pairs = [(k, k) for k in sorted(set(old) & set(new))]
+    pairs += [(ok, nk) for ok, nk, _ in moves]
+    for ok, nk in pairs:
+        t_old = parse_ts(old[ok][TIME_COL])
+        t_new = parse_ts(new[nk][TIME_COL])
+        differs = any(old[ok][c] != new[nk][c] for c in compare_cols)
+        if t_old and t_new and t_old > t_new:
+            rows.append(old[ok])
+            stats["alt_neuer"] += 1
+        elif t_old and t_new and t_new > t_old:
+            rows.append(new[nk])
+            stats["neu_neuer"] += 1
+        else:
+            rows.append(new[nk])
+            if differs:
+                conflicts.append(nk)
+            else:
+                stats["gleich"] += 1
+    for k in removed:
+        rows.append(old[k])
+        stats["nur_alt"] += 1
+    for k in added:
+        rows.append(new[k])
+        stats["nur_neu"] += 1
+
+    rows.sort(key=lambda r: (r["Group"], r["Title"], r["Username"]))
+    return rows, stats, conflicts
+
+
 def display_names(path1, path2):
     """Dateinamen für die Ausgabe; bei gleichem Namen der volle Pfad."""
     n1, n2 = os.path.basename(path1), os.path.basename(path2)
@@ -220,10 +260,17 @@ def main():
                    help="Neu hinzugefügte Einträge als CSV schreiben "
                         "(Standard: neue_eintraege.csv). Enthält Passwörter im Klartext! "
                         "Einträge aus Papierkorb-Gruppen werden ausgelassen.")
+    p.add_argument("--export-merged", nargs="?", const="merged.csv", metavar="DATEI",
+                   help="Zusammengeführte CSV schreiben: alle Einträge beider Dateien, bei "
+                        "Unterschieden die jeweils neuere Version (Standard: merged.csv). "
+                        "Enthält Passwörter im Klartext! Papierkorb-Gruppen werden ausgelassen. "
+                        "Nicht kombinierbar mit --search.")
     args = p.parse_args()
 
     if args.search is not None and args.export_added:
         p.error("--search und --export-added können nicht kombiniert werden.")
+    if args.search is not None and args.export_merged:
+        p.error("--search und --export-merged können nicht kombiniert werden.")
     if args.search is not None and not args.search.strip():
         p.error("--search benötigt einen nicht-leeren Suchbegriff.")
 
@@ -346,6 +393,23 @@ def main():
         write_csv(args.export_added, [new[k] for k in export])
         print(f"{len(export)} neue Einträge nach '{args.export_added}' exportiert "
               f"({skipped} aus Papierkorb ausgelassen; Datei enthält Passwörter im Klartext).\n")
+
+    if args.export_merged:
+        rows, stats, conflicts = build_merged(old, new, removed, added, moves, compare_cols)
+        export = [r for r in rows if not is_excluded(r)]
+        write_csv(args.export_merged, export)
+        print(f"{len(export)} Einträge nach '{args.export_merged}' exportiert "
+              f"({len(rows) - len(export)} aus Papierkorb ausgelassen; "
+              f"Datei enthält Passwörter im Klartext).")
+        print(f"  nur in {n1}: {stats['nur_alt']}, nur in {n2}: {stats['nur_neu']}, "
+              f"neuere Version aus {n1}: {stats['alt_neuer']}, "
+              f"aus {n2}: {stats['neu_neuer']}, unverändert: {stats['gleich']}")
+        if conflicts:
+            print(f"  {len(conflicts)} Konflikt(e) mit unklarer Aktualität – "
+                  f"Version aus {n2} übernommen, bitte prüfen:")
+            for k in conflicts:
+                print(f"    ! {label(k)}")
+        print()
 
     if not (removed or added or n_changed or moves):
         print("Keine Unterschiede.")
