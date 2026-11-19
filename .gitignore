@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# IDE
+.idea/
+
+# Alle CSVs ignorieren (echte Passwort-Exporte und Skript-Ausgaben!),
+# nur die Beispieldaten in tests/ sind erlaubt
+*.csv
+!tests/*.csv
