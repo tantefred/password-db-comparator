@@ -163,6 +163,12 @@ a.btn { display: inline-block; text-decoration: none; }
 .side.b { background: var(--b-soft); color: var(--b); }
 .side small { font-weight: 500; color: var(--muted); margin-left: 6px; }
 .filters { color: var(--muted); font-size: 13px; }
+.formats { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
+.hints { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; display: grid; gap: 2px; }
+.skipped { margin: 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.lost { margin: 0; padding: 8px 12px; border-left: 4px solid var(--danger); background: var(--danger-soft); border-radius: 0 var(--radius) var(--radius) 0; font-size: 13.5px; }
+.lost strong { color: var(--danger); }
+.lost ul { margin: 4px 0 0; padding-left: 18px; }
 .cmd { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .cmd code { font: 12.5px/1.4 var(--mono); background: var(--sunken); border: 1px solid var(--line); border-radius: 4px; padding: 4px 8px; overflow-wrap: anywhere; flex: 1 1 280px; }
 .cmd .lbl { font-size: 13px; color: var(--muted); }
@@ -265,14 +271,14 @@ pre.json { margin: 0; padding: 14px 16px; max-height: 420px; overflow: auto; fon
           <label class="drop a" id="drop-a">
             <span class="tag" aria-hidden="true">1</span>
             <span class="name" data-name>Erste Datei wählen</span>
-            <span class="meta" data-meta>CSV hierher ziehen oder klicken</span>
-            <input type="file" id="file-a" accept=".csv,text/csv,text/plain" aria-label="Erste CSV-Datei">
+            <span class="meta" data-meta>CSV oder JSON hierher ziehen oder klicken</span>
+            <input type="file" id="file-a" accept=".csv,.json,text/csv,application/json,text/plain" aria-label="Erste Datei (CSV oder JSON)">
           </label>
           <label class="drop b" id="drop-b">
             <span class="tag" aria-hidden="true">2</span>
             <span class="name" data-name>Zweite Datei wählen</span>
-            <span class="meta" data-meta>CSV hierher ziehen oder klicken</span>
-            <input type="file" id="file-b" accept=".csv,text/csv,text/plain" aria-label="Zweite CSV-Datei">
+            <span class="meta" data-meta>CSV oder JSON hierher ziehen oder klicken</span>
+            <input type="file" id="file-b" accept=".csv,.json,text/csv,application/json,text/plain" aria-label="Zweite Datei (CSV oder JSON)">
           </label>
         </div>
         <button class="btn quiet swap" type="button" id="swap">Dateien tauschen</button>
@@ -310,6 +316,7 @@ pre.json { margin: 0; padding: 14px 16px; max-height: 420px; overflow: auto; fon
           <input class="text-in" id="group" type="text" placeholder="z. B. Privat">
         </label>
         <label class="check"><input type="checkbox" id="hide-trash"><span>Papierkorb ausblenden<small>Einträge aus Papierkorb-Gruppen werden ganz ignoriert.</small></span></label>
+        <label class="check"><input type="checkbox" id="keep-db-name"><span>Datenbanknamen in Gruppen behalten<small>KeePassium setzt ihn vor jeden Gruppenpfad (z. B. DB1/Web); normalerweise wird er entfernt.</small></span></label>
         <label class="check"><input type="checkbox" id="detect-moves" checked><span>Verschobene Einträge erkennen<small>Sonst erscheinen sie als „entfernt“ plus „neu“.</small></span></label>
         <fieldset>
           <legend>Spalten ignorieren</legend>
@@ -347,10 +354,14 @@ pre.json { margin: 0; padding: 14px 16px; max-height: 420px; overflow: auto; fon
 <script>
 "use strict";
 const TOKEN = document.querySelector('meta[name="csv-token"]').content;
-const COLUMNS = ["Password", "URL", "Notes", "TOTP", "Icon", "Last Modified", "Created"];
-const COLUMN_LABEL = { "Password": "Passwort", "URL": "URL", "Notes": "Notizen", "TOTP": "TOTP",
-  "Icon": "Icon", "Last Modified": "Geändert am", "Created": "Erstellt am" };
-const SECRET = new Set(["Password", "TOTP"]);
+const COLUMNS = ["Password", "URL", "Notes", "TOTP", "Icon", "Last Modified", "Created",
+  "Favorite", "Type", "Reprompt", "Fields", "URLs"];
+const COLUMN_LABEL = { "Group": "Gruppe", "Title": "Titel", "Username": "Username",
+  "Password": "Passwort", "URL": "URL", "Notes": "Notizen", "TOTP": "TOTP", "Icon": "Icon",
+  "Last Modified": "Geändert am", "Created": "Erstellt am", "Favorite": "Favorit", "Type": "Typ",
+  "Reprompt": "Passwort-Nachfrage", "Fields": "Eigene Felder", "URLs": "Alle URLs" };
+const FORMAT_LABEL = { "keepass-csv": "KeePass-CSV", "bitwarden-json": "Bitwarden-JSON",
+  "bitwarden-csv": "Bitwarden-CSV" };
 const MODE_LABEL = { "compare": "Vergleichen", "search": "Suchen", "stats": "Zählen",
   "check": "Prüfen", "password-check": "Prüfen" };
 const MODE_HINT = {
@@ -400,13 +411,21 @@ function setupDrop(key, dropEl, input) {
   ["dragleave", "drop"].forEach((ev) => dropEl.addEventListener(ev, (e) => { e.preventDefault(); dropEl.classList.remove("over"); }));
   dropEl.addEventListener("drop", (e) => load(e.dataTransfer.files[0]));
 }
+// Gleiche Regeln wie auf dem Server; maßgeblich ist später die Angabe im Ergebnis.
+function sniffFormat(text) {
+  const t = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
+  const first = t.trimStart().charAt(0);
+  if (first === "{" || first === "[") return "bitwarden-json";
+  const header = t.split(/\r?\n/, 1)[0];
+  return header.includes("login_uri") && header.includes("login_username") ? "bitwarden-csv" : "keepass-csv";
+}
 function renderDrop(key, dropEl) {
   const f = state[key];
   dropEl.classList.toggle("filled", !!f);
   dropEl.querySelector("[data-name]").textContent = f ? f.name : (key === "a" ? "Erste Datei wählen" : "Zweite Datei wählen");
   dropEl.querySelector("[data-meta]").textContent = f
-    ? `${(f.size / 1024).toLocaleString("de-DE", { maximumFractionDigits: 1 })} KB – klicken zum Ersetzen`
-    : "CSV hierher ziehen oder klicken";
+    ? `${FORMAT_LABEL[sniffFormat(f.text)]}, ${(f.size / 1024).toLocaleString("de-DE", { maximumFractionDigits: 1 })} KB – klicken zum Ersetzen`
+    : "CSV oder JSON hierher ziehen oder klicken";
 }
 function refreshRun() {
   const mode = currentMode();
@@ -425,6 +444,7 @@ function collectOptions() {
     group: $("group").value,
     hide_trash: $("hide-trash").checked,
     detect_moves: $("detect-moves").checked,
+    keep_db_name: $("keep-db-name").checked,
     show_secrets: $("show-secrets").checked,
   };
   if (mode === "search") opts.search = $("search").value;
@@ -527,12 +547,19 @@ function headPanel(data) {
     catch (_) { copy.textContent = "Nicht möglich"; }
     setTimeout(() => (copy.textContent = "Kopieren"), 1600);
   });
+  const hints = [f.old, f.new].flatMap((side) => (side.notes || []).map((n) => `${side.name}: ${n}`));
+  const skippedByReason = {};
+  for (const a of fl.auto_ignored || []) (skippedByReason[a.reason] = skippedByReason[a.reason] || []).push(COLUMN_LABEL[a.column] || a.column);
+  const skipped = Object.entries(skippedByReason).map(([reason, cols]) => `${cols.join(", ")} – ${reason}`);
+  const formatBadge = (side) => h("span", { class: "badge", text: FORMAT_LABEL[side.format] || side.format });
   return h("section", { class: "panel head", id: "top" },
     h("div", { class: "pair" },
-      sideTag("a", f.old.name), h("small", { class: "note", text: plural(f.old.entries, "Eintrag", "Einträge") }),
+      sideTag("a", f.old.name), formatBadge(f.old), h("small", { class: "note", text: plural(f.old.entries, "Eintrag", "Einträge") }),
       h("span", { class: "sep", "aria-hidden": "true", text: "⇄" }),
-      sideTag("b", f.new.name), h("small", { class: "note", text: plural(f.new.entries, "Eintrag", "Einträge") })),
+      sideTag("b", f.new.name), formatBadge(f.new), h("small", { class: "note", text: plural(f.new.entries, "Eintrag", "Einträge") })),
     notes.length ? h("div", { class: "filters", text: notes.join("  ·  ") }) : null,
+    hints.length ? h("ul", { class: "hints" }, hints.map((t) => h("li", { text: t }))) : null,
+    skipped.length ? h("p", { class: "skipped" }, h("strong", { text: "Nicht verglichen: " }), skipped.join("  ·  ")) : null,
     h("div", { class: "cmd" }, h("span", { class: "lbl", text: "Im Terminal:" }), h("code", { text: data.command }), copy));
 }
 
@@ -633,9 +660,16 @@ function exportsPanel(exps) {
     const url = URL.createObjectURL(new Blob([e.csv], { type: "text/csv;charset=utf-8" }));
     state.urls.push(url);
     const title = k === "added" ? "Neu hinzugefügte Einträge" : "Zusammengeführte Datei";
+    const lost = [
+      ...Object.entries(e.lost.columns).map(([col, n]) => `${COLUMN_LABEL[col] || col}: ${plural(n, "Eintrag", "Einträge")}`),
+      ...Object.entries(e.lost.source).map(([label, n]) => `${label}: ${plural(n, "Eintrag", "Einträge")}`),
+    ];
     return h("div", { class: "export" },
       h("strong", { text: title }),
-      e.lines.map((l) => h("p", { class: l.startsWith("    !") ? "note" : null, text: l.trim() })),
+      e.lines.filter((l) => !l.includes("nicht speicherbar"))
+        .map((l) => h("p", { class: l.startsWith("    !") ? "note" : null, text: l.trim() })),
+      lost.length ? h("div", { class: "lost" }, h("strong", { text: `Im ${e.target} nicht speicherbar` }),
+        h("ul", null, lost.map((t) => h("li", { text: t })))) : null,
       h("a", { class: "btn", href: url, download: e.filename, text: `${e.filename} speichern` }));
   });
   return h("section", { class: "panel" }, h("h2", { text: "Exporte" }),
