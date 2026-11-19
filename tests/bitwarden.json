@@ -1,0 +1,318 @@
+{
+  "encrypted": false,
+  "folders": [
+    {
+      "id": "f-web",
+      "name": "Web"
+    },
+    {
+      "id": "f-shops",
+      "name": "Web/Shops"
+    },
+    {
+      "id": "f-privat",
+      "name": "Privat"
+    }
+  ],
+  "items": [
+    {
+      "passwordHistory": [
+        {
+          "lastUsedDate": "2023-06-01T00:00:00.000Z",
+          "password": "pw-mail-0"
+        }
+      ],
+      "revisionDate": "2024-01-10T10:00:00.000Z",
+      "creationDate": "2023-01-01T09:00:00.000Z",
+      "deletedDate": null,
+      "id": "0001",
+      "organizationId": null,
+      "folderId": "f-web",
+      "type": 1,
+      "reprompt": 0,
+      "name": "Mail",
+      "notes": null,
+      "favorite": true,
+      "fields": [
+        {
+          "name": "PIN",
+          "value": "1234",
+          "type": 1,
+          "linkedId": null
+        },
+        {
+          "name": "Konto",
+          "value": "Haupt konto",
+          "type": 0,
+          "linkedId": null
+        }
+      ],
+      "login": {
+        "fido2Credentials": [],
+        "uris": [
+          {
+            "match": null,
+            "uri": "https://mail.example.org"
+          }
+        ],
+        "username": "max@example.org",
+        "password": "pw-mail-1",
+        "totp": "otpauth://totp/Mail:max?secret=JBSWY3DPEHPK3PXP&issuer=Mail"
+      },
+      "collectionIds": null
+    },
+    {
+      "passwordHistory": null,
+      "revisionDate": "2024-06-01T10:00:00.000Z",
+      "creationDate": "2023-01-01T09:00:00.000Z",
+      "deletedDate": null,
+      "id": "0002",
+      "organizationId": null,
+      "folderId": "f-shops",
+      "type": 1,
+      "reprompt": 0,
+      "name": "Shop",
+      "notes": "Zeile 1\nZeile 2",
+      "favorite": false,
+      "fields": null,
+      "login": {
+        "fido2Credentials": [],
+        "uris": [
+          {
+            "match": null,
+            "uri": "https://shop.example.org"
+          },
+          {
+            "match": null,
+            "uri": "https://shop.example.org/login"
+          }
+        ],
+        "username": "max",
+        "password": "pw-shop",
+        "totp": null
+      },
+      "collectionIds": null
+    },
+    {
+      "passwordHistory": null,
+      "revisionDate": "2024-01-01T10:00:00.000Z",
+      "creationDate": "2023-01-01T09:00:00.000Z",
+      "deletedDate": null,
+      "id": "0003",
+      "organizationId": null,
+      "folderId": "f-web",
+      "type": 1,
+      "reprompt": 0,
+      "name": "Forum",
+      "notes": null,
+      "favorite": false,
+      "fields": null,
+      "login": {
+        "fido2Credentials": [],
+        "uris": [
+          {
+            "match": null,
+            "uri": "https://forum.example.org"
+          }
+        ],
+        "username": "max",
+        "password": "pw-forum",
+        "totp": null
+      },
+      "collectionIds": null
+    },
+    {
+      "passwordHistory": null,
+      "revisionDate": "2024-01-01T10:00:00.000Z",
+      "creationDate": "2023-01-01T09:00:00.000Z",
+      "deletedDate": null,
+      "id": "0004",
+      "organizationId": null,
+      "folderId": "f-privat",
+      "type": 1,
+      "reprompt": 1,
+      "name": "Bank",
+      "notes": null,
+      "favorite": false,
+      "fields": null,
+      "login": {
+        "fido2Credentials": [],
+        "uris": [
+          {
+            "match": null,
+            "uri": "https://bank.example.org"
+          }
+        ],
+        "username": "max",
+        "password": "pw-bank",
+        "totp": "JBSWY3DPEHPK3PXP"
+      },
+      "collectionIds": null
+    },
+    {
+      "passwordHistory": null,
+      "revisionDate": "2024-01-01T10:00:00.000Z",
+      "creationDate": "2023-01-01T09:00:00.000Z",
+      "deletedDate": null,
+      "id": "0005",
+      "organizationId": null,
+      "folderId": null,
+      "type": 1,
+      "reprompt": 0,
+      "name": "Router",
+      "notes": null,
+      "favorite": false,
+      "fields": null,
+      "login": {
+        "fido2Credentials": [],
+        "uris": [
+          {
+            "match": null,
+            "uri": "http://192.168.0.1"
+          }
+        ],
+        "username": "admin",
+        "password": "pw-router",
+        "totp": null
+      },
+      "collectionIds": null
+    },
+    {
+      "passwordHistory": null,
+      "revisionDate": "2024-01-01T10:00:00.000Z",
+      "creationDate": "2023-01-01T09:00:00.000Z",
+      "deletedDate": null,
+      "id": "0006",
+      "organizationId": null,
+      "folderId": "f-web",
+      "type": 1,
+      "reprompt": 0,
+      "name": "Alt-Account",
+      "notes": null,
+      "favorite": false,
+      "fields": null,
+      "login": {
+        "fido2Credentials": [],
+        "uris": [],
+        "username": "max",
+        "password": "pw-alt",
+        "totp": null
+      },
+      "collectionIds": null
+    },
+    {
+      "passwordHistory": null,
+      "revisionDate": "2024-01-01T10:00:00.000Z",
+      "creationDate": "2023-02-02T08:00:00.000Z",
+      "deletedDate": null,
+      "id": "0007",
+      "organizationId": null,
+      "folderId": "f-privat",
+      "type": 1,
+      "reprompt": 0,
+      "name": "Streaming",
+      "notes": null,
+      "favorite": false,
+      "fields": null,
+      "login": {
+        "fido2Credentials": [],
+        "uris": [
+          {
+            "match": null,
+            "uri": "https://stream.example.org"
+          }
+        ],
+        "username": "max",
+        "password": "pw-stream",
+        "totp": null
+      },
+      "collectionIds": null
+    },
+    {
+      "passwordHistory": null,
+      "revisionDate": "2024-01-01T10:00:00.000Z",
+      "creationDate": "2023-01-01T09:00:00.000Z",
+      "deletedDate": "2024-02-02T00:00:00.000Z",
+      "id": "0008",
+      "organizationId": null,
+      "folderId": null,
+      "type": 1,
+      "reprompt": 0,
+      "name": "Gelöscht",
+      "notes": null,
+      "favorite": false,
+      "fields": null,
+      "login": {
+        "fido2Credentials": [],
+        "uris": [],
+        "username": "max",
+        "password": "pw-weg",
+        "totp": null
+      },
+      "collectionIds": null
+    },
+    {
+      "passwordHistory": null,
+      "revisionDate": "2024-03-03T10:00:00.000Z",
+      "creationDate": "2024-03-03T10:00:00.000Z",
+      "deletedDate": null,
+      "id": "0009",
+      "organizationId": null,
+      "folderId": "f-privat",
+      "type": 2,
+      "reprompt": 0,
+      "name": "WLAN-Zugang",
+      "notes": "SSID: Heimnetz",
+      "favorite": false,
+      "fields": null,
+      "secureNote": {
+        "type": 0
+      },
+      "collectionIds": null
+    },
+    {
+      "passwordHistory": null,
+      "revisionDate": "2024-03-03T10:00:00.000Z",
+      "creationDate": "2024-03-03T10:00:00.000Z",
+      "deletedDate": null,
+      "id": "0010",
+      "organizationId": null,
+      "folderId": null,
+      "type": 3,
+      "reprompt": 0,
+      "name": "Kreditkarte",
+      "notes": null,
+      "favorite": false,
+      "fields": null,
+      "card": {
+        "cardholderName": "Max Muster",
+        "brand": "Visa",
+        "number": "4111111111111111",
+        "expMonth": "12",
+        "expYear": "2030",
+        "code": "123"
+      },
+      "collectionIds": null
+    },
+    {
+      "passwordHistory": null,
+      "revisionDate": "2024-03-03T10:00:00.000Z",
+      "creationDate": "2024-03-03T10:00:00.000Z",
+      "deletedDate": null,
+      "id": "0011",
+      "organizationId": null,
+      "folderId": null,
+      "type": 4,
+      "reprompt": 0,
+      "name": "Personalien",
+      "notes": null,
+      "favorite": false,
+      "fields": null,
+      "identity": {
+        "firstName": "Max",
+        "lastName": "Muster"
+      },
+      "collectionIds": null
+    }
+  ]
+}
