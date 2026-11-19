@@ -1,20 +1,23 @@
-"""Kommandozeile: Optionen einlesen und Ergebnis ausgeben."""
+"""Kommandozeile: Optionen einlesen, Dateien laden und das Ergebnis ausgeben."""
 
 import argparse
-from datetime import datetime, timezone
-import json
 import sys
 
-from .analysis import audit_entries, check_entries, stats_rows
-from .common import display_names, is_excluded, label
-from .compare import build_merged, classify, find_moves, search_matches
-from .constants import EXPECTED, KEY_COLS, TIME_COL
-from .csvio import load, write_csv
-from .render_json import changed_json, entry_ref, move_json
-from .render_text import print_changed, print_check, print_move, print_password_check, print_stats
+from .common import display_names, is_excluded
+from .compare import compare_files, search_matches
+from .constants import EXPECTED, KEY_COLS
+from .csvio import load
+from .exports import export_added, export_merged
+from .render_json import (base_report, check_report, compare_report, dump,
+                          password_report, search_report, stats_report)
+from .render_text import (print_check, print_compare, print_header,
+                          print_password_check, print_search, print_stats,
+                          print_summary)
+
+IGNORABLE = [c for c in EXPECTED if c not in KEY_COLS]
 
 
-def main():
+def build_parser():
     p = argparse.ArgumentParser(description="KeePassium-CSV-Exporte vergleichen")
     p.add_argument("alt", help="Erste CSV-Datei")
     p.add_argument("neu", help="Zweite CSV-Datei")
@@ -23,7 +26,7 @@ def main():
     p.add_argument("-i", "--ignore", nargs="+", default=[], metavar="SPALTE",
                    help="Spalten, die beim Vergleich ignoriert werden "
                         "(z. B. --ignore Icon \"Last Modified\" oder --ignore Icon,Notes). "
-                        f"Mögliche Werte: {', '.join(c for c in EXPECTED if c not in KEY_COLS)}")
+                        f"Mögliche Werte: {', '.join(IGNORABLE)}")
     p.add_argument("-s", "--search", metavar="TEXT",
                    help="Nur Einträge anzeigen, deren Gruppe, Titel oder Username TEXT enthält "
                         "(Groß-/Kleinschreibung egal), samt Status. "
@@ -68,8 +71,11 @@ def main():
                         "Unterschieden die jeweils neuere Version (Standard: merged.csv). "
                         "Enthält Passwörter im Klartext! Papierkorb-Gruppen werden ausgelassen. "
                         "Nicht kombinierbar mit --search.")
-    args = p.parse_args()
+    return p
 
+
+def validate_args(p, args):
+    """Prüft Optionskombinationen und gibt die kanonischen Namen der ignorierten Spalten zurück."""
     # Auswertungsmodi ersetzen die normale Ausgabe und schließen sich gegenseitig
     # sowie die Exporte aus.
     modes = [name for name, active in (("--search", args.search is not None),
@@ -84,9 +90,6 @@ def main():
         p.error(f"{modes[0]} und {exports[0]} können nicht kombiniert werden.")
     if args.search is not None and not args.search.strip():
         p.error("--search benötigt einen nicht-leeren Suchbegriff.")
-    as_json = args.format == "json"
-    # Im JSON-Modus bleibt stdout dem JSON vorbehalten
-    log = (lambda *a, **k: print(*a, file=sys.stderr, **k)) if as_json else print
 
     by_lower = {c.lower(): c for c in EXPECTED}
     ignored = []
@@ -95,13 +98,16 @@ def main():
             continue
         col = by_lower.get(part.lower())
         if col is None:
-            p.error(f"Unbekannte Spalte '{part}'. Gültig: "
-                    f"{', '.join(c for c in EXPECTED if c not in KEY_COLS)}")
+            p.error(f"Unbekannte Spalte '{part}'. Gültig: {', '.join(IGNORABLE)}")
         if col in KEY_COLS:
             p.error(f"Die Spalte '{col}' identifiziert die Einträge und kann nicht ignoriert werden.")
         if col not in ignored:
             ignored.append(col)
+    return ignored
 
+
+def load_filtered(p, args):
+    """Lädt beide Dateien und wendet --hide-trash und --group an."""
     old, new = load(args.alt), load(args.neu)
     if args.hide_trash:
         old = {k: r for k, r in old.items() if not is_excluded(r)}
@@ -112,240 +118,62 @@ def main():
             p.error("--group benötigt einen nicht-leeren Suchbegriff.")
         old = {k: r for k, r in old.items() if needle in r["Group"].lower()}
         new = {k: r for k, r in new.items() if needle in r["Group"].lower()}
-    n1, n2 = display_names(args.alt, args.neu)
-    removed = sorted(set(old) - set(new))
-    added = sorted(set(new) - set(old))
+    return old, new
 
-    compare_cols = [c for c in EXPECTED if c not in KEY_COLS and c not in ignored]
 
-    # Verschobene/umbenannte Einträge aus removed/added herauslösen
-    moves = [] if args.no_detect_moves else find_moves(old, new, removed, added, ignored)
-    moved_old = {m[0] for m in moves}
-    moved_new = {m[1] for m in moves}
-    removed = [k for k in removed if k not in moved_old]
-    added = [k for k in added if k not in moved_new]
-
-    groups = {"old_outdated": [], "new_outdated": [], "unclear": []}
-    for key in sorted(set(old) & set(new)):
-        diffs = [c for c in compare_cols if old[key][c] != new[key][c]]
-        if diffs:
-            grp, delta = classify(key, old, new, n1, n2)
-            groups[grp].append((key, diffs, delta))
-    n_changed = sum(len(v) for v in groups.values())
-
-    if not as_json:
-        print(f"{n1}: {len(old)} Einträge")
-        print(f"{n2}: {len(new)} Einträge")
-        if ignored:
-            print(f"Ignorierte Spalten: {', '.join(ignored)}")
-        if args.hide_trash:
-            print("Papierkorb-Gruppen ausgeblendet")
-        if args.group is not None:
-            print(f"Gruppenfilter: '{args.group.strip()}'")
-    base = {
-        "files": {
-            "old": {"name": n1, "path": args.alt, "entries": len(old)},
-            "new": {"name": n2, "path": args.neu, "entries": len(new)},
-        },
-        "filters": {
-            "ignored_columns": ignored,
-            "hide_trash": args.hide_trash,
-            "group": args.group.strip() if args.group is not None else None,
-            "detect_moves": not args.no_detect_moves,
-        },
-    }
-    if args.stats:
-        if as_json:
-            rows = stats_rows(old, new)
-            report = {"mode": "stats", **base,
-                      "groups": [{"group": g, "old": a, "new": b, "difference": b - a}
-                                 for g, a, b in rows],
-                      "total": {"old": len(old), "new": len(new),
-                                "difference": len(new) - len(old)}}
-            print(json.dumps(report, ensure_ascii=False, indent=2))
-            return
-        print()
-        print_stats(old, new, n1, n2)
-        return
-    if args.check:
-        if as_json:
-            report = {"mode": "check", **base,
-                      "results": [{"file": name, "findings": [
-                          {"category": t, "count": len(ls), "items": ls}
-                          for t, ls in check_entries(entries)]}
-                          for name, entries in ((n1, old), (n2, new))]}
-            print(json.dumps(report, ensure_ascii=False, indent=2))
-            return
-        print()
-        print_check(old, new, n1, n2)
-        return
-    if args.password_check:
-        if as_json:
-            now = datetime.now(timezone.utc)
-            results = []
-            for name, entries in ((n1, old), (n2, new)):
-                findings, totp = audit_entries(entries, args.min_length, args.max_age_days, now)
-                results.append({"file": name,
-                                "findings": [{"category": t, "count": len(ls), "items": ls}
-                                             for t, ls in findings],
-                                "totp": {"with_totp": totp, "entries": len(entries)}})
-            report = {"mode": "password-check", **base,
-                      "thresholds": {"min_length": args.min_length,
-                                     "max_age_days": args.max_age_days},
-                      "results": results}
-            print(json.dumps(report, ensure_ascii=False, indent=2))
-            return
-        print()
-        print_password_check(old, new, n1, n2, args.min_length, args.max_age_days)
-        return
-    if not as_json:
-        print()
-
-    titles = {
-        "old_outdated": f"Geändert – {n2} ist aktueller ({n1} muss aktualisiert werden)",
-        "new_outdated": f"Geändert – {n1} ist aktueller ({n2} muss aktualisiert werden)",
-        "unclear": "Geändert – Aktualität unklar (manuell prüfen)",
-    }
-
-    if args.search is not None:
-        n_matches, results = search_matches(args.search, old, new, removed, added,
-                                            moves, groups)
-        if as_json:
-            status_of = {"old_outdated": "newer_in_new", "new_outdated": "newer_in_old",
-                         "unclear": "unclear"}
-            items = []
-            for kind, data in results:
-                if kind == "moved":
-                    items.append({"status": "moved", **move_json(
-                        data, compare_cols, old, new, n1, n2, args.show_secrets)})
-                elif kind == "changed":
-                    k, grp, diffs, delta = data
-                    items.append({"status": status_of[grp], **changed_json(
-                        k, k, diffs, delta, old, new, args.show_secrets)})
-                elif kind == "only_old":
-                    items.append({"status": "only_in_old", "entry": entry_ref(data),
-                                  "last_modified": old[data][TIME_COL]})
-                elif kind == "only_new":
-                    items.append({"status": "only_in_new", "entry": entry_ref(data),
-                                  "last_modified": new[data][TIME_COL]})
-                else:
-                    items.append({"status": "identical", "entry": entry_ref(data),
-                                  "last_modified": old[data][TIME_COL]})
-            print(json.dumps({"mode": "search", **base, "query": args.search,
-                              "match_count": n_matches, "results": items},
-                             ensure_ascii=False, indent=2))
-            sys.exit(0 if n_matches else 1)
-        if not n_matches:
-            sys.exit(f"Kein Eintrag gefunden, dessen Gruppe, Titel oder Username "
-                     f"'{args.search}' enthält.")
-        print(f"Suche nach '{args.search}': {n_matches} Treffer\n")
-        for kind, data in results:
-            if kind == "moved":
-                print(f"  Status: verschoben/umbenannt")
-                print_move(data, compare_cols, old, new, n1, n2, args.show_secrets)
-            elif kind == "only_old":
-                print(f"  - {label(data)}")
-                print(f"      Status: nur in {n1} (in {n2} nicht vorhanden)")
-                print(f"      Last Modified: {old[data][TIME_COL]}")
-            elif kind == "only_new":
-                print(f"  + {label(data)}")
-                print(f"      Status: nur in {n2} (in {n1} nicht vorhanden)")
-                print(f"      Last Modified: {new[data][TIME_COL]}")
-            elif kind == "changed":
-                k, grp, diffs, delta = data
-                print(f"  Status: {titles[grp]}")
-                print_changed(k, diffs, delta, old, new, args.show_secrets)
-            else:
-                print(f"  = {label(data)}")
-                print(f"      Status: identisch in beiden Dateien")
-                print(f"      Last Modified: {old[data][TIME_COL]}")
-            print()
-        return
-
-    if not as_json:
-        if moves:
-            print(f"== Verschoben/umbenannt: {len(moves)} ==")
-            for move in moves:
-                print_move(move, compare_cols, old, new, n1, n2, args.show_secrets)
-            print()
-        if removed:
-            print(f"== Nur in {n1} (in {n2} nicht vorhanden): {len(removed)} ==")
-            for k in removed:
-                print(f"  - {label(k)}")
-            print()
-        if added:
-            print(f"== Nur in {n2} (in {n1} nicht vorhanden): {len(added)} ==")
-            for k in added:
-                print(f"  + {label(k)}")
-            print()
-
-        for grp in ("old_outdated", "new_outdated", "unclear"):
-            items = groups[grp]
-            if not items:
-                continue
-            print(f"== {titles[grp]}: {len(items)} ==")
-            for k, diffs, delta in items:
-                print_changed(k, diffs, delta, old, new, args.show_secrets)
-            print()
-
-    if args.export_added:
-        export = [k for k in added if not is_excluded(new[k])]
-        skipped = len(added) - len(export)
-        write_csv(args.export_added, [new[k] for k in export])
-        log(f"{len(export)} neue Einträge nach '{args.export_added}' exportiert "
-              f"({skipped} aus Papierkorb ausgelassen; Datei enthält Passwörter im Klartext).\n")
-
-    if args.export_merged:
-        rows, stats, conflicts = build_merged(old, new, removed, added, moves, compare_cols)
-        export = [r for r in rows if not is_excluded(r)]
-        write_csv(args.export_merged, export)
-        log(f"{len(export)} Einträge nach '{args.export_merged}' exportiert "
-              f"({len(rows) - len(export)} aus Papierkorb ausgelassen; "
-              f"Datei enthält Passwörter im Klartext).")
-        log(f"  nur in {n1}: {stats['nur_alt']}, nur in {n2}: {stats['nur_neu']}, "
-              f"neuere Version aus {n1}: {stats['alt_neuer']}, "
-              f"aus {n2}: {stats['neu_neuer']}, unverändert: {stats['gleich']}")
-        if conflicts:
-            log(f"  {len(conflicts)} Konflikt(e) mit unklarer Aktualität – "
-                  f"Version aus {n2} übernommen, bitte prüfen:")
-            for k in conflicts:
-                log(f"    ! {label(k)}")
-        log()
-
+def run_search(args, cmp, base, as_json):
+    n_matches, results = search_matches(args.search, cmp.old, cmp.new, cmp.removed,
+                                        cmp.added, cmp.moves, cmp.groups)
     if as_json:
-        report = {
-            "mode": "compare",
-            **base,
-            "moved": [move_json(m, compare_cols, old, new, n1, n2, args.show_secrets)
-                      for m in moves],
-            "only_in_old": [entry_ref(k) for k in removed],
-            "only_in_new": [entry_ref(k) for k in added],
-            "changed": {
-                "newer_in_new": [changed_json(k, k, d, dl, old, new, args.show_secrets)
-                                 for k, d, dl in groups["old_outdated"]],
-                "newer_in_old": [changed_json(k, k, d, dl, old, new, args.show_secrets)
-                                 for k, d, dl in groups["new_outdated"]],
-                "unclear": [changed_json(k, k, d, dl, old, new, args.show_secrets)
-                            for k, d, dl in groups["unclear"]],
-            },
-            "summary": {
-                "only_in_old": len(removed), "only_in_new": len(added),
-                "moved": len(moves), "changed": n_changed,
-                "newer_in_new": len(groups["old_outdated"]),
-                "newer_in_old": len(groups["new_outdated"]),
-                "unclear": len(groups["unclear"]),
-                "identical": not (removed or added or n_changed or moves),
-            },
-        }
-        print(json.dumps(report, ensure_ascii=False, indent=2))
-        return
+        dump(search_report(base, cmp, args.search, n_matches, results, args.show_secrets))
+        sys.exit(0 if n_matches else 1)
+    if not n_matches:
+        sys.exit(f"Kein Eintrag gefunden, dessen Gruppe, Titel oder Username "
+                 f"'{args.search}' enthält.")
+    print_search(args.search, n_matches, results, cmp, args.show_secrets)
 
-    if not (removed or added or n_changed or moves):
-        print("Keine Unterschiede.")
+
+def run_compare(args, cmp, base, as_json, log):
+    if not as_json:
+        print_compare(cmp, args.show_secrets)
+    if args.export_added:
+        export_added(cmp, args.export_added, log)
+    if args.export_merged:
+        export_merged(cmp, args.export_merged, log)
+    if as_json:
+        dump(compare_report(base, cmp, args.show_secrets))
     else:
-        print(f"Zusammenfassung: {len(removed)} nur in {n1}, {len(added)} nur in {n2}, "
-              f"{len(moves)} verschoben/umbenannt, "
-              f"{n_changed} geändert "
-              f"({len(groups['old_outdated'])} in {n1} zu aktualisieren, "
-              f"{len(groups['new_outdated'])} in {n2} zu aktualisieren, "
-              f"{len(groups['unclear'])} manuell prüfen).")
+        print_summary(cmp)
+
+
+def main():
+    p = build_parser()
+    args = p.parse_args()
+    ignored = validate_args(p, args)
+    as_json = args.format == "json"
+    # Im JSON-Modus bleibt stdout dem JSON vorbehalten
+    log = (lambda *a, **k: print(*a, file=sys.stderr, **k)) if as_json else print
+
+    old, new = load_filtered(p, args)
+    n1, n2 = display_names(args.alt, args.neu)
+    cmp = compare_files(old, new, n1, n2, ignored, detect_moves=not args.no_detect_moves)
+    base = base_report(cmp, args.alt, args.neu, args.hide_trash, args.group,
+                       not args.no_detect_moves)
+
+    if not as_json:
+        print_header(cmp, args.hide_trash, args.group)
+        print()
+
+    if args.stats:
+        dump(stats_report(base, cmp)) if as_json else print_stats(old, new, n1, n2)
+    elif args.check:
+        dump(check_report(base, cmp)) if as_json else print_check(old, new, n1, n2)
+    elif args.password_check:
+        if as_json:
+            dump(password_report(base, cmp, args.min_length, args.max_age_days))
+        else:
+            print_password_check(old, new, n1, n2, args.min_length, args.max_age_days)
+    elif args.search is not None:
+        run_search(args, cmp, base, as_json)
+    else:
+        run_compare(args, cmp, base, as_json, log)

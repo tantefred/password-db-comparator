@@ -1,9 +1,10 @@
 """Vergleichslogik: verschobene Einträge, Aktualität, Merge und Suche."""
 
 from collections import defaultdict
+from dataclasses import dataclass
 
 from .common import human_delta, parse_ts
-from .constants import TIME_COL
+from .constants import EXPECTED, KEY_COLS, TIME_COL
 
 
 def find_moves(old, new, removed, added, ignored):
@@ -125,3 +126,49 @@ def search_matches(needle, old, new, removed, added, moves, groups):
         else:
             results.append(("identical", k))
     return len(matches), results
+
+
+@dataclass
+class Comparison:
+    """Ergebnis des Vergleichs zweier (bereits gefilterter) Dateien."""
+    old: dict
+    new: dict
+    n1: str
+    n2: str
+    ignored: list
+    compare_cols: list
+    removed: list    # nur in der ersten Datei (ohne verschobene)
+    added: list      # nur in der zweiten Datei (ohne verschobene)
+    moves: list      # (alter_key, neuer_key, sicherheit)
+    groups: dict     # 'old_outdated' | 'new_outdated' | 'unclear' -> [(key, diffs, delta)]
+
+    @property
+    def n_changed(self):
+        return sum(len(v) for v in self.groups.values())
+
+    @property
+    def identical(self):
+        return not (self.removed or self.added or self.n_changed or self.moves)
+
+
+def compare_files(old, new, n1, n2, ignored, detect_moves=True):
+    """Vergleicht zwei Dateien und gibt ein Comparison-Objekt zurück."""
+    removed = sorted(set(old) - set(new))
+    added = sorted(set(new) - set(old))
+    compare_cols = [c for c in EXPECTED if c not in KEY_COLS and c not in ignored]
+
+    # Verschobene/umbenannte Einträge aus removed/added herauslösen
+    moves = find_moves(old, new, removed, added, ignored) if detect_moves else []
+    moved_old = {m[0] for m in moves}
+    moved_new = {m[1] for m in moves}
+    removed = [k for k in removed if k not in moved_old]
+    added = [k for k in added if k not in moved_new]
+
+    groups = {"old_outdated": [], "new_outdated": [], "unclear": []}
+    for key in sorted(set(old) & set(new)):
+        diffs = [c for c in compare_cols if old[key][c] != new[key][c]]
+        if diffs:
+            grp, delta = classify(key, old, new, n1, n2)
+            groups[grp].append((key, diffs, delta))
+    return Comparison(old, new, n1, n2, list(ignored), compare_cols,
+                      removed, added, moves, groups)

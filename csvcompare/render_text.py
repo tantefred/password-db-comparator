@@ -88,3 +88,96 @@ def print_password_check(old, new, n1, n2, min_length, max_age_days):
             for line in lines:
                 print(f"    - {line}")
         print(f"  TOTP: {totp} von {len(entries)} Einträgen haben TOTP eingerichtet\n")
+
+
+def group_titles(n1, n2):
+    """Abschnittsüberschriften für geänderte Einträge, mit den echten Dateinamen."""
+    return {
+        "old_outdated": f"Geändert – {n2} ist aktueller ({n1} muss aktualisiert werden)",
+        "new_outdated": f"Geändert – {n1} ist aktueller ({n2} muss aktualisiert werden)",
+        "unclear": "Geändert – Aktualität unklar (manuell prüfen)",
+    }
+
+
+def print_header(cmp, hide_trash, group):
+    """Kopfzeilen: Dateien, Anzahl der Einträge und aktive Filter."""
+    print(f"{cmp.n1}: {len(cmp.old)} Einträge")
+    print(f"{cmp.n2}: {len(cmp.new)} Einträge")
+    if cmp.ignored:
+        print(f"Ignorierte Spalten: {', '.join(cmp.ignored)}")
+    if hide_trash:
+        print("Papierkorb-Gruppen ausgeblendet")
+    if group is not None:
+        print(f"Gruppenfilter: '{group.strip()}'")
+
+
+def print_search(query, n_matches, results, cmp, show_secrets):
+    """Gibt die Suchtreffer samt Status aus."""
+    n1, n2, old, new = cmp.n1, cmp.n2, cmp.old, cmp.new
+    titles = group_titles(n1, n2)
+    print(f"Suche nach '{query}': {n_matches} Treffer\n")
+    for kind, data in results:
+        if kind == "moved":
+            print(f"  Status: verschoben/umbenannt")
+            print_move(data, cmp.compare_cols, old, new, n1, n2, show_secrets)
+        elif kind == "only_old":
+            print(f"  - {label(data)}")
+            print(f"      Status: nur in {n1} (in {n2} nicht vorhanden)")
+            print(f"      Last Modified: {old[data][TIME_COL]}")
+        elif kind == "only_new":
+            print(f"  + {label(data)}")
+            print(f"      Status: nur in {n2} (in {n1} nicht vorhanden)")
+            print(f"      Last Modified: {new[data][TIME_COL]}")
+        elif kind == "changed":
+            k, grp, diffs, delta = data
+            print(f"  Status: {titles[grp]}")
+            print_changed(k, diffs, delta, old, new, show_secrets)
+        else:
+            print(f"  = {label(data)}")
+            print(f"      Status: identisch in beiden Dateien")
+            print(f"      Last Modified: {old[data][TIME_COL]}")
+        print()
+
+
+def print_compare(cmp, show_secrets):
+    """Gibt die Abschnitte des Vergleichs aus (verschoben, nur in einer Datei, geändert)."""
+    n1, n2, old, new = cmp.n1, cmp.n2, cmp.old, cmp.new
+    titles = group_titles(n1, n2)
+    if cmp.moves:
+        print(f"== Verschoben/umbenannt: {len(cmp.moves)} ==")
+        for move in cmp.moves:
+            print_move(move, cmp.compare_cols, old, new, n1, n2, show_secrets)
+        print()
+    if cmp.removed:
+        print(f"== Nur in {n1} (in {n2} nicht vorhanden): {len(cmp.removed)} ==")
+        for k in cmp.removed:
+            print(f"  - {label(k)}")
+        print()
+    if cmp.added:
+        print(f"== Nur in {n2} (in {n1} nicht vorhanden): {len(cmp.added)} ==")
+        for k in cmp.added:
+            print(f"  + {label(k)}")
+        print()
+
+    for grp in ("old_outdated", "new_outdated", "unclear"):
+        items = cmp.groups[grp]
+        if not items:
+            continue
+        print(f"== {titles[grp]}: {len(items)} ==")
+        for k, diffs, delta in items:
+            print_changed(k, diffs, delta, old, new, show_secrets)
+        print()
+
+
+def print_summary(cmp):
+    """Schlusszeile des Vergleichs."""
+    if cmp.identical:
+        print("Keine Unterschiede.")
+        return
+    g = cmp.groups
+    print(f"Zusammenfassung: {len(cmp.removed)} nur in {cmp.n1}, {len(cmp.added)} nur in {cmp.n2}, "
+          f"{len(cmp.moves)} verschoben/umbenannt, "
+          f"{cmp.n_changed} geändert "
+          f"({len(g['old_outdated'])} in {cmp.n1} zu aktualisieren, "
+          f"{len(g['new_outdated'])} in {cmp.n2} zu aktualisieren, "
+          f"{len(g['unclear'])} manuell prüfen).")
