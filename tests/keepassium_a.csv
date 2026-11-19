@@ -1,0 +1,10 @@
+Group,Title,Username,Password,URL,Notes,TOTP,Icon,Last Modified,Created
+Privat-DB/Web,Mail,max@example.org,pw-mail-1,https://mail.example.org,,JBSWY3DPEHPK3PXP,1,2024-01-10T10:00:00Z,2023-01-01T09:00:00Z
+Privat-DB/Web/Shops,Shop,max,pw-shop,https://shop.example.org,"Zeile 1
+Zeile 2",,1,2024-06-01T10:00:00Z,2023-01-01T09:00:00Z
+Privat-DB/Web,Forum,max,pw-forum,https://forum.example.org,,,1,2024-01-01T10:00:00Z,2023-01-01T09:00:00Z
+Privat-DB/Privat,Bank,max,pw-bank,https://bank.example.org,,JBSWY3DPEHPK3PXP,1,2024-01-01T10:00:00Z,2023-01-01T09:00:00Z
+Privat-DB,Router,admin,pw-router,http://192.168.0.1,,,1,2024-01-01T10:00:00Z,2023-01-01T09:00:00Z
+Privat-DB/Web,Alt-Account,max,pw-alt,,,,1,2024-01-01T10:00:00Z,2023-01-01T09:00:00Z
+Privat-DB/Privat,Streaming,max,pw-stream,https://stream.example.org,,,1,2024-01-01T10:00:00Z,2023-02-02T08:00:00Z
+Privat-DB/Papierkorb,Gelöscht,max,pw-weg,,,,1,2024-01-01T10:00:00Z,2023-01-01T09:00:00Z
