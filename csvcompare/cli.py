@@ -19,8 +19,15 @@ IGNORABLE = [c for c in EXPECTED if c not in KEY_COLS]
 
 def build_parser():
     p = argparse.ArgumentParser(description="KeePassium-CSV-Exporte vergleichen")
-    p.add_argument("alt", help="Erste CSV-Datei")
-    p.add_argument("neu", help="Zweite CSV-Datei")
+    p.add_argument("alt", nargs="?", help="Erste CSV-Datei")
+    p.add_argument("neu", nargs="?", help="Zweite CSV-Datei")
+    p.add_argument("--ui", action="store_true",
+                   help="Statt im Terminal in einer lokalen Weboberfläche arbeiten "
+                        "(Dateien werden dort ausgewählt; alle anderen Optionen entfallen)")
+    p.add_argument("--port", type=int, default=8765, metavar="N",
+                   help="Port für --ui (Standard: 8765; bei belegtem Port wird der nächste freie genommen)")
+    p.add_argument("--no-browser", action="store_true",
+                   help="Mit --ui den Browser nicht automatisch öffnen")
     p.add_argument("--show-secrets", action="store_true",
                    help="Passwörter/TOTP im Klartext anzeigen")
     p.add_argument("-i", "--ignore", nargs="+", default=[], metavar="SPALTE",
@@ -144,6 +151,14 @@ def run_exports(args, cmp, log):
 def main():
     p = build_parser()
     args = p.parse_args()
+    if args.ui:
+        if args.alt or args.neu:
+            p.error("--ui braucht keine Dateien; wähle sie in der Oberfläche aus.")
+        from .webui import serve  # nur laden, wenn die Oberfläche gebraucht wird
+        serve(args.port, open_browser=not args.no_browser)
+        return
+    if not (args.alt and args.neu):
+        p.error("the following arguments are required: alt, neu")
     ignored = validate_args(p, args)
     as_json = args.format == "json"
     # Im JSON-Modus bleibt stdout dem JSON vorbehalten
