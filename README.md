@@ -12,10 +12,27 @@ python3 compare_csv.py tests/alt.csv tests/neu.csv
 | `--show-secrets` | Passwörter/TOTP im Klartext anzeigen (sonst maskiert) |
 | `-i`, `--ignore SPALTE...` | Spalten beim Vergleich ignorieren, z. B. `--ignore Icon "Last Modified"` |
 | `-s`, `--search TEXT` | Nur Einträge zeigen, deren Gruppe/Titel/Username `TEXT` enthält, samt Status (nicht mit `--export-added` kombinierbar) |
-| `--export-added [DATEI]` | Neu hinzugefügte Einträge als CSV schreiben (Standard: `neue_eintraege.csv`; Papierkorb-Gruppen werden ausgelassen) |
+| `--no-detect-moves` | Verschobene/umbenannte Einträge nicht erkennen (sie erscheinen dann als „entfernt“ plus „hinzugefügt“) |
+| `--export-added [DATEI]` | Neu hinzugefügte Einträge als CSV schreiben (Standard: `neue_eintraege.csv`; Papierkorb-Gruppen werden ausgelassen; verschobene Einträge zählen nicht als neu) |
 
 Geänderte Einträge werden danach gruppiert, in welcher Datei die jeweils
 aktuellere Version liegt.
+
+## Verschobene und umbenannte Einträge
+
+Da Einträge über Gruppe, Titel und Username zugeordnet werden, würde ein
+verschobener oder umbenannter Eintrag sonst als „entfernt“ plus „hinzugefügt“
+erscheinen. Das Skript paart solche Einträge und zeigt sie in einem eigenen
+Abschnitt „Verschoben/umbenannt“:
+
+- **sicher:** `Created` ist identisch und nicht leer, und Passwort, URL oder
+  Titel stimmen überein.
+- **wahrscheinlich:** Username, Passwort und URL sind alle identisch und nicht leer.
+
+Gepaart wird nur bei eindeutigen 1:1-Treffern; mehrdeutige Fälle bleiben bei
+„entfernt“/„hinzugefügt“. Wird ein Eintrag gleichzeitig umbenannt und bekommt
+ein neues Passwort, wird er nicht erkannt. Per `--ignore` ignorierte Spalten
+zählen beim Paaren nicht mit (ohne `Created` entfällt die Stufe „sicher“).
 
 **Achtung:** Echte Exporte und `--export-added`-Dateien enthalten Passwörter im
 Klartext. Alle `*.csv` außer `tests/*.csv` sind per `.gitignore` ausgeschlossen.
