@@ -8,3 +8,6 @@ Web,Neuer-Account,max,pw-neu,https://neu.example.org,,,1,2024-04-01T10:00:00Z,20
 Papierkorb,Gelöscht,max,pw-weg,,,,1,2024-04-01T10:00:00Z,2023-01-01T09:00:00Z
 Privat,Bank,max,pw-bank,https://bank.example.org,,JBSWY3DPEHPK3PXP,1,2024-01-01T10:00:00Z,2023-01-01T09:00:00Z
 Privat,Icon-Test,max,pw-icon,,,,9,2024-01-01T10:00:00Z,2023-01-01T09:00:00Z
+Web,Streaming-Abo,max,pw-stream,https://stream.example.org,,,4,2024-01-01T10:00:00Z,2023-02-02T08:00:00Z
+Web,Zwilling A,max,pw-zwilling,,,,1,2024-01-01T10:00:00Z,2023-04-04T08:00:00Z
+Web,Zwilling B,max,pw-zwilling,,,,1,2024-01-01T10:00:00Z,2023-04-04T08:00:00Z

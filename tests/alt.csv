@@ -7,3 +7,5 @@ Web,Blog,max,pw-blog,,alte Notiz,,3,2024-01-01T10:00:00Z,2023-01-01T09:00:00Z
 Web,Alt-Account,max,pw-alt,,,,1,2024-01-01T10:00:00Z,2023-01-01T09:00:00Z
 Privat,Bank,max,pw-bank,https://bank.example.org,,JBSWY3DPEHPK3PXP,1,2024-01-01T10:00:00Z,2023-01-01T09:00:00Z
 Privat,Icon-Test,max,pw-icon,,,,1,2024-01-01T10:00:00Z,2023-01-01T09:00:00Z
+Privat,Streaming,max,pw-stream,https://stream.example.org,,,4,2024-01-01T10:00:00Z,2023-02-02T08:00:00Z
+Web,Zwilling,max,pw-zwilling,,,,1,2024-01-01T10:00:00Z,2023-04-04T08:00:00Z
