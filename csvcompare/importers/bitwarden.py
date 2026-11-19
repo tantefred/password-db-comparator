@@ -1,4 +1,4 @@
-"""Bitwarden/Vaultwarden-Exporte (unverschlüsseltes JSON; CSV folgt).
+"""Bitwarden/Vaultwarden-Exporte (unverschlüsseltes JSON und CSV).
 
 Es werden alle Felder erfasst, nicht nur die, die KeePass kennt: Favorit, Typ, Nachfrage,
 eigene Felder und alle URLs landen in eigenen Spalten, und der unveränderte Originaleintrag
@@ -6,6 +6,8 @@ steckt in ``SOURCE_KEY`` (mit ``id``, ``collectionIds``, ``passwordHistory`` usw
 späterer Export in Bitwarden-Formate nichts verliert.
 """
 
+import csv
+import io
 import json
 
 from ..columns import ALL_NAMES, SOURCE_KEY
@@ -13,9 +15,16 @@ from ..common import collapse_whitespace, normalize_timestamp
 from .base import CsvError, LoadResult
 
 FORMAT_JSON = "bitwarden-json"
+FORMAT_CSV = "bitwarden-csv"
 
 # Diese Spalten liefert Bitwarden; ein Icon gibt es nicht.
 PROVIDED = frozenset(ALL_NAMES) - {"Icon"}
+# Das CSV enthält zusätzlich keine Zeitstempel.
+PROVIDED_CSV = PROVIDED - {"Last Modified", "Created"}
+
+CSV_DETECT_COLUMNS = ("login_uri", "login_username")
+CSV_NO_TIMESTAMPS_NOTE = ("Dieser Export enthält keine Zeitstempel; bei Änderungen lässt sich "
+                          "nicht sagen, welche Datei aktueller ist.")
 
 TYPE_LOGIN, TYPE_NOTE = 1, 2
 SKIPPED_TYPE_NAMES = {3: ("Karte", "Karten"), 4: ("Identität", "Identitäten"),
@@ -111,3 +120,50 @@ def parse_json(text_, name):
                      if deleted == 1 else
                      f"{subject} enthalten und stehen in der Gruppe „{TRASH_GROUP}“.")
     return LoadResult(rows=rows, format=FORMAT_JSON, provided_columns=PROVIDED, notes=notes)
+
+
+def is_csv(header):
+    """Erkennt die Kopfzeile eines Bitwarden-CSV-Exports."""
+    return all(c in header for c in CSV_DETECT_COLUMNS)
+
+
+def parse_csv(text_, name):
+    """Liest einen unverschlüsselten Bitwarden/Vaultwarden-CSV-Export (Logins und Notizen).
+
+    Die Spalte ``fields`` steht dort als ``Name: Wert Name: Wert`` (durch Leerzeichen getrennt)
+    und lässt sich nicht eindeutig zerlegen; sie wird deshalb nur mit vereinheitlichten
+    Leerzeichen als Text verglichen. Das Original bleibt in ``SOURCE_KEY``.
+    """
+    reader = csv.DictReader(io.StringIO(text_, newline=""))
+    rows, skipped = [], {}
+    for source in reader:
+        kind = (source.get("type") or "login").strip().lower()
+        if kind not in ("login", "note"):
+            skipped[kind] = skipped.get(kind, 0) + 1
+            continue
+        uris = (source.get("login_uri") or "").split()  # mehrere URIs: eine pro Zeile
+
+        row = empty_row()
+        row["Group"] = text(source.get("folder"))
+        row["Title"] = text(source.get("name"))
+        row["Username"] = text(source.get("login_username"))
+        row["Password"] = text(source.get("login_password"))
+        row["URL"] = uris[0] if uris else ""
+        row["URLs"] = "\n".join(uris)
+        row["Notes"] = text(source.get("notes"))
+        row["TOTP"] = text(source.get("login_totp"))
+        row["Favorite"] = "1" if text(source.get("favorite")).strip() in ("1", "true", "True") else "0"
+        row["Type"] = kind
+        row["Reprompt"] = "1" if text(source.get("reprompt")).strip() in ("1", "true", "True") else "0"
+        row["Fields"] = collapse_whitespace(text(source.get("fields")))
+        row[SOURCE_KEY] = dict(source)
+        rows.append(row)
+
+    notes = []
+    if skipped:
+        n = sum(skipped.values())
+        names = ", ".join(f"{count} {kind}" for kind, count in sorted(skipped.items()))
+        notes.append(f"{n} {'Eintrag' if n == 1 else 'Einträge'} übersprungen ({names}); "
+                     f"verglichen werden Logins und sichere Notizen.")
+    notes.append(CSV_NO_TIMESTAMPS_NOTE)
+    return LoadResult(rows=rows, format=FORMAT_CSV, provided_columns=PROVIDED_CSV, notes=notes)
