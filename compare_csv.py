@@ -5,6 +5,7 @@ Aufruf: python3 compare_csv.py alt.csv neu.csv [--show-secrets] [--export-added 
 """
 import argparse
 import csv
+import json
 import os
 import sys
 from collections import Counter, defaultdict
@@ -326,6 +327,46 @@ def search_matches(needle, old, new, removed, added, moves, groups):
     return len(matches), results
 
 
+def entry_ref(key):
+    """Schlüssel eines Eintrags als JSON-Objekt."""
+    ref = {"group": key[0], "title": key[1], "username": key[2]}
+    if key[3] > 1:
+        ref["duplicate_index"] = key[3]
+    return ref
+
+
+def changed_json(ok, nk, diffs, delta, old, new, show_secrets):
+    """Geänderten (ggf. verschobenen) Eintrag als JSON-Objekt; Geheimnisse maskiert."""
+    changes = {}
+    for c in diffs:
+        a, b = old[ok][c], new[nk][c]
+        if c in SECRET_COLS and not show_secrets:
+            changes[c] = {"old": "(gesetzt)" if a else "(leer)",
+                          "new": "(gesetzt)" if b else "(leer)", "masked": True}
+        else:
+            changes[c] = {"old": a, "new": b}
+    d = {"entry": entry_ref(ok)}
+    if nk != ok:
+        d["moved_to"] = entry_ref(nk)
+    d["differing_columns"] = list(diffs)
+    d["only_timestamp"] = bool(diffs) and all(c == TIME_COL for c in diffs)
+    d["note"] = delta if diffs else None
+    d["last_modified"] = {"old": old[ok][TIME_COL], "new": new[nk][TIME_COL]}
+    d["changes"] = changes
+    return d
+
+
+def move_json(move, compare_cols, old, new, n1, n2, show_secrets):
+    """Verschobenes/umbenanntes Paar als JSON-Objekt."""
+    ok, nk, confidence = move
+    diffs = [c for c in compare_cols if old[ok][c] != new[nk][c]]
+    _, delta = classify(ok, old, new, n1, n2, new_key=nk)
+    d = changed_json(ok, nk, diffs, delta, old, new, show_secrets)
+    d["changed_key_columns"] = [c for c, a, b in zip(KEY_COLS, ok, nk) if a != b]
+    d["confidence"] = "certain" if confidence == "sicher" else "likely"
+    return d
+
+
 def display_names(path1, path2):
     """Dateinamen für die Ausgabe; bei gleichem Namen der volle Pfad."""
     n1, n2 = os.path.basename(path1), os.path.basename(path2)
@@ -453,6 +494,10 @@ def main():
     p.add_argument("--max-age-days", type=int, default=730, metavar="TAGE",
                    help="Maximales Alter seit der letzten Änderung für --password-check "
                         "(Standard: 730)")
+    p.add_argument("--format", choices=("text", "json"), default="text",
+                   help="Ausgabeformat (Standard: text). Bei json steht nur das JSON auf stdout; "
+                        "Hinweise zu Exporten gehen nach stderr. Passwörter bleiben maskiert, "
+                        "außer mit --show-secrets.")
     p.add_argument("--no-detect-moves", action="store_true",
                    help="Verschobene/umbenannte Einträge nicht erkennen "
                         "(sie erscheinen dann als 'entfernt' plus 'hinzugefügt')")
@@ -482,6 +527,11 @@ def main():
         p.error(f"{modes[0]} und {exports[0]} können nicht kombiniert werden.")
     if args.search is not None and not args.search.strip():
         p.error("--search benötigt einen nicht-leeren Suchbegriff.")
+    as_json = args.format == "json"
+    if as_json and modes:
+        p.error(f"--format json wird für {modes[0]} noch nicht unterstützt.")
+    # Im JSON-Modus bleibt stdout dem JSON vorbehalten
+    log = (lambda *a, **k: print(*a, file=sys.stderr, **k)) if as_json else print
 
     by_lower = {c.lower(): c for c in EXPECTED}
     ignored = []
@@ -528,14 +578,15 @@ def main():
             groups[grp].append((key, diffs, delta))
     n_changed = sum(len(v) for v in groups.values())
 
-    print(f"{n1}: {len(old)} Einträge")
-    print(f"{n2}: {len(new)} Einträge")
-    if ignored:
-        print(f"Ignorierte Spalten: {', '.join(ignored)}")
-    if args.hide_trash:
-        print("Papierkorb-Gruppen ausgeblendet")
-    if args.group is not None:
-        print(f"Gruppenfilter: '{args.group.strip()}'")
+    if not as_json:
+        print(f"{n1}: {len(old)} Einträge")
+        print(f"{n2}: {len(new)} Einträge")
+        if ignored:
+            print(f"Ignorierte Spalten: {', '.join(ignored)}")
+        if args.hide_trash:
+            print("Papierkorb-Gruppen ausgeblendet")
+        if args.group is not None:
+            print(f"Gruppenfilter: '{args.group.strip()}'")
     if args.stats:
         print()
         print_stats(old, new, n1, n2)
@@ -586,54 +637,92 @@ def main():
             print()
         return
 
-    if moves:
-        print(f"== Verschoben/umbenannt: {len(moves)} ==")
-        for move in moves:
-            print_move(move, compare_cols, old, new, n1, n2, args.show_secrets)
-        print()
-    if removed:
-        print(f"== Nur in {n1} (in {n2} nicht vorhanden): {len(removed)} ==")
-        for k in removed:
-            print(f"  - {label(k)}")
-        print()
-    if added:
-        print(f"== Nur in {n2} (in {n1} nicht vorhanden): {len(added)} ==")
-        for k in added:
-            print(f"  + {label(k)}")
-        print()
+    if not as_json:
+        if moves:
+            print(f"== Verschoben/umbenannt: {len(moves)} ==")
+            for move in moves:
+                print_move(move, compare_cols, old, new, n1, n2, args.show_secrets)
+            print()
+        if removed:
+            print(f"== Nur in {n1} (in {n2} nicht vorhanden): {len(removed)} ==")
+            for k in removed:
+                print(f"  - {label(k)}")
+            print()
+        if added:
+            print(f"== Nur in {n2} (in {n1} nicht vorhanden): {len(added)} ==")
+            for k in added:
+                print(f"  + {label(k)}")
+            print()
 
-    for grp in ("old_outdated", "new_outdated", "unclear"):
-        items = groups[grp]
-        if not items:
-            continue
-        print(f"== {titles[grp]}: {len(items)} ==")
-        for k, diffs, delta in items:
-            print_changed(k, diffs, delta, old, new, args.show_secrets)
-        print()
+        for grp in ("old_outdated", "new_outdated", "unclear"):
+            items = groups[grp]
+            if not items:
+                continue
+            print(f"== {titles[grp]}: {len(items)} ==")
+            for k, diffs, delta in items:
+                print_changed(k, diffs, delta, old, new, args.show_secrets)
+            print()
 
     if args.export_added:
         export = [k for k in added if not is_excluded(new[k])]
         skipped = len(added) - len(export)
         write_csv(args.export_added, [new[k] for k in export])
-        print(f"{len(export)} neue Einträge nach '{args.export_added}' exportiert "
+        log(f"{len(export)} neue Einträge nach '{args.export_added}' exportiert "
               f"({skipped} aus Papierkorb ausgelassen; Datei enthält Passwörter im Klartext).\n")
 
     if args.export_merged:
         rows, stats, conflicts = build_merged(old, new, removed, added, moves, compare_cols)
         export = [r for r in rows if not is_excluded(r)]
         write_csv(args.export_merged, export)
-        print(f"{len(export)} Einträge nach '{args.export_merged}' exportiert "
+        log(f"{len(export)} Einträge nach '{args.export_merged}' exportiert "
               f"({len(rows) - len(export)} aus Papierkorb ausgelassen; "
               f"Datei enthält Passwörter im Klartext).")
-        print(f"  nur in {n1}: {stats['nur_alt']}, nur in {n2}: {stats['nur_neu']}, "
+        log(f"  nur in {n1}: {stats['nur_alt']}, nur in {n2}: {stats['nur_neu']}, "
               f"neuere Version aus {n1}: {stats['alt_neuer']}, "
               f"aus {n2}: {stats['neu_neuer']}, unverändert: {stats['gleich']}")
         if conflicts:
-            print(f"  {len(conflicts)} Konflikt(e) mit unklarer Aktualität – "
+            log(f"  {len(conflicts)} Konflikt(e) mit unklarer Aktualität – "
                   f"Version aus {n2} übernommen, bitte prüfen:")
             for k in conflicts:
-                print(f"    ! {label(k)}")
-        print()
+                log(f"    ! {label(k)}")
+        log()
+
+    if as_json:
+        report = {
+            "mode": "compare",
+            "files": {
+                "old": {"name": n1, "path": args.alt, "entries": len(old)},
+                "new": {"name": n2, "path": args.neu, "entries": len(new)},
+            },
+            "filters": {
+                "ignored_columns": ignored,
+                "hide_trash": args.hide_trash,
+                "group": args.group.strip() if args.group is not None else None,
+                "detect_moves": not args.no_detect_moves,
+            },
+            "moved": [move_json(m, compare_cols, old, new, n1, n2, args.show_secrets)
+                      for m in moves],
+            "only_in_old": [entry_ref(k) for k in removed],
+            "only_in_new": [entry_ref(k) for k in added],
+            "changed": {
+                "newer_in_new": [changed_json(k, k, d, dl, old, new, args.show_secrets)
+                                 for k, d, dl in groups["old_outdated"]],
+                "newer_in_old": [changed_json(k, k, d, dl, old, new, args.show_secrets)
+                                 for k, d, dl in groups["new_outdated"]],
+                "unclear": [changed_json(k, k, d, dl, old, new, args.show_secrets)
+                            for k, d, dl in groups["unclear"]],
+            },
+            "summary": {
+                "only_in_old": len(removed), "only_in_new": len(added),
+                "moved": len(moves), "changed": n_changed,
+                "newer_in_new": len(groups["old_outdated"]),
+                "newer_in_old": len(groups["new_outdated"]),
+                "unclear": len(groups["unclear"]),
+                "identical": not (removed or added or n_changed or moves),
+            },
+        }
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return
 
     if not (removed or added or n_changed or moves):
         print("Keine Unterschiede.")
