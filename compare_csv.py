@@ -252,6 +252,9 @@ def main():
                    help="Nur Einträge anzeigen, deren Gruppe, Titel oder Username TEXT enthält "
                         "(Groß-/Kleinschreibung egal), samt Status. "
                         "Nicht kombinierbar mit --export-added.")
+    p.add_argument("--hide-trash", action="store_true",
+                   help="Einträge aus Papierkorb-Gruppen komplett ausblenden "
+                        "(Vergleich, Suche und Exporte)")
     p.add_argument("--no-detect-moves", action="store_true",
                    help="Verschobene/umbenannte Einträge nicht erkennen "
                         "(sie erscheinen dann als 'entfernt' plus 'hinzugefügt')")
@@ -289,6 +292,9 @@ def main():
             ignored.append(col)
 
     old, new = load(args.alt), load(args.neu)
+    if args.hide_trash:
+        old = {k: r for k, r in old.items() if not is_excluded(r)}
+        new = {k: r for k, r in new.items() if not is_excluded(r)}
     n1, n2 = display_names(args.alt, args.neu)
     removed = sorted(set(old) - set(new))
     added = sorted(set(new) - set(old))
@@ -314,6 +320,8 @@ def main():
     print(f"{n2}: {len(new)} Einträge")
     if ignored:
         print(f"Ignorierte Spalten: {', '.join(ignored)}")
+    if args.hide_trash:
+        print("Papierkorb-Gruppen ausgeblendet")
     print()
 
     titles = {
