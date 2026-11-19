@@ -1,0 +1,10 @@
+Group,Title,Username,Password,URL,Notes,TOTP,Icon,Last Modified,Created
+Web,Mail,max@example.org,pw-mail-2,https://mail.example.org,,,1,2024-05-10T10:00:00Z,2023-01-01T09:00:00Z
+Web,Shop,max,pw-shop,https://shop.example.org,"Zeile 1
+Zeile 2 geändert",,5,2024-03-01T10:00:00Z,2023-01-01T09:00:00Z
+Web,Forum,max,pw-forum,https://forum.example.org,,,2,2024-02-01T10:00:00Z,2023-01-01T09:00:00Z
+Web,Blog,max,pw-blog,,neue Notiz,,3,2024-01-01T10:00:00Z,2023-01-01T09:00:00Z
+Web,Neuer-Account,max,pw-neu,https://neu.example.org,,,1,2024-04-01T10:00:00Z,2024-04-01T10:00:00Z
+Papierkorb,Gelöscht,max,pw-weg,,,,1,2024-04-01T10:00:00Z,2023-01-01T09:00:00Z
+Privat,Bank,max,pw-bank,https://bank.example.org,,JBSWY3DPEHPK3PXP,1,2024-01-01T10:00:00Z,2023-01-01T09:00:00Z
+Privat,Icon-Test,max,pw-icon,,,,9,2024-01-01T10:00:00Z,2023-01-01T09:00:00Z
