@@ -21,10 +21,14 @@ def read_fixture(name):
         return f.read()
 
 
-def run(*args):
-    """Startet das Skript im Projektverzeichnis und gibt (returncode, stdout, stderr) zurück."""
+def run(*args, cwd=ROOT):
+    """Startet das Skript (im Projektordner oder in ``cwd``): (returncode, stdout, stderr)."""
     proc = subprocess.run(
-        [sys.executable, SCRIPT, *args], cwd=ROOT, capture_output=True, text=True, encoding="utf-8"
+        [sys.executable, SCRIPT, *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
     )
     return proc.returncode, proc.stdout, proc.stderr
 
