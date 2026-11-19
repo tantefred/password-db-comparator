@@ -186,6 +186,50 @@ class SmallLimitTests(ServerTestCase):
             conn.close()
 
 
+class StaticPageTests(unittest.TestCase):
+    """Die Oberfläche darf nichts nachladen und Dateiinhalte nie als HTML einsetzen."""
+
+    @classmethod
+    def setUpClass(cls):
+        with open(os.path.join(ROOT, "csvcompare", "web", "index.html"), encoding="utf-8") as f:
+            cls.html = f.read()
+
+    def test_token_placeholder_appears_once(self):
+        self.assertEqual(self.html.count("__TOKEN__"), 1)
+
+    def test_page_loads_nothing_from_outside(self):
+        import re
+        self.assertEqual(re.findall(r"https?://", self.html), [])
+        self.assertEqual(re.findall(r"""\b(?:src|href)\s*=\s*["'](?!#)""", self.html), [])
+        self.assertNotIn("@import", self.html)
+        self.assertNotIn("url(", self.html)
+
+    def test_file_contents_are_never_inserted_as_html(self):
+        for risky in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write",
+                      "eval(", "new Function", "srcdoc"):
+            self.assertNotIn(risky, self.html, risky)
+
+    def test_page_does_not_store_anything_in_the_browser(self):
+        for storage in ("localStorage", "sessionStorage", "indexedDB", "document.cookie"):
+            self.assertNotIn(storage, self.html, storage)
+
+    def test_javascript_syntax(self):
+        import re
+        import shutil
+        import tempfile
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node ist nicht installiert")
+        js = re.search(r"<script>(.*?)</script>", self.html, re.S).group(1)
+        with tempfile.NamedTemporaryFile("w", suffix=".js", encoding="utf-8", delete=False) as f:
+            f.write(js)
+        try:
+            proc = subprocess.run([node, "--check", f.name], capture_output=True, text=True)
+        finally:
+            os.unlink(f.name)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+
 class CommandLineEntryTests(unittest.TestCase):
     def test_ui_rejects_files(self):
         proc = subprocess.run([sys.executable, os.path.join(ROOT, "compare_csv.py"), "--ui",
