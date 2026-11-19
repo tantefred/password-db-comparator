@@ -1,52 +1,12 @@
-"""JSON-Darstellung der Ergebnisse."""
+"""JSON-Berichte: je Auswertungsmodus ein Bericht, den Terminal und Weboberfläche teilen."""
 
 import json
-from datetime import datetime, timezone
 
 from .analysis import audit_entries, check_entries, stats_rows
-from .columns import KEY_NAMES, MODIFIED, SECRET_NAMES
-from .compare import classify
+from .columns import MODIFIED, SECRET_NAMES
+from .compare import FRESHNESS, NEWER_IN_NEW, NEWER_IN_OLD, UNCLEAR
 from .display import mask_secret
-from .values import differing_columns
-
-
-def entry_ref(key):
-    """Schlüssel eines Eintrags als JSON-Objekt."""
-    ref = {"group": key[0], "title": key[1], "username": key[2]}
-    if key[3] > 1:
-        ref["duplicate_index"] = key[3]
-    return ref
-
-
-def changed_json(ok, nk, diffs, delta, old, new, show_secrets):
-    """Geänderten (ggf. verschobenen) Eintrag als JSON-Objekt; Geheimnisse maskiert."""
-    changes = {}
-    for c in diffs:
-        a, b = old[ok][c], new[nk][c]
-        if c in SECRET_NAMES and not show_secrets:
-            changes[c] = {"old": mask_secret(a), "new": mask_secret(b), "masked": True}
-        else:
-            changes[c] = {"old": a, "new": b}
-    d = {"entry": entry_ref(ok)}
-    if nk != ok:
-        d["moved_to"] = entry_ref(nk)
-    d["differing_columns"] = list(diffs)
-    d["only_timestamp"] = bool(diffs) and all(c == MODIFIED for c in diffs)
-    d["note"] = delta if diffs else None
-    d["last_modified"] = {"old": old[ok][MODIFIED], "new": new[nk][MODIFIED]}
-    d["changes"] = changes
-    return d
-
-
-def move_json(move, compare_cols, old, new, n1, n2, show_secrets):
-    """Verschobenes/umbenanntes Paar als JSON-Objekt."""
-    ok, nk, confidence = move
-    diffs = differing_columns(old[ok], new[nk], compare_cols)
-    _, delta = classify(ok, old, new, n1, n2, new_key=nk)
-    d = changed_json(ok, nk, diffs, delta, old, new, show_secrets)
-    d["changed_key_columns"] = [c for c, a, b in zip(KEY_NAMES, ok, nk) if a != b]
-    d["confidence"] = "certain" if confidence == "sicher" else "likely"
-    return d
+from .search import MOVED, ONLY_IN_NEW, search
 
 
 def dump(report):
@@ -54,111 +14,149 @@ def dump(report):
     print(json.dumps(report, ensure_ascii=False, indent=2))
 
 
-def base_report(cmp, path_old, path_new, hide_trash, group, detect_moves):
+def entry_ref(key):
+    """Schlüssel eines Eintrags als JSON-Objekt."""
+    ref = {"group": key.group, "title": key.title, "username": key.username}
+    if key.number > 1:
+        ref["duplicate_index"] = key.number
+    return ref
+
+
+def change_json(cmp, change, show_secrets):
+    """Einen Eintrag mit seinen Unterschieden als JSON-Objekt; Geheimnisse sind maskiert."""
+    old_row, new_row = cmp.old[change.key], cmp.new[change.new_key]
+    changes = {}
+    for column in change.columns:
+        old_value, new_value = old_row[column], new_row[column]
+        if column in SECRET_NAMES and not show_secrets:
+            changes[column] = {"old": mask_secret(old_value), "new": mask_secret(new_value),
+                               "masked": True}
+        else:
+            changes[column] = {"old": old_value, "new": new_value}
+    result = {"entry": entry_ref(change.key)}
+    if change.new_key != change.key:
+        result["moved_to"] = entry_ref(change.new_key)
+    result["differing_columns"] = list(change.columns)
+    result["only_timestamp"] = bool(change.columns) and all(c == MODIFIED for c in change.columns)
+    result["note"] = change.note if change.columns else None
+    result["last_modified"] = {"old": old_row[MODIFIED], "new": new_row[MODIFIED]}
+    result["changes"] = changes
+    return result
+
+
+def move_json(cmp, move, show_secrets):
+    """Ein verschobenes oder umbenanntes Paar als JSON-Objekt."""
+    result = change_json(cmp, cmp.move_change(move), show_secrets)
+    result["changed_key_columns"] = move.key_columns
+    result["confidence"] = move.confidence
+    return result
+
+
+def base_report(cmp, args):
     """Gemeinsamer Kopf aller Berichte: Dateien und aktive Filter."""
-    def side(name, path, entries, src):
+    def side(name, path, entries, source):
         return {"name": name, "path": path, "entries": len(entries),
-                "format": src.format if src else None,
-                "db_prefix": src.db_prefix if src else None,
-                "notes": list(src.notes) if src else []}
+                "format": source.format if source else None,
+                "db_prefix": source.db_prefix if source else None,
+                "notes": list(source.notes) if source else []}
 
     return {
         "files": {
-            "old": side(cmp.n1, path_old, cmp.old, cmp.src_old),
-            "new": side(cmp.n2, path_new, cmp.new, cmp.src_new),
+            "old": side(cmp.old_name, args.alt, cmp.old, cmp.old_source),
+            "new": side(cmp.new_name, args.neu, cmp.new, cmp.new_source),
         },
         "filters": {
             "ignored_columns": cmp.ignored,
-            "auto_ignored": [{"column": col, "reason": reason}
-                             for col, reason in (cmp.auto_ignored or [])],
-            "hide_trash": hide_trash,
-            "group": group.strip() if group is not None else None,
-            "detect_moves": detect_moves,
+            "auto_ignored": [{"column": column, "reason": reason}
+                             for column, reason in cmp.auto_ignored],
+            "hide_trash": args.hide_trash,
+            "group": args.group.strip() if args.group is not None else None,
+            "detect_moves": not args.no_detect_moves,
         },
     }
 
 
-def _findings(findings):
-    return [{"category": t, "count": len(ls), "items": ls} for t, ls in findings]
+def findings_json(findings):
+    return [{"category": f.title, "count": len(f.lines), "items": f.lines} for f in findings]
 
 
 def stats_report(base, cmp):
     rows = stats_rows(cmp.old, cmp.new)
     return {"mode": "stats", **base,
-            "groups": [{"group": g, "old": a, "new": b, "difference": b - a}
-                       for g, a, b in rows],
+            "groups": [{"group": group, "old": old, "new": new, "difference": new - old}
+                       for group, old, new in rows],
             "total": {"old": len(cmp.old), "new": len(cmp.new),
                       "difference": len(cmp.new) - len(cmp.old)}}
 
 
 def check_report(base, cmp):
+    sides = ((cmp.old_name, cmp.old), (cmp.new_name, cmp.new))
     return {"mode": "check", **base,
-            "results": [{"file": name, "findings": _findings(check_entries(entries))}
-                        for name, entries in ((cmp.n1, cmp.old), (cmp.n2, cmp.new))]}
+            "results": [{"file": name, "findings": findings_json(check_entries(entries))}
+                        for name, entries in sides]}
 
 
 def password_report(base, cmp, min_length, max_age_days):
-    now = datetime.now(timezone.utc)
     results = []
-    for name, entries in ((cmp.n1, cmp.old), (cmp.n2, cmp.new)):
-        findings, totp = audit_entries(entries, min_length, max_age_days, now)
-        results.append({"file": name, "findings": _findings(findings),
-                        "totp": {"with_totp": totp, "entries": len(entries)}})
+    for name, entries in ((cmp.old_name, cmp.old), (cmp.new_name, cmp.new)):
+        findings, totp_count = audit_entries(entries, min_length, max_age_days)
+        results.append({"file": name, "findings": findings_json(findings),
+                        "totp": {"with_totp": totp_count, "entries": len(entries)}})
     return {"mode": "password-check", **base,
             "thresholds": {"min_length": min_length, "max_age_days": max_age_days},
             "results": results}
 
 
-def search_report(base, cmp, query, n_matches, results, show_secrets):
-    status_of = {"old_outdated": "newer_in_new", "new_outdated": "newer_in_old",
-                 "unclear": "unclear"}
-    old, new, n1, n2 = cmp.old, cmp.new, cmp.n1, cmp.n2
-    items = []
-    for kind, data in results:
-        if kind == "moved":
-            items.append({"status": "moved", **move_json(
-                data, cmp.compare_cols, old, new, n1, n2, show_secrets)})
-        elif kind == "changed":
-            k, grp, diffs, delta = data
-            items.append({"status": status_of[grp], **changed_json(
-                k, k, diffs, delta, old, new, show_secrets)})
-        elif kind == "only_old":
-            items.append({"status": "only_in_old", "entry": entry_ref(data),
-                          "last_modified": old[data][MODIFIED]})
-        elif kind == "only_new":
-            items.append({"status": "only_in_new", "entry": entry_ref(data),
-                          "last_modified": new[data][MODIFIED]})
-        else:
-            items.append({"status": "identical", "entry": entry_ref(data),
-                          "last_modified": old[data][MODIFIED]})
+def search_report(base, cmp, query, hits, show_secrets):
+    results = []
+    for hit in hits:
+        if hit.status == MOVED:
+            results.append({"status": hit.status, **move_json(cmp, hit.item, show_secrets)})
+        elif hit.status in FRESHNESS:
+            results.append({"status": hit.status, **change_json(cmp, hit.item, show_secrets)})
+        else:  # nur in einer Datei oder identisch
+            entries = cmp.new if hit.status == ONLY_IN_NEW else cmp.old
+            results.append({"status": hit.status, "entry": entry_ref(hit.item),
+                            "last_modified": entries[hit.item][MODIFIED]})
     return {"mode": "search", **base, "query": query,
-            "match_count": n_matches, "results": items}
+            "match_count": len(hits), "results": results}
 
 
 def compare_report(base, cmp, show_secrets):
-    old, new, n1, n2, g = cmp.old, cmp.new, cmp.n1, cmp.n2, cmp.groups
-
-    def changed(items):
-        return [changed_json(k, k, d, dl, old, new, show_secrets) for k, d, dl in items]
-
+    count = {freshness: len(cmp.changes[freshness]) for freshness in FRESHNESS}
     return {
         "mode": "compare",
         **base,
-        "moved": [move_json(m, cmp.compare_cols, old, new, n1, n2, show_secrets)
-                  for m in cmp.moves],
-        "only_in_old": [entry_ref(k) for k in cmp.removed],
-        "only_in_new": [entry_ref(k) for k in cmp.added],
-        "changed": {
-            "newer_in_new": changed(g["old_outdated"]),
-            "newer_in_old": changed(g["new_outdated"]),
-            "unclear": changed(g["unclear"]),
-        },
+        "moved": [move_json(cmp, move, show_secrets) for move in cmp.moves],
+        "only_in_old": [entry_ref(key) for key in cmp.only_old],
+        "only_in_new": [entry_ref(key) for key in cmp.only_new],
+        "changed": {freshness: [change_json(cmp, change, show_secrets)
+                                for change in cmp.changes[freshness]]
+                    for freshness in FRESHNESS},
         "summary": {
-            "only_in_old": len(cmp.removed), "only_in_new": len(cmp.added),
+            "only_in_old": len(cmp.only_old), "only_in_new": len(cmp.only_new),
             "moved": len(cmp.moves), "changed": cmp.n_changed,
-            "newer_in_new": len(g["old_outdated"]),
-            "newer_in_old": len(g["new_outdated"]),
-            "unclear": len(g["unclear"]),
+            "newer_in_new": count[NEWER_IN_NEW],
+            "newer_in_old": count[NEWER_IN_OLD],
+            "unclear": count[UNCLEAR],
             "identical": cmp.identical,
         },
     }
+
+
+def build_report(args, cmp):
+    """Erzeugt den Bericht zum gewählten Modus: (Bericht, Exitcode).
+
+    Der Exitcode ist 1 nur bei einer Suche ohne Treffer.
+    """
+    base = base_report(cmp, args)
+    if args.stats:
+        return stats_report(base, cmp), 0
+    if args.check:
+        return check_report(base, cmp), 0
+    if args.password_check:
+        return password_report(base, cmp, args.min_length, args.max_age_days), 0
+    if args.search is not None:
+        hits = search(cmp, args.search)
+        return search_report(base, cmp, args.search, hits, args.show_secrets), 0 if hits else 1
+    return compare_report(base, cmp, args.show_secrets), 0

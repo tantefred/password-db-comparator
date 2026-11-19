@@ -12,8 +12,7 @@ from .compare import compare_files
 from .entries import entries_from_rows
 from .exports import added_export, loss_report, merged_export
 from .importers import CsvError, load_any
-from .render_json import base_report, entry_ref
-from .report import build_report
+from .render_json import build_report, entry_ref
 from .writers import DEFAULT_WRITER
 
 
@@ -93,6 +92,7 @@ def analyze(old_name, old_text, new_name, new_text, options):
     parser = build_parser()
     parser.error = fail  # statt Programmabbruch eine Ausnahme auslösen
     args = parser.parse_args(["alt", "neu", *argv])
+    args.alt, args.neu = old_name, new_name  # im Bericht als Pfade ausgewiesen
     ignored = validate_args(parser, args)
 
     try:
@@ -103,14 +103,13 @@ def analyze(old_name, old_text, new_name, new_text, options):
     old, new = filter_entries(parser, args, entries_from_rows(src_old.rows),
                               entries_from_rows(src_new.rows))
 
-    n1, n2 = old_name, new_name
-    if n1 == n2:  # gleicher Dateiname: im Bericht unterscheidbar machen
-        n1, n2 = f"{old_name} (1)", f"{new_name} (2)"
-    cmp = compare_files(old, new, n1, n2, ignored, detect_moves=not args.no_detect_moves,
-                        src_old=src_old, src_new=src_new)
-    base = base_report(cmp, old_name, new_name, args.hide_trash, args.group,
-                       not args.no_detect_moves)
-    report, status = build_report(args, cmp, base)
+    shown_old, shown_new = old_name, new_name
+    if shown_old == shown_new:  # gleicher Dateiname: im Bericht unterscheidbar machen
+        shown_old, shown_new = f"{old_name} (1)", f"{new_name} (2)"
+    cmp = compare_files(old, new, shown_old, shown_new, ignored,
+                        detect_moves=not args.no_detect_moves,
+                        old_source=src_old, new_source=src_new)
+    report, status = build_report(args, cmp)
 
     exports = {}
     if args.export_added:

@@ -221,6 +221,9 @@ class SearchTests(unittest.TestCase):
     def test_search_reports_moved_pair_once(self):
         _, r = run_json(ALT, NEU, "--search", "streaming")
         self.assertEqual([x["status"] for x in r["results"]], ["moved"])
+        self.assertEqual(r["match_count"], 1)   # ein Paar ist ein Treffer, nicht zwei
+        _, out, _ = run(ALT, NEU, "--search", "streaming")
+        self.assertIn("1 Treffer", out)
 
     def test_search_statuses(self):
         _, r = run_json(ALT, NEU, "--search", "bank")

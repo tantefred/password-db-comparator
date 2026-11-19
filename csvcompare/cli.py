@@ -4,16 +4,16 @@ import argparse
 import sys
 
 from .columns import ALL_NAMES, KEY_NAMES, VALUE_NAMES
-from .compare import compare_files, search_matches
+from .compare import compare_files
 from .display import display_names
 from .entries import entries_from_rows, is_trash
 from .exports import export_added, export_merged
 from .importers import CsvError, read_file
-from .render_json import base_report, dump
+from .render_json import build_report, dump
 from .render_text import (print_check, print_compare, print_header,
                           print_password_check, print_search, print_stats,
                           print_summary)
-from .report import build_report
+from .search import search
 
 
 IGNORABLE = VALUE_NAMES
@@ -145,12 +145,11 @@ def load_filtered(p, args):
 
 
 def run_search(args, cmp):
-    n_matches, results = search_matches(args.search, cmp.old, cmp.new, cmp.removed,
-                                        cmp.added, cmp.moves, cmp.groups)
-    if not n_matches:
+    hits = search(cmp, args.search)
+    if not hits:
         sys.exit(f"Kein Eintrag gefunden, dessen Gruppe, Titel oder Username "
                  f"'{args.search}' enthält.")
-    print_search(args.search, n_matches, results, cmp, args.show_secrets)
+    print_search(cmp, args.search, hits, args.show_secrets)
 
 
 def run_exports(args, cmp, log):
@@ -177,26 +176,25 @@ def main():
     log = (lambda *a, **k: print(*a, file=sys.stderr, **k)) if as_json else print
 
     old, new, src_old, src_new = load_filtered(p, args)
-    n1, n2 = display_names(args.alt, args.neu)
-    cmp = compare_files(old, new, n1, n2, ignored, detect_moves=not args.no_detect_moves,
-                        src_old=src_old, src_new=src_new)
-    base = base_report(cmp, args.alt, args.neu, args.hide_trash, args.group,
-                       not args.no_detect_moves)
+    old_name, new_name = display_names(args.alt, args.neu)
+    cmp = compare_files(old, new, old_name, new_name, ignored,
+                        detect_moves=not args.no_detect_moves,
+                        old_source=src_old, new_source=src_new)
 
     if as_json:
         run_exports(args, cmp, log)
-        report, status = build_report(args, cmp, base)
+        report, status = build_report(args, cmp)
         dump(report)
         sys.exit(status)
 
-    print_header(cmp, args.hide_trash, args.group)
+    print_header(cmp, args)
     print()
     if args.stats:
-        print_stats(old, new, n1, n2)
+        print_stats(cmp)
     elif args.check:
-        print_check(old, new, n1, n2)
+        print_check(cmp)
     elif args.password_check:
-        print_password_check(old, new, n1, n2, args.min_length, args.max_age_days)
+        print_password_check(cmp, args.min_length, args.max_age_days)
     elif args.search is not None:
         run_search(args, cmp)
     else:

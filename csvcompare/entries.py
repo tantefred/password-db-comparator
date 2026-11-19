@@ -1,11 +1,11 @@
 """Einträge: Schlüssel bilden, beschriften und als Papierkorb-Eintrag erkennen.
 
-Ein Eintrag wird durch den Schlüssel ``(Gruppe, Titel, Username, Nummer)`` bezeichnet; die
-Nummer unterscheidet Einträge, die sonst gleich heißen. Die Zeile dazu ist ein Dict mit allen
-Spalten (siehe ``columns.py``).
+Ein Eintrag wird durch einen ``Key`` bezeichnet; die Nummer unterscheidet Einträge, die sonst
+gleich heißen. Die Zeile dazu ist ein Dict mit allen Spalten (siehe ``columns.py``).
 """
 
 from collections import defaultdict
+from typing import NamedTuple
 
 from .columns import KEY_NAMES
 
@@ -13,25 +13,36 @@ from .columns import KEY_NAMES
 TRASH_PATTERNS = ("papierkorb", "recycle bin")
 
 
+class Key(NamedTuple):
+    group: str
+    title: str
+    username: str
+    number: int = 1   # unterscheidet Einträge mit sonst gleichem Schlüssel
+
+    @property
+    def identity(self):
+        """Gruppe, Titel und Username ohne die Nummer."""
+        return self[:3]
+
+
 def entries_from_rows(rows):
-    """Bildet aus Zeilen ein Dict {Schlüssel: Zeile}; doppelte Schlüssel werden nummeriert."""
+    """Bildet aus Zeilen ein Dict {Key: Zeile}; doppelte Schlüssel werden nummeriert."""
     seen = defaultdict(int)
     entries = {}
     for row in rows:
-        base = tuple(row[name] for name in KEY_NAMES)
-        seen[base] += 1
-        entries[base + (seen[base],)] = row
+        identity = tuple(row[name] for name in KEY_NAMES)
+        seen[identity] += 1
+        entries[Key(*identity, seen[identity])] = row
     return entries
 
 
 def entry_label(key):
     """Lesbare Bezeichnung eines Eintrags, z. B. ``Web / Mail  [max]``."""
-    group, title, username, number = key
-    text = f"{group or '(ohne Gruppe)'} / {title or '(ohne Titel)'}"
-    if username:
-        text += f"  [{username}]"
-    if number > 1:
-        text += f"  #{number}"
+    text = f"{key.group or '(ohne Gruppe)'} / {key.title or '(ohne Titel)'}"
+    if key.username:
+        text += f"  [{key.username}]"
+    if key.number > 1:
+        text += f"  #{key.number}"
     return text
 
 
