@@ -150,18 +150,22 @@ def build_merged(old, new, removed, added, moves, compare_cols):
     return rows, stats, conflicts
 
 
-def print_stats(old, new, n1, n2):
-    """Gibt die Anzahl der Einträge pro Gruppe für beide Dateien aus."""
+def stats_rows(old, new):
+    """Einträge pro Gruppe in beiden Dateien: Liste (gruppe, alt, neu)."""
     c_old = Counter(r["Group"] for r in old.values())
     c_new = Counter(r["Group"] for r in new.values())
-    groups = sorted(set(c_old) | set(c_new))
-    names = [g or "(ohne Gruppe)" for g in groups]
+    return [(g, c_old[g], c_new[g]) for g in sorted(set(c_old) | set(c_new))]
+
+
+def print_stats(old, new, n1, n2):
+    """Gibt die Anzahl der Einträge pro Gruppe für beide Dateien aus."""
+    rows = stats_rows(old, new)
+    names = [g or "(ohne Gruppe)" for g, _, _ in rows]
     w = max([len(x) for x in names] + [len("Gesamt"), len("Gruppe")])
     w1, w2 = max(len(n1), 6), max(len(n2), 6)
     print(f"{'Gruppe':<{w}}  {n1:>{w1}}  {n2:>{w2}}  Differenz")
     print("-" * (w + w1 + w2 + 15))
-    for g, name in zip(groups, names):
-        a, b = c_old[g], c_new[g]
+    for name, (_, a, b) in zip(names, rows):
         print(f"{name:<{w}}  {a:>{w1}}  {b:>{w2}}  {b - a:+d}")
     print("-" * (w + w1 + w2 + 15))
     a, b = len(old), len(new)
@@ -528,8 +532,6 @@ def main():
     if args.search is not None and not args.search.strip():
         p.error("--search benötigt einen nicht-leeren Suchbegriff.")
     as_json = args.format == "json"
-    if as_json and modes:
-        p.error(f"--format json wird für {modes[0]} noch nicht unterstützt.")
     # Im JSON-Modus bleibt stdout dem JSON vorbehalten
     log = (lambda *a, **k: print(*a, file=sys.stderr, **k)) if as_json else print
 
@@ -587,19 +589,64 @@ def main():
             print("Papierkorb-Gruppen ausgeblendet")
         if args.group is not None:
             print(f"Gruppenfilter: '{args.group.strip()}'")
+    base = {
+        "files": {
+            "old": {"name": n1, "path": args.alt, "entries": len(old)},
+            "new": {"name": n2, "path": args.neu, "entries": len(new)},
+        },
+        "filters": {
+            "ignored_columns": ignored,
+            "hide_trash": args.hide_trash,
+            "group": args.group.strip() if args.group is not None else None,
+            "detect_moves": not args.no_detect_moves,
+        },
+    }
     if args.stats:
+        if as_json:
+            rows = stats_rows(old, new)
+            report = {"mode": "stats", **base,
+                      "groups": [{"group": g, "old": a, "new": b, "difference": b - a}
+                                 for g, a, b in rows],
+                      "total": {"old": len(old), "new": len(new),
+                                "difference": len(new) - len(old)}}
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+            return
         print()
         print_stats(old, new, n1, n2)
         return
     if args.check:
+        if as_json:
+            report = {"mode": "check", **base,
+                      "results": [{"file": name, "findings": [
+                          {"category": t, "count": len(ls), "items": ls}
+                          for t, ls in check_entries(entries)]}
+                          for name, entries in ((n1, old), (n2, new))]}
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+            return
         print()
         print_check(old, new, n1, n2)
         return
     if args.password_check:
+        if as_json:
+            now = datetime.now(timezone.utc)
+            results = []
+            for name, entries in ((n1, old), (n2, new)):
+                findings, totp = audit_entries(entries, args.min_length, args.max_age_days, now)
+                results.append({"file": name,
+                                "findings": [{"category": t, "count": len(ls), "items": ls}
+                                             for t, ls in findings],
+                                "totp": {"with_totp": totp, "entries": len(entries)}})
+            report = {"mode": "password-check", **base,
+                      "thresholds": {"min_length": args.min_length,
+                                     "max_age_days": args.max_age_days},
+                      "results": results}
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+            return
         print()
         print_password_check(old, new, n1, n2, args.min_length, args.max_age_days)
         return
-    print()
+    if not as_json:
+        print()
 
     titles = {
         "old_outdated": f"Geändert – {n2} ist aktueller ({n1} muss aktualisiert werden)",
@@ -610,6 +657,31 @@ def main():
     if args.search is not None:
         n_matches, results = search_matches(args.search, old, new, removed, added,
                                             moves, groups)
+        if as_json:
+            status_of = {"old_outdated": "newer_in_new", "new_outdated": "newer_in_old",
+                         "unclear": "unclear"}
+            items = []
+            for kind, data in results:
+                if kind == "moved":
+                    items.append({"status": "moved", **move_json(
+                        data, compare_cols, old, new, n1, n2, args.show_secrets)})
+                elif kind == "changed":
+                    k, grp, diffs, delta = data
+                    items.append({"status": status_of[grp], **changed_json(
+                        k, k, diffs, delta, old, new, args.show_secrets)})
+                elif kind == "only_old":
+                    items.append({"status": "only_in_old", "entry": entry_ref(data),
+                                  "last_modified": old[data][TIME_COL]})
+                elif kind == "only_new":
+                    items.append({"status": "only_in_new", "entry": entry_ref(data),
+                                  "last_modified": new[data][TIME_COL]})
+                else:
+                    items.append({"status": "identical", "entry": entry_ref(data),
+                                  "last_modified": old[data][TIME_COL]})
+            print(json.dumps({"mode": "search", **base, "query": args.search,
+                              "match_count": n_matches, "results": items},
+                             ensure_ascii=False, indent=2))
+            sys.exit(0 if n_matches else 1)
         if not n_matches:
             sys.exit(f"Kein Eintrag gefunden, dessen Gruppe, Titel oder Username "
                      f"'{args.search}' enthält.")
@@ -690,16 +762,7 @@ def main():
     if as_json:
         report = {
             "mode": "compare",
-            "files": {
-                "old": {"name": n1, "path": args.alt, "entries": len(old)},
-                "new": {"name": n2, "path": args.neu, "entries": len(new)},
-            },
-            "filters": {
-                "ignored_columns": ignored,
-                "hide_trash": args.hide_trash,
-                "group": args.group.strip() if args.group is not None else None,
-                "detect_moves": not args.no_detect_moves,
-            },
+            **base,
             "moved": [move_json(m, compare_cols, old, new, n1, n2, args.show_secrets)
                       for m in moves],
             "only_in_old": [entry_ref(k) for k in removed],
