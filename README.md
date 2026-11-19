@@ -15,6 +15,7 @@ python3 compare_csv.py tests/alt.csv tests/neu.csv
 | `--hide-trash` | Papierkorb-Gruppen komplett ausblenden (Vergleich, Suche und Exporte) |
 | `-g`, `--group TEXT` | Nur Einträge betrachten, deren Gruppenpfad `TEXT` enthält (Groß-/Kleinschreibung egal) |
 | `--stats` | Nur die Anzahl der Einträge pro Gruppe in beiden Dateien samt Differenz anzeigen (mit `--group`/`--hide-trash` kombinierbar, nicht mit `--search` oder den Exporten) |
+| `--check` | Jede Datei einzeln auf Dubletten und kaputte Einträge prüfen (ohne Passwörter anzuzeigen; mit `--group`/`--hide-trash` kombinierbar, nicht mit `--search`, `--stats` oder den Exporten) |
 | `--no-detect-moves` | Verschobene/umbenannte Einträge nicht erkennen (sie erscheinen dann als „entfernt“ plus „hinzugefügt“) |
 | `--export-added [DATEI]` | Neu hinzugefügte Einträge als CSV schreiben (Standard: `neue_eintraege.csv`; Papierkorb-Gruppen werden ausgelassen; verschobene Einträge zählen nicht als neu) |
 | `--export-merged [DATEI]` | Zusammengeführte CSV schreiben (Standard: `merged.csv`): alle Einträge beider Dateien, bei Unterschieden die jeweils neuere Version; Papierkorb-Gruppen werden ausgelassen (nicht mit `--search` kombinierbar) |
@@ -28,6 +29,19 @@ aktuellere Version liegt.
 damit auch für Suche und Exporte. Dadurch wirkt ein Eintrag, der in den Papierkorb
 oder aus der gefilterten Gruppe heraus verschoben wurde, als „nur in einer Datei“
 vorhanden. Beide Filter lassen sich kombinieren.
+
+## Prüfung (`--check`)
+
+Prüft beide Dateien jeweils für sich und listet:
+
+- doppelte Einträge (gleiche Gruppe, Titel und Username),
+- gleichen Titel und Username in verschiedenen Gruppen,
+- gleiche URL und Username in verschiedenen Einträgen,
+- Einträge ohne Passwort oder ohne Titel,
+- offensichtlich ungültige URLs (Leerzeichen, kein Host, Host ohne Punkt;
+  `localhost`, IP-Adressen und URLs ohne Schema sind erlaubt).
+
+Passwörter werden dabei nie ausgegeben. Beispieldaten: `tests/probleme.csv`.
 
 ## Merge-Export
 
