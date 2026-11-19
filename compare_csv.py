@@ -255,6 +255,10 @@ def main():
     p.add_argument("--hide-trash", action="store_true",
                    help="Einträge aus Papierkorb-Gruppen komplett ausblenden "
                         "(Vergleich, Suche und Exporte)")
+    p.add_argument("-g", "--group", metavar="TEXT",
+                   help="Nur Einträge betrachten, deren Gruppenpfad TEXT enthält "
+                        "(Groß-/Kleinschreibung egal), z. B. --group Privat. "
+                        "Gilt für Vergleich, Suche und Exporte.")
     p.add_argument("--no-detect-moves", action="store_true",
                    help="Verschobene/umbenannte Einträge nicht erkennen "
                         "(sie erscheinen dann als 'entfernt' plus 'hinzugefügt')")
@@ -295,6 +299,12 @@ def main():
     if args.hide_trash:
         old = {k: r for k, r in old.items() if not is_excluded(r)}
         new = {k: r for k, r in new.items() if not is_excluded(r)}
+    if args.group is not None:
+        needle = args.group.strip().lower()
+        if not needle:
+            p.error("--group benötigt einen nicht-leeren Suchbegriff.")
+        old = {k: r for k, r in old.items() if needle in r["Group"].lower()}
+        new = {k: r for k, r in new.items() if needle in r["Group"].lower()}
     n1, n2 = display_names(args.alt, args.neu)
     removed = sorted(set(old) - set(new))
     added = sorted(set(new) - set(old))
@@ -322,6 +332,8 @@ def main():
         print(f"Ignorierte Spalten: {', '.join(ignored)}")
     if args.hide_trash:
         print("Papierkorb-Gruppen ausgeblendet")
+    if args.group is not None:
+        print(f"Gruppenfilter: '{args.group.strip()}'")
     print()
 
     titles = {
