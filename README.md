@@ -11,12 +11,23 @@ python3 compare_csv.py tests/alt.csv tests/neu.csv
 |---|---|
 | `--show-secrets` | Passwörter/TOTP im Klartext anzeigen (sonst maskiert) |
 | `-i`, `--ignore SPALTE...` | Spalten beim Vergleich ignorieren, z. B. `--ignore Icon "Last Modified"` |
-| `-s`, `--search TEXT` | Nur Einträge zeigen, deren Gruppe/Titel/Username `TEXT` enthält, samt Status (nicht mit `--export-added` kombinierbar) |
+| `-s`, `--search TEXT` | Nur Einträge zeigen, deren Gruppe/Titel/Username `TEXT` enthält, samt Status (nicht mit `--export-added` / `--export-merged` kombinierbar) |
 | `--no-detect-moves` | Verschobene/umbenannte Einträge nicht erkennen (sie erscheinen dann als „entfernt“ plus „hinzugefügt“) |
 | `--export-added [DATEI]` | Neu hinzugefügte Einträge als CSV schreiben (Standard: `neue_eintraege.csv`; Papierkorb-Gruppen werden ausgelassen; verschobene Einträge zählen nicht als neu) |
+| `--export-merged [DATEI]` | Zusammengeführte CSV schreiben (Standard: `merged.csv`): alle Einträge beider Dateien, bei Unterschieden die jeweils neuere Version; Papierkorb-Gruppen werden ausgelassen (nicht mit `--search` kombinierbar) |
 
 Geänderte Einträge werden danach gruppiert, in welcher Datei die jeweils
 aktuellere Version liegt.
+
+## Merge-Export
+
+`--export-merged` schreibt eine CSV, die alle Einträge beider Dateien enthält.
+Gibt es einen Eintrag in beiden Dateien, wird die Version mit dem neueren
+`Last Modified` übernommen (auch bei verschobenen/umbenannten Einträgen). Ist die
+Aktualität nicht bestimmbar (gleicher oder fehlender Zeitstempel) und der Inhalt
+verschieden, wird die Version aus der zweiten Datei genommen und der Eintrag als
+Konflikt aufgelistet. Die Datei lässt sich in KeePassium importieren; sie enthält
+Passwörter im Klartext.
 
 ## Verschobene und umbenannte Einträge
 
