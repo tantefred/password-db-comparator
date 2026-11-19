@@ -1,0 +1,11 @@
+folder,favorite,type,name,notes,fields,reprompt,login_uri,login_username,login_password,login_totp
+Web,1,login,Mail,,PIN: 1234 Konto: Haupt konto,0,https://mail.example.org,max@example.org,pw-mail-1,otpauth://totp/Mail:max?secret=JBSWY3DPEHPK3PXP&issuer=Mail
+Web/Shops,,login,Shop,"Zeile 1
+Zeile 2",,0,"https://shop.example.org
+https://shop.example.org/login",max,pw-shop,
+Web,,login,Forum,,,0,https://forum.example.org,max,pw-forum,
+Privat,,login,Bank,,,1,https://bank.example.org,max,pw-bank,JBSWY3DPEHPK3PXP
+,,login,Router,,,0,http://192.168.0.1,admin,pw-router,
+Web,,login,Alt-Account,,,0,,max,pw-alt,
+Privat,,login,Streaming,,,0,https://stream.example.org,max,pw-stream,
+Privat,,note,WLAN-Zugang,SSID: Heimnetz,,0,,,,
