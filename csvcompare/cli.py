@@ -106,9 +106,8 @@ def validate_args(p, args):
     return ignored
 
 
-def load_filtered(p, args):
-    """Lädt beide Dateien und wendet --hide-trash und --group an."""
-    old, new = load(args.alt), load(args.neu)
+def filter_entries(p, args, old, new):
+    """Wendet --hide-trash und --group auf beide Dateien an."""
     if args.hide_trash:
         old = {k: r for k, r in old.items() if not is_excluded(r)}
         new = {k: r for k, r in new.items() if not is_excluded(r)}
@@ -119,6 +118,11 @@ def load_filtered(p, args):
         old = {k: r for k, r in old.items() if needle in r["Group"].lower()}
         new = {k: r for k, r in new.items() if needle in r["Group"].lower()}
     return old, new
+
+
+def load_filtered(p, args):
+    """Lädt beide Dateien und wendet die Filter an."""
+    return filter_entries(p, args, load(args.alt), load(args.neu))
 
 
 def run_search(args, cmp):
