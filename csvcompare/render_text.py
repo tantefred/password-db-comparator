@@ -64,8 +64,7 @@ def print_findings(findings):
 
 def print_header(cmp, args):
     """Kopfzeilen: Dateien, Anzahl der Einträge, Hinweise und aktive Filter."""
-    sides = ((cmp.old_name, cmp.old, cmp.old_source), (cmp.new_name, cmp.new, cmp.new_source))
-    for name, entries, source in sides:
+    for name, entries, source in cmp.sides:
         format_label = None
         if source and source.format != KEEPASS_CSV:
             format_label = FORMAT_LABELS[source.format]
@@ -85,8 +84,25 @@ def print_header(cmp, args):
         print(f"Gruppenfilter: '{args.group.strip()}'")
 
 
+def print_stats_single(cmp):
+    """Anzahl der Einträge pro Gruppe für eine einzelne Datei."""
+    rows = stats_rows(cmp.old, {})
+    names = [group or "(ohne Gruppe)" for group, _, _ in rows]
+    width = max([len(name) for name in names] + [len("Gesamt"), len("Gruppe")])
+    width_count = max(len(cmp.old_name), 6)
+    rule = "-" * (width + width_count + 2)
+    print(f"{'Gruppe':<{width}}  {cmp.old_name:>{width_count}}")
+    print(rule)
+    for name, (_, count, _) in zip(names, rows, strict=True):
+        print(f"{name:<{width}}  {count:>{width_count}}")
+    print(rule)
+    print(f"{'Gesamt':<{width}}  {len(cmp.old):>{width_count}}")
+
+
 def print_stats(cmp):
     """Gibt die Anzahl der Einträge pro Gruppe für beide Dateien aus."""
+    if cmp.single:
+        return print_stats_single(cmp)
     rows = stats_rows(cmp.old, cmp.new)
     names = [group or "(ohne Gruppe)" for group, _, _ in rows]
     width = max([len(name) for name in names] + [len("Gesamt"), len("Gruppe")])
@@ -111,7 +127,7 @@ def print_stats(cmp):
 
 def print_check(cmp):
     """Gibt das Prüfergebnis beider Dateien aus."""
-    for name, entries in ((cmp.old_name, cmp.old), (cmp.new_name, cmp.new)):
+    for name, entries, _ in cmp.sides:
         print(f"=== {name} ===")
         print_findings(check_entries(entries))
         print()
@@ -119,7 +135,7 @@ def print_check(cmp):
 
 def print_password_check(cmp, min_length, max_age_days):
     """Gibt die Passwortqualität beider Dateien aus."""
-    for name, entries in ((cmp.old_name, cmp.old), (cmp.new_name, cmp.new)):
+    for name, entries, _ in cmp.sides:
         print(f"=== {name} ===")
         findings, totp_count = audit_entries(entries, min_length, max_age_days)
         print_findings(findings)

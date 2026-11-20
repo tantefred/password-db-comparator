@@ -71,7 +71,7 @@ def base_report(cmp, args):
     return {
         "files": {
             "old": side(cmp.old_name, args.alt, cmp.old, cmp.old_source),
-            "new": side(cmp.new_name, args.neu, cmp.new, cmp.new_source),
+            "new": None if cmp.single else side(cmp.new_name, args.neu, cmp.new, cmp.new_source),
         },
         "filters": {
             "ignored_columns": cmp.ignored,
@@ -91,6 +91,13 @@ def findings_json(findings):
 
 def stats_report(base, cmp):
     rows = stats_rows(cmp.old, cmp.new)
+    if cmp.single:
+        return {
+            "mode": "stats",
+            **base,
+            "groups": [{"group": group, "old": old} for group, old, _ in rows],
+            "total": {"old": len(cmp.old)},
+        }
     return {
         "mode": "stats",
         **base,
@@ -107,20 +114,19 @@ def stats_report(base, cmp):
 
 
 def check_report(base, cmp):
-    sides = ((cmp.old_name, cmp.old), (cmp.new_name, cmp.new))
     return {
         "mode": "check",
         **base,
         "results": [
             {"file": name, "findings": findings_json(check_entries(entries))}
-            for name, entries in sides
+            for name, entries, _ in cmp.sides
         ],
     }
 
 
 def password_report(base, cmp, min_length, max_age_days):
     results = []
-    for name, entries in ((cmp.old_name, cmp.old), (cmp.new_name, cmp.new)):
+    for name, entries, _ in cmp.sides:
         findings, totp_count = audit_entries(entries, min_length, max_age_days)
         results.append(
             {

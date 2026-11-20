@@ -21,6 +21,14 @@ TIME_REASON = (
 )
 
 
+class Side(NamedTuple):
+    """Eine der ausgewerteten Dateien: Name, Einträge und was beim Einlesen bekannt wurde."""
+
+    name: str
+    entries: dict
+    source: object
+
+
 class Move(NamedTuple):
     """Ein Eintrag, der in der zweiten Datei unter anderem Schlüssel steht."""
 
@@ -46,12 +54,16 @@ class Change(NamedTuple):
 
 @dataclass
 class Comparison:
-    """Ergebnis des Vergleichs zweier (bereits gefilterter) Dateien."""
+    """Ergebnis des Vergleichs zweier (bereits gefilterter) Dateien.
+
+    Mit ``new_name=None`` steht nur eine Datei zur Auswertung (``single``): Dann gibt es keinen
+    Vergleich, und alle Auswertungen einzelner Dateien laufen über ``sides``.
+    """
 
     old: dict
     new: dict
     old_name: str
-    new_name: str
+    new_name: str | None
     ignored: list  # per Option ignorierte Spalten
     columns: list  # tatsächlich verglichene Spalten
     only_old: list = field(default_factory=list)  # Schlüssel nur in der ersten Datei
@@ -61,6 +73,19 @@ class Comparison:
     old_source: object = None  # LoadResult der ersten Datei (Format, Datenbankname, Hinweise)
     new_source: object = None  # LoadResult der zweiten Datei
     auto_ignored: list = field(default_factory=list)  # [(spalte, grund)]
+
+    @property
+    def single(self):
+        """Wird nur eine Datei ausgewertet (kein Vergleich)?"""
+        return self.new_name is None
+
+    @property
+    def sides(self):
+        """Die vorhandenen Dateien: eine bei ``single``, sonst beide."""
+        sides = [Side(self.old_name, self.old, self.old_source)]
+        if not self.single:
+            sides.append(Side(self.new_name, self.new, self.new_source))
+        return sides
 
     @property
     def n_changed(self):
@@ -204,3 +229,8 @@ def compare_files(
         if change.columns:
             cmp.changes[freshness].append(change)
     return cmp
+
+
+def single_file(entries, name, ignored=(), source=None):
+    """Eine einzelne Datei als ``Comparison`` ohne Gegenseite (für Auswertungen ohne Vergleich)."""
+    return Comparison(entries, {}, name, None, list(ignored), [], old_source=source)
