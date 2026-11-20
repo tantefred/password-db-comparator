@@ -6,14 +6,16 @@ import sys
 from .columns import ALL_NAMES, KEY_NAMES, VALUE_NAMES
 from .compare import compare_files, single_file
 from .display import display_names
+from .duplicates import KINDS
 from .entries import entries_from_rows, is_trash
 from .exports import export_path, pick_writer, prepare_added, prepare_merged
 from .importers import CsvError, read_file
-from .modes import CHECK, OVERVIEW, PASSWORD_CHECK, SEARCH, STATS, selected_mode
+from .modes import CHECK, DEDUPE, OVERVIEW, PASSWORD_CHECK, SEARCH, STATS, selected_mode
 from .render_json import build_report, dump
 from .render_text import (
     print_check,
     print_compare,
+    print_dedupe,
     print_header,
     print_overview,
     print_password_check,
@@ -91,6 +93,18 @@ def build_parser():
         action="store_true",
         help="Statistik, Prüfung und Passwortqualität in einem Bericht; bei nur einer Datei "
         "der Standard (nicht kombinierbar mit --search, --stats, --check, --password-check)",
+    )
+    parser.add_argument(
+        "--dedupe",
+        action="store_true",
+        help="Dublettengruppen einer Datei auflisten (nicht kombinierbar mit anderen Modi)",
+    )
+    parser.add_argument(
+        "--dedupe-kinds",
+        default=",".join(KINDS),
+        metavar="ARTEN",
+        help="Arten für --dedupe, kommagetrennt: key (gleicher Schlüssel), login (gleiche URL "
+        "und Username), title (gleicher Titel in anderen Gruppen); Standard: alle",
     )
     parser.add_argument(
         "--stats",
@@ -182,6 +196,7 @@ def check_combinations(parser, args):
         for name, active in (
             ("--search", args.search is not None),
             ("--overview", args.overview),
+            ("--dedupe", args.dedupe),
             ("--stats", args.stats),
             ("--check", args.check),
             ("--password-check", args.password_check),
@@ -202,6 +217,8 @@ def check_combinations(parser, args):
         parser.error(f"{modes[0]} und {exports[0]} können nicht kombiniert werden.")
     if args.search is not None and not args.search.strip():
         parser.error("--search benötigt einen nicht-leeren Suchbegriff.")
+    if args.dedupe and args.neu:
+        parser.error("--dedupe wertet eine einzelne Datei aus; zweite Datei weglassen.")
     if args.export_format and not exports:
         parser.error("--export-format braucht --export-added oder --export-merged.")
     if not args.neu and exports:
@@ -229,9 +246,21 @@ def parse_ignored(parser, args):
     return ignored
 
 
+def parse_kinds(parser, args):
+    """Macht aus ``--dedupe-kinds`` ein Tupel gültiger Arten (in fester Reihenfolge)."""
+    wanted = [part.strip().lower() for part in args.dedupe_kinds.split(",") if part.strip()]
+    unknown = [part for part in wanted if part not in KINDS]
+    if unknown or not wanted:
+        parser.error(
+            f"Unbekannte Dublettenart '{(unknown or [''])[0]}'. Gültig: {', '.join(KINDS)}"
+        )
+    args.dedupe_kinds = tuple(kind for kind in KINDS if kind in wanted)
+
+
 def validate_args(parser, args):
     """Prüft die Optionen und gibt die ignorierten Spalten zurück."""
     check_combinations(parser, args)
+    parse_kinds(parser, args)
     return parse_ignored(parser, args)
 
 
@@ -323,6 +352,8 @@ def run_text(args, cmp):
         print_password_check(cmp, args.min_length, args.max_age_days)
     elif mode == OVERVIEW:
         print_overview(cmp, args.min_length, args.max_age_days)
+    elif mode == DEDUPE:
+        print_dedupe(cmp, args.dedupe_kinds, args.show_secrets)
     elif mode == SEARCH:
         run_search(args, cmp)
     else:

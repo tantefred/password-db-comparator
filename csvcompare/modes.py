@@ -1,18 +1,21 @@
 """Welche Auswertung gewählt ist (Vergleich, Überblick, Statistik, Prüfung, Passwörter, Suche)."""
 
-COMPARE, OVERVIEW, STATS, CHECK, PASSWORD_CHECK, SEARCH = (
+COMPARE, OVERVIEW, DEDUPE, STATS, CHECK, PASSWORD_CHECK, SEARCH = (
     "compare",
     "overview",
+    "dedupe",
     "stats",
     "check",
     "password-check",
     "search",
 )
-MODES = (COMPARE, OVERVIEW, STATS, CHECK, PASSWORD_CHECK, SEARCH)
+MODES = (COMPARE, OVERVIEW, DEDUPE, STATS, CHECK, PASSWORD_CHECK, SEARCH)
 
 
 def selected_mode(args, single):
     """Der gewählte Modus. Ohne Wahl: Vergleich bei zwei Dateien, Überblick bei einer."""
+    if args.dedupe:
+        return DEDUPE
     if args.stats:
         return STATS
     if args.check:

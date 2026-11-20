@@ -6,7 +6,8 @@ from .analysis import audit_entries, check_entries, stats_rows
 from .columns import MODIFIED, SECRET_NAMES
 from .compare import FRESHNESS, NEWER_IN_NEW, NEWER_IN_OLD, UNCLEAR
 from .display import mask_secret
-from .modes import CHECK, OVERVIEW, PASSWORD_CHECK, SEARCH, STATS, selected_mode
+from .duplicates import find_duplicates
+from .modes import CHECK, DEDUPE, OVERVIEW, PASSWORD_CHECK, SEARCH, STATS, selected_mode
 from .search import MOVED, ONLY_IN_NEW, search
 
 
@@ -163,6 +164,38 @@ def search_report(base, cmp, query, hits, show_secrets):
     return {"mode": "search", **base, "query": query, "match_count": len(hits), "results": results}
 
 
+def dedupe_report(base, cmp, kinds, show_secrets):
+    """Die Dublettengruppen mit ihren Mitgliedern und den abweichenden Spalten."""
+    groups = []
+    for group in find_duplicates(cmp.old, kinds):
+        members = []
+        for key in group.keys:
+            row = cmp.old[key]
+            values = {}
+            for column in group.differing:
+                masked = column in SECRET_NAMES and not show_secrets
+                values[column] = mask_secret(row[column]) if masked else row[column]
+            members.append(
+                {"entry": entry_ref(key), "last_modified": row[MODIFIED], "values": values}
+            )
+        groups.append(
+            {
+                "id": group.id,
+                "kind": group.kind,
+                "reason": group.reason,
+                "differing_columns": list(group.differing),
+                "members": members,
+            }
+        )
+    return {
+        "mode": "dedupe",
+        **base,
+        "kinds": list(kinds),
+        "group_count": len(groups),
+        "groups": groups,
+    }
+
+
 def overview_report(base, cmp, min_length, max_age_days):
     """Statistik, Prüfung und Passwortqualität in einem Bericht."""
 
@@ -216,6 +249,8 @@ def build_report(args, cmp):
         return check_report(base, cmp), 0
     if mode == PASSWORD_CHECK:
         return password_report(base, cmp, args.min_length, args.max_age_days), 0
+    if mode == DEDUPE:
+        return dedupe_report(base, cmp, args.dedupe_kinds, args.show_secrets), 0
     if mode == OVERVIEW:
         return overview_report(base, cmp, args.min_length, args.max_age_days), 0
     if mode == SEARCH:

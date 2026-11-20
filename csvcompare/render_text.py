@@ -3,7 +3,8 @@
 from .analysis import audit_entries, check_entries, stats_rows
 from .columns import MODIFIED, SECRET_NAMES
 from .compare import CERTAIN, FRESHNESS, LIKELY, NEWER_IN_NEW, NEWER_IN_OLD, UNCLEAR
-from .display import display_value
+from .display import display_value, plural
+from .duplicates import find_duplicates
 from .entries import entry_label
 from .importers import FORMAT_LABELS, KEEPASS_CSV
 from .search import FOUND, IDENTICAL, MOVED, ONLY_IN_NEW, ONLY_IN_OLD
@@ -140,6 +141,28 @@ def print_password_check(cmp, min_length, max_age_days):
         findings, totp_count = audit_entries(entries, min_length, max_age_days)
         print_findings(findings)
         print(f"  TOTP: {totp_count} von {len(entries)} Einträgen haben TOTP eingerichtet\n")
+
+
+def print_dedupe(cmp, kinds, show_secrets):
+    """Die Dublettengruppen der Datei; Geheimnisse bleiben maskiert."""
+    groups = find_duplicates(cmp.old, kinds)
+    if not groups:
+        print("Keine Dubletten gefunden.")
+        return
+    print(f"{plural(len(groups), 'Dublettengruppe', 'Dublettengruppen')} in {cmp.old_name}\n")
+    for number, group in enumerate(groups, 1):
+        print(f"{number}. {group.reason}  ({len(group.keys)} Einträge)")
+        for key in group.keys:
+            print(f"   - {entry_label(key)}   {MODIFIED}: {cmp.old[key][MODIFIED]}")
+        shown = list(group.differing)
+        print("   Unterschiede in: " + (", ".join(shown) if shown else "keine"))
+        for column in shown:
+            secret = column in SECRET_NAMES
+            values = [
+                display_value(cmp.old[key][column], secret, show_secrets) for key in group.keys
+            ]
+            print(f"     {column}: " + "  |  ".join(values))
+        print()
 
 
 def print_overview(cmp, min_length, max_age_days):

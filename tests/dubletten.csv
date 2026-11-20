@@ -1,0 +1,10 @@
+Group,Title,Username,Password,URL,Notes,TOTP,Icon,Last Modified,Created
+Privat-DB/Web,Mail,max@example.org,pw-alt,https://mail.example.org,,,1,2024-01-10T10:00:00Z,2023-01-01T09:00:00Z
+Privat-DB/Web,Mail,max@example.org,pw-neu,https://mail.example.org,Neue Notiz,JBSWY3DPEHPK3PXP,1,2024-06-10T10:00:00Z,2023-06-01T09:00:00Z
+Privat-DB/Web,Mail,max@example.org,pw-neu,,,,,2023-01-10T10:00:00Z,2022-01-01T09:00:00Z
+Privat-DB/Web,Bank,max,bank-pw,https://bank.example.org/,,,,2024-02-01T10:00:00Z,2023-02-01T09:00:00Z
+Privat-DB/Konten,Bank Online,max,bank-pw,https://BANK.example.org,Zweiter Name,,,2024-03-01T10:00:00Z,2023-03-01T09:00:00Z
+Privat-DB/Web,Forum,max,forum-pw,https://forum.example.org,,,,2024-01-01T10:00:00Z,2023-01-01T09:00:00Z
+Privat-DB/Alt,Forum,Max,forum-pw,https://alt.example.org,,,,2023-01-01T10:00:00Z,2022-01-01T09:00:00Z
+Privat-DB/Papierkorb,Mail,max@example.org,pw-geloescht,https://mail.example.org,,,,2020-01-01T10:00:00Z,2020-01-01T09:00:00Z
+Privat-DB/Web,Einzeln,max,solo-pw,https://solo.example.org,,,,2024-01-01T10:00:00Z,2023-01-01T09:00:00Z
