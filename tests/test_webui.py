@@ -343,16 +343,15 @@ class CommandLineEntryTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 2)
         self.assertIn("--ui braucht keine Dateien", proc.stderr)
 
-    def test_files_are_still_required_without_ui(self):
-        for args in ([], ["tests/alt.csv"]):
-            proc = subprocess.run(
-                [sys.executable, os.path.join(ROOT, "compare_csv.py"), *args],
-                cwd=ROOT,
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(proc.returncode, 2)
-            self.assertIn("required: alt, neu", proc.stderr)
+    def test_at_least_one_file_is_required_without_ui(self):
+        proc = subprocess.run(
+            [sys.executable, os.path.join(ROOT, "compare_csv.py")],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("mindestens eine Datei", proc.stderr)
 
     def test_ui_starts_and_serves_on_loopback(self):
         proc = subprocess.Popen(

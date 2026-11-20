@@ -28,7 +28,12 @@ def human_delta(seconds):
 
 
 def display_names(path_old, path_new):
-    """Dateinamen für die Ausgabe; bei gleichem Namen der volle Pfad."""
+    """Dateinamen für die Ausgabe; bei gleichem Namen der volle Pfad.
+
+    Ohne zweite Datei (``path_new=None``) gibt es nur den Namen der ersten.
+    """
+    if path_new is None:
+        return os.path.basename(path_old), None
     name_old, name_new = os.path.basename(path_old), os.path.basename(path_new)
     return (path_old, path_new) if name_old == name_new else (name_old, name_new)
 

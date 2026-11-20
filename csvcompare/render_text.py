@@ -6,7 +6,7 @@ from .compare import CERTAIN, FRESHNESS, LIKELY, NEWER_IN_NEW, NEWER_IN_OLD, UNC
 from .display import display_value
 from .entries import entry_label
 from .importers import FORMAT_LABELS, KEEPASS_CSV
-from .search import IDENTICAL, MOVED, ONLY_IN_NEW, ONLY_IN_OLD
+from .search import FOUND, IDENTICAL, MOVED, ONLY_IN_NEW, ONLY_IN_OLD
 
 CONFIDENCE_LABEL = {CERTAIN: "sicher", LIKELY: "wahrscheinlich"}
 
@@ -142,6 +142,16 @@ def print_password_check(cmp, min_length, max_age_days):
         print(f"  TOTP: {totp_count} von {len(entries)} Einträgen haben TOTP eingerichtet\n")
 
 
+def print_overview(cmp, min_length, max_age_days):
+    """Statistik, Prüfung auf Dubletten und Passwortqualität zusammen."""
+    print("== Statistik ==")
+    print_stats(cmp)
+    print("\n== Prüfung auf Dubletten und kaputte Einträge ==")
+    print_check(cmp)
+    print("== Passwortqualität ==")
+    print_password_check(cmp, min_length, max_age_days)
+
+
 def print_search(cmp, query, hits, show_secrets):
     """Gibt die Suchtreffer samt Status aus."""
     titles = freshness_titles(cmp)
@@ -158,6 +168,9 @@ def print_search(cmp, query, hits, show_secrets):
             print(f"  + {entry_label(hit.item)}")
             print(f"      Status: nur in {cmp.new_name} (in {cmp.old_name} nicht vorhanden)")
             print(f"      {MODIFIED}: {cmp.new[hit.item][MODIFIED]}")
+        elif hit.status == FOUND:
+            print(f"  * {entry_label(hit.item)}")
+            print(f"      {MODIFIED}: {cmp.old[hit.item][MODIFIED]}")
         elif hit.status == IDENTICAL:
             print(f"  = {entry_label(hit.item)}")
             print("      Status: identisch in beiden Dateien")

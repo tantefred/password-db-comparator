@@ -4,16 +4,18 @@ import argparse
 import sys
 
 from .columns import ALL_NAMES, KEY_NAMES, VALUE_NAMES
-from .compare import compare_files
+from .compare import compare_files, single_file
 from .display import display_names
 from .entries import entries_from_rows, is_trash
 from .exports import export_path, pick_writer, prepare_added, prepare_merged
 from .importers import CsvError, read_file
+from .modes import CHECK, OVERVIEW, PASSWORD_CHECK, SEARCH, STATS, selected_mode
 from .render_json import build_report, dump
 from .render_text import (
     print_check,
     print_compare,
     print_header,
+    print_overview,
     print_password_check,
     print_search,
     print_stats,
@@ -29,7 +31,11 @@ def build_parser():
         "(KeePass-CSV, Bitwarden/Vaultwarden-JSON oder -CSV)"
     )
     parser.add_argument("alt", nargs="?", help="Erste Datei (CSV oder JSON)")
-    parser.add_argument("neu", nargs="?", help="Zweite Datei (CSV oder JSON)")
+    parser.add_argument(
+        "neu",
+        nargs="?",
+        help="Zweite Datei (CSV oder JSON); ohne sie wird nur die erste ausgewertet",
+    )
     parser.add_argument(
         "--ui",
         action="store_true",
@@ -79,6 +85,12 @@ def build_parser():
         help="Nur Einträge betrachten, deren Gruppenpfad TEXT enthält "
         "(Groß-/Kleinschreibung egal), z. B. --group Privat. "
         "Gilt für Vergleich, Suche und Exporte.",
+    )
+    parser.add_argument(
+        "--overview",
+        action="store_true",
+        help="Statistik, Prüfung und Passwortqualität in einem Bericht; bei nur einer Datei "
+        "der Standard (nicht kombinierbar mit --search, --stats, --check, --password-check)",
     )
     parser.add_argument(
         "--stats",
@@ -169,6 +181,7 @@ def check_combinations(parser, args):
         name
         for name, active in (
             ("--search", args.search is not None),
+            ("--overview", args.overview),
             ("--stats", args.stats),
             ("--check", args.check),
             ("--password-check", args.password_check),
@@ -191,6 +204,8 @@ def check_combinations(parser, args):
         parser.error("--search benötigt einen nicht-leeren Suchbegriff.")
     if args.export_format and not exports:
         parser.error("--export-format braucht --export-added oder --export-merged.")
+    if not args.neu and exports:
+        parser.error(f"{exports[0]} braucht zwei Dateien (alt und neu).")
 
 
 def parse_ignored(parser, args):
@@ -220,28 +235,28 @@ def validate_args(parser, args):
     return parse_ignored(parser, args)
 
 
-def filter_entries(parser, args, old, new):
-    """Wendet --hide-trash und --group auf beide Dateien an."""
+def filter_entries(parser, args, entries):
+    """Wendet --hide-trash und --group auf die Einträge einer Datei an."""
     if args.hide_trash:
-        old = {key: row for key, row in old.items() if not is_trash(row)}
-        new = {key: row for key, row in new.items() if not is_trash(row)}
+        entries = {key: row for key, row in entries.items() if not is_trash(row)}
     if args.group is not None:
         needle = args.group.strip().lower()
         if not needle:
             parser.error("--group benötigt einen nicht-leeren Suchbegriff.")
-        old = {key: row for key, row in old.items() if needle in row["Group"].lower()}
-        new = {key: row for key, row in new.items() if needle in row["Group"].lower()}
-    return old, new
+        entries = {key: row for key, row in entries.items() if needle in row["Group"].lower()}
+    return entries
 
 
 def build_comparison(parser, args, ignored, old_source, new_source, old_name, new_name):
     """Vergleicht zwei gelesene Dateien unter Beachtung der Filter-Optionen.
 
+    Ohne zweite Datei (``new_source=None``) entsteht eine Auswertung nur der ersten.
     Gemeinsamer Weg für Terminal und Weboberfläche.
     """
-    old, new = filter_entries(
-        parser, args, entries_from_rows(old_source.rows), entries_from_rows(new_source.rows)
-    )
+    old = filter_entries(parser, args, entries_from_rows(old_source.rows))
+    if new_source is None:
+        return single_file(old, old_name, ignored, old_source)
+    new = filter_entries(parser, args, entries_from_rows(new_source.rows))
     return compare_files(
         old,
         new,
@@ -299,13 +314,16 @@ def run_json(args, cmp):
 def run_text(args, cmp):
     print_header(cmp, args)
     print()
-    if args.stats:
+    mode = selected_mode(args, cmp.single)
+    if mode == STATS:
         print_stats(cmp)
-    elif args.check:
+    elif mode == CHECK:
         print_check(cmp)
-    elif args.password_check:
+    elif mode == PASSWORD_CHECK:
         print_password_check(cmp, args.min_length, args.max_age_days)
-    elif args.search is not None:
+    elif mode == OVERVIEW:
+        print_overview(cmp, args.min_length, args.max_age_days)
+    elif mode == SEARCH:
         run_search(args, cmp)
     else:
         print_compare(cmp, args.show_secrets)
@@ -326,13 +344,13 @@ def main():
     args = parser.parse_args()
     if args.ui:
         return run_ui(parser, args)
-    if not (args.alt and args.neu):
-        parser.error("the following arguments are required: alt, neu")
+    if not args.alt:
+        parser.error("Es wird mindestens eine Datei benötigt (alt, optional neu).")
     ignored = validate_args(parser, args)
 
     try:
         old_source = read_file(args.alt, keep_db_name=args.keep_db_name)
-        new_source = read_file(args.neu, keep_db_name=args.keep_db_name)
+        new_source = read_file(args.neu, keep_db_name=args.keep_db_name) if args.neu else None
     except CsvError as e:
         sys.exit(f"Fehler: {e}")
     old_name, new_name = display_names(args.alt, args.neu)

@@ -6,6 +6,7 @@ from .analysis import audit_entries, check_entries, stats_rows
 from .columns import MODIFIED, SECRET_NAMES
 from .compare import FRESHNESS, NEWER_IN_NEW, NEWER_IN_OLD, UNCLEAR
 from .display import mask_secret
+from .modes import CHECK, OVERVIEW, PASSWORD_CHECK, SEARCH, STATS, selected_mode
 from .search import MOVED, ONLY_IN_NEW, search
 
 
@@ -162,6 +163,21 @@ def search_report(base, cmp, query, hits, show_secrets):
     return {"mode": "search", **base, "query": query, "match_count": len(hits), "results": results}
 
 
+def overview_report(base, cmp, min_length, max_age_days):
+    """Statistik, Prüfung und Passwortqualität in einem Bericht."""
+
+    def section(report):
+        return {key: value for key, value in report.items() if key != "mode"}
+
+    return {
+        "mode": "overview",
+        **base,
+        "stats": section(stats_report({}, cmp)),
+        "check": section(check_report({}, cmp)),
+        "password_check": section(password_report({}, cmp, min_length, max_age_days)),
+    }
+
+
 def compare_report(base, cmp, show_secrets):
     count = {freshness: len(cmp.changes[freshness]) for freshness in FRESHNESS}
     return {
@@ -193,13 +209,16 @@ def build_report(args, cmp):
     Der Exitcode ist 1 nur bei einer Suche ohne Treffer.
     """
     base = base_report(cmp, args)
-    if args.stats:
+    mode = selected_mode(args, cmp.single)
+    if mode == STATS:
         return stats_report(base, cmp), 0
-    if args.check:
+    if mode == CHECK:
         return check_report(base, cmp), 0
-    if args.password_check:
+    if mode == PASSWORD_CHECK:
         return password_report(base, cmp, args.min_length, args.max_age_days), 0
-    if args.search is not None:
+    if mode == OVERVIEW:
+        return overview_report(base, cmp, args.min_length, args.max_age_days), 0
+    if mode == SEARCH:
         hits = search(cmp, args.search)
         return search_report(base, cmp, args.search, hits, args.show_secrets), 0 if hits else 1
     return compare_report(base, cmp, args.show_secrets), 0

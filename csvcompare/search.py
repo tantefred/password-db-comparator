@@ -4,6 +4,7 @@ from typing import NamedTuple
 
 # Status eines Treffers; ergänzend zu den Aktualitäts-Status aus ``compare``
 MOVED, ONLY_IN_OLD, ONLY_IN_NEW, IDENTICAL = "moved", "only_in_old", "only_in_new", "identical"
+FOUND = "found"  # Treffer in einer einzelnen Datei (kein Vergleich)
 
 
 class Hit(NamedTuple):
@@ -17,6 +18,10 @@ def search(cmp, query):
     Ein verschobenes oder umbenanntes Paar erscheint nur einmal, auch wenn beide Schlüssel passen.
     """
     needle = query.strip().lower()
+    if cmp.single:
+        return [
+            Hit(FOUND, key) for key in sorted(cmp.old) if needle in " / ".join(key.identity).lower()
+        ]
     only_old, only_new = set(cmp.only_old), set(cmp.only_new)
     move_of = {key: move for move in cmp.moves for key in (move.old_key, move.new_key)}
     change_of = {
