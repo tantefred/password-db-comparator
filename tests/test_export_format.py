@@ -89,7 +89,9 @@ class CommandLineTests(unittest.TestCase):
     def test_export_format_without_an_export_is_an_error(self):
         rc, _, err = run(KP_A, KP_B, "--export-format", "bitwarden-json")
         self.assertEqual(rc, 2)
-        self.assertIn("--export-format braucht --export-added oder --export-merged", err)
+        self.assertIn(
+            "--export-format braucht --export-added, --export-merged oder --export-clean", err
+        )
 
     def test_unknown_format_is_rejected(self):
         rc, _, err = run(KP_A, KP_B, "--export-merged", "--export-format", "excel")

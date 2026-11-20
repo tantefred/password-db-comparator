@@ -12,7 +12,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC
 
-from ..columns import ALL_NAMES, FORMAT_KEY, SOURCE_KEY
+from ..columns import ALL_NAMES, FORMAT_KEY, OLD_PASSWORDS_KEY, SOURCE_KEY
 from ..display import plural
 from ..importers import BITWARDEN_CSV, BITWARDEN_JSON
 from ..importers.bitwarden import TYPE_LOGIN, TYPE_NOTE, canonical_fields
@@ -152,6 +152,11 @@ class BitwardenJsonWriter(Writer):
         )
         for key in ("organizationId", "collectionIds", "deletedDate", "passwordHistory"):
             item.setdefault(key, None)
+        if row.get(OLD_PASSWORDS_KEY):
+            item["passwordHistory"] = [
+                {"lastUsedDate": json_time(used, None), "password": password}
+                for password, used in row[OLD_PASSWORDS_KEY]
+            ] + list(item.get("passwordHistory") or [])
         if is_note:
             item.pop("login", None)
             item.setdefault("secureNote", {"type": 0})
@@ -199,4 +204,5 @@ BITWARDEN_JSON_WRITER = BitwardenJsonWriter(
     extension=".json",
     mime="application/json",
     columns=tuple(name for name in ALL_NAMES if name != "Icon"),
+    stores_password_history=True,
 )

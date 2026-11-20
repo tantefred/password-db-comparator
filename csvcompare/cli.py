@@ -6,11 +6,11 @@ import sys
 from .columns import ALL_NAMES, KEY_NAMES, VALUE_NAMES
 from .compare import compare_files, single_file
 from .display import display_names
-from .duplicates import KINDS
+from .duplicates import KEY, KINDS, LOGIN
 from .entries import entries_from_rows, is_trash
-from .exports import export_path, pick_writer, prepare_added, prepare_merged
+from .exports import export_path, pick_writer, prepare_added, prepare_clean, prepare_merged
 from .importers import CsvError, read_file
-from .modes import CHECK, DEDUPE, OVERVIEW, PASSWORD_CHECK, SEARCH, STATS, selected_mode
+from .modes import CHECK, CLEAN, DEDUPE, OVERVIEW, PASSWORD_CHECK, SEARCH, STATS, selected_mode
 from .render_json import build_report, dump
 from .render_text import (
     print_check,
@@ -181,6 +181,22 @@ def build_parser():
         "Papierkorb-Gruppen werden ausgelassen. Nicht kombinierbar mit --search.",
     )
     parser.add_argument(
+        "--export-clean",
+        nargs="?",
+        const=True,
+        metavar="DATEI",
+        help="Eine einzelne Datei ohne Dubletten schreiben (Standard: bereinigt.csv bzw. .json). "
+        "Ohne Rückfragen: Gruppen der Arten aus --clean-kinds werden zusammengeführt, der "
+        "zuletzt geänderte Eintrag gewinnt. Enthält Passwörter im Klartext!",
+    )
+    parser.add_argument(
+        "--clean-kinds",
+        default="key",
+        metavar="ARTEN",
+        help="Arten, die --export-clean zusammenführt (key, login; Standard: key). "
+        "„title“ wird nie automatisch zusammengeführt.",
+    )
+    parser.add_argument(
         "--export-format",
         choices=tuple(WRITERS),
         help="Format der Exporte: keepass-csv (Standard) oder bitwarden-json "
@@ -217,10 +233,16 @@ def check_combinations(parser, args):
         parser.error(f"{modes[0]} und {exports[0]} können nicht kombiniert werden.")
     if args.search is not None and not args.search.strip():
         parser.error("--search benötigt einen nicht-leeren Suchbegriff.")
+    if args.export_clean and args.neu:
+        parser.error("--export-clean wertet eine einzelne Datei aus; zweite Datei weglassen.")
+    if args.export_clean and exports:
+        parser.error(f"--export-clean und {exports[0]} können nicht kombiniert werden.")
+    if args.export_clean and modes and modes != ["--dedupe"]:
+        parser.error(f"{modes[0]} und --export-clean können nicht kombiniert werden.")
     if args.dedupe and args.neu:
         parser.error("--dedupe wertet eine einzelne Datei aus; zweite Datei weglassen.")
-    if args.export_format and not exports:
-        parser.error("--export-format braucht --export-added oder --export-merged.")
+    if args.export_format and not exports and not args.export_clean:
+        parser.error("--export-format braucht --export-added, --export-merged oder --export-clean.")
     if not args.neu and exports:
         parser.error(f"{exports[0]} braucht zwei Dateien (alt und neu).")
 
@@ -257,10 +279,25 @@ def parse_kinds(parser, args):
     args.dedupe_kinds = tuple(kind for kind in KINDS if kind in wanted)
 
 
+def parse_clean_kinds(parser, args):
+    """Macht aus ``--clean-kinds`` ein Tupel der Arten, die automatisch zusammengeführt werden."""
+    wanted = [part.strip().lower() for part in args.clean_kinds.split(",") if part.strip()]
+    allowed = (KEY, LOGIN)
+    bad = [part for part in wanted if part not in allowed]
+    if bad or not wanted:
+        shown = bad[0] if bad else ""
+        parser.error(
+            f"Ungültige Art '{shown}' für --clean-kinds. Gültig: {', '.join(allowed)} "
+            f"(„title“ wird nie automatisch zusammengeführt)."
+        )
+    args.clean_kinds = tuple(kind for kind in allowed if kind in wanted)
+
+
 def validate_args(parser, args):
     """Prüft die Optionen und gibt die ignorierten Spalten zurück."""
     check_combinations(parser, args)
     parse_kinds(parser, args)
+    parse_clean_kinds(parser, args)
     return parse_ignored(parser, args)
 
 
@@ -303,11 +340,15 @@ def log_to_stderr(*args, **kwargs):
 
 
 def run_exports(args, cmp, log):
+    def prepare_clean_export(cmp, path, writer):
+        return prepare_clean(cmp, path, writer, auto_kinds=args.clean_kinds)
+
     """Schreibt die angeforderten Exporte und meldet, was dabei passiert ist."""
     writer = pick_writer(args.export_format)
     requested = (
         (args.export_added, "added", prepare_added),
         (args.export_merged, "merged", prepare_merged),
+        (args.export_clean, "clean", prepare_clean_export),
     )
     for value, kind, prepare in requested:
         if not value:
@@ -354,8 +395,13 @@ def run_text(args, cmp):
         print_overview(cmp, args.min_length, args.max_age_days)
     elif mode == DEDUPE:
         print_dedupe(cmp, args.dedupe_kinds, args.show_secrets)
+        if args.export_clean:
+            print()
+            run_exports(args, cmp, print)
     elif mode == SEARCH:
         run_search(args, cmp)
+    elif mode == CLEAN:
+        run_exports(args, cmp, print)
     else:
         print_compare(cmp, args.show_secrets)
         run_exports(args, cmp, print)

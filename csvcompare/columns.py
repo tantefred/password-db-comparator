@@ -15,6 +15,9 @@ SOURCE_KEY = "_source"
 UNMAPPED_KEY = "_unmapped"
 # Kennung des Formats, aus dem die Zeile gelesen wurde (z. B. "bitwarden-json")
 FORMAT_KEY = "_format"
+# Frühere Passwörter eines zusammengeführten Eintrags: Liste von (Passwort, zuletzt geändert).
+# Nur Formate mit Passwort-Verlauf (Bitwarden-JSON) können sie speichern.
+OLD_PASSWORDS_KEY = "_old_passwords"
 
 
 @dataclass(frozen=True)

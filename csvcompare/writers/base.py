@@ -3,7 +3,9 @@
 from collections import Counter
 from dataclasses import dataclass
 
-from ..columns import ALL_NAMES, BY_NAME, LABELS, UNMAPPED_KEY
+from ..columns import ALL_NAMES, BY_NAME, LABELS, OLD_PASSWORDS_KEY, UNMAPPED_KEY
+
+OLD_PASSWORDS_LABEL = "Frühere Passwörter"
 
 
 @dataclass(frozen=True)
@@ -19,6 +21,7 @@ class Writer:
     mime: str  # Medientyp für Downloads
     columns: tuple  # Spalten, die das Zielformat speichern kann
     prefix_groups: bool = False  # setzt den Datenbanknamen wieder vor die Gruppenpfade
+    stores_password_history: bool = False  # kann frühere Passwörter eines Eintrags speichern
 
     def text(self, rows):
         """Die Einträge als Dateiinhalt (String)."""
@@ -58,6 +61,8 @@ def lost_data(rows, writer):
                 columns[column] += 1
         if not writer.keeps_source(row):
             source.update(row.get(UNMAPPED_KEY) or [])
+        if row.get(OLD_PASSWORDS_KEY) and not writer.stores_password_history:
+            source[OLD_PASSWORDS_LABEL] += 1
     return {"columns": dict(columns), "source": dict(source)}
 
 

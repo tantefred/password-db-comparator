@@ -8,7 +8,9 @@ from dataclasses import dataclass, field
 
 from .columns import MODIFIED
 from .display import plural
+from .duplicates import find_duplicates
 from .entries import entry_label, is_trash
+from .merge import KEEP_ONE, clean_entries
 from .values import differing_columns, parse_time
 from .writers import DEFAULT_WRITER, WRITERS, loss_lines, lost_data
 
@@ -63,7 +65,7 @@ def merge_entries(cmp):
 
 
 # Dateinamen, wenn bei --export-added/--export-merged kein Pfad angegeben ist
-DEFAULT_NAMES = {"added": "neue_eintraege", "merged": "merged"}
+DEFAULT_NAMES = {"added": "neue_eintraege", "merged": "merged", "clean": "bereinigt"}
 
 
 def pick_writer(format_id=None):
@@ -141,4 +143,38 @@ def prepare_merged(cmp, path, writer=DEFAULT_WRITER):
             f"Version aus {cmp.new_name} übernommen, bitte prüfen:"
         )
         lines += [f"    ! {entry_label(key)}" for key in conflicts]
+    return with_losses(rows, lines, writer, conflicts=conflicts)
+
+
+def prepare_clean(
+    cmp, path, writer=DEFAULT_WRITER, kinds=None, auto_kinds=("key",), decisions=None
+):
+    """Die Datei ohne Dubletten (nur eine Datei).
+
+    Zusammengeführt wird nach ``decisions``; Gruppen ohne Entscheidung nur, wenn ihre Art in
+    ``auto_kinds`` steht. Konflikte werden zugunsten des zuletzt geänderten Eintrags gelöst
+    und in den Meldungen genannt.
+    """
+    groups = find_duplicates(cmp.old, kinds) if kinds else find_duplicates(cmp.old)
+    cleaned = clean_entries(cmp.old, groups, decisions, auto_kinds)
+    rows = prefix_rows(cmp, cleaned.rows, writer)
+    lines = [
+        f"{plural(len(rows), 'Eintrag', 'Einträge')} nach '{path}' exportiert "
+        f"({plural(len(cleaned.merged), 'Gruppe', 'Gruppen')} bearbeitet, "
+        f"{plural(cleaned.removed, 'Eintrag', 'Einträge')} entfernt, "
+        f"{cleaned.trash} aus Papierkorb ausgelassen; Datei enthält Passwörter im Klartext)."
+    ]
+    conflicted = [merged for merged in cleaned.merged if merged.conflicts]
+    if conflicted:
+        lines.append(
+            f"  {plural(len(conflicted), 'Konflikt', 'Konflikte')} – der zuletzt geänderte "
+            f"Eintrag hat sich durchgesetzt (außer bei eigener Wahl), bitte prüfen:"
+        )
+        for merged in conflicted:
+            first = merged.group.keys[0]
+            lines.append(f"    ! {entry_label(first)}: {', '.join(merged.conflicts)}")
+    kept_one = sum(1 for merged in cleaned.merged if merged.action == KEEP_ONE)
+    if kept_one:
+        lines.append(f"  {plural(kept_one, 'Gruppe', 'Gruppen')}: nur ein Eintrag behalten.")
+    conflicts = [merged.group.keys[0] for merged in conflicted]
     return with_losses(rows, lines, writer, conflicts=conflicts)

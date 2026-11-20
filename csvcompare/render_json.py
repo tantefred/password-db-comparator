@@ -7,7 +7,8 @@ from .columns import MODIFIED, SECRET_NAMES
 from .compare import FRESHNESS, NEWER_IN_NEW, NEWER_IN_OLD, UNCLEAR
 from .display import mask_secret
 from .duplicates import find_duplicates
-from .modes import CHECK, DEDUPE, OVERVIEW, PASSWORD_CHECK, SEARCH, STATS, selected_mode
+from .exports import export_path, pick_writer, prepare_clean
+from .modes import CHECK, CLEAN, DEDUPE, OVERVIEW, PASSWORD_CHECK, SEARCH, STATS, selected_mode
 from .search import MOVED, ONLY_IN_NEW, search
 
 
@@ -164,6 +165,20 @@ def search_report(base, cmp, query, hits, show_secrets):
     return {"mode": "search", **base, "query": query, "match_count": len(hits), "results": results}
 
 
+def clean_summary(cmp, args):
+    """Zusammenfassung des Exports ohne Dubletten (die Datei selbst wird nebenbei geschrieben)."""
+    writer = pick_writer(args.export_format)
+    path = export_path(args.export_clean, "clean", writer)
+    export = prepare_clean(cmp, path, writer, auto_kinds=args.clean_kinds)
+    return {
+        "path": path,
+        "format": writer.format,
+        "entries": len(export.rows),
+        "conflicts": [entry_ref(key) for key in export.conflicts],
+        "lost": export.lost,
+    }
+
+
 def dedupe_report(base, cmp, kinds, show_secrets):
     """Die Dublettengruppen mit ihren Mitgliedern und den abweichenden Spalten."""
     groups = []
@@ -249,6 +264,8 @@ def build_report(args, cmp):
         return check_report(base, cmp), 0
     if mode == PASSWORD_CHECK:
         return password_report(base, cmp, args.min_length, args.max_age_days), 0
+    if mode == CLEAN:
+        return {"mode": "clean", **base, "export": clean_summary(cmp, args)}, 0
     if mode == DEDUPE:
         return dedupe_report(base, cmp, args.dedupe_kinds, args.show_secrets), 0
     if mode == OVERVIEW:
