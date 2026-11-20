@@ -97,8 +97,10 @@ def make_handler(token, max_body, index_loader=load_index):
             raw = self.rfile.read(length)
             try:
                 data = json.loads(raw.decode("utf-8"))
-                old, new, options = data["old"], data["new"], data.get("options", {})
-                names_texts = [old["name"], old["text"], new["name"], new["text"]]
+                old, new, options = data["old"], data.get("new"), data.get("options", {})
+                names_texts = [old["name"], old["text"]]
+                if new is not None:  # die zweite Datei ist optional
+                    names_texts += [new["name"], new["text"]]
                 if not all(isinstance(x, str) for x in names_texts) or not isinstance(
                     options, dict
                 ):
@@ -106,7 +108,13 @@ def make_handler(token, max_body, index_loader=load_index):
             except (ValueError, KeyError, TypeError):
                 return self._json(400, {"error": "Ungültige Anfrage."})
             try:
-                result = analyze(old["name"], old["text"], new["name"], new["text"], options)
+                result = analyze(
+                    old["name"],
+                    old["text"],
+                    new["name"] if new else None,
+                    new["text"] if new else None,
+                    options,
+                )
             except UsageError as e:
                 return self._json(400, {"error": str(e)})
             except Exception:  # Fehlerdetails nur auf der Konsole, nie mit Dateiinhalten

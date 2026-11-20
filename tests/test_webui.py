@@ -243,6 +243,12 @@ class StaticPageTests(unittest.TestCase):
         self.assertNotIn("@import", self.html)
         self.assertNotIn("url(", self.html)
 
+    def test_page_supports_a_single_file(self):
+        self.assertIn('value="overview" checked', self.html)
+        self.assertIn('value="compare" disabled', self.html)
+        self.assertIn("state.b ? {", self.html)
+        self.assertIn('id="clear-b"', self.html)
+
     def test_file_contents_are_never_inserted_as_html(self):
         for risky in (
             "innerHTML",

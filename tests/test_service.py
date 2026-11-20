@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 from csvcompare.service import UsageError, analyze, options_to_argv
-from tests.helpers import read_fixture, run
+from tests.helpers import fixture_path, read_fixture, run
 
 ALT, NEU = read_fixture("alt.csv"), read_fixture("neu.csv")
 
@@ -150,3 +150,35 @@ class ServiceBehaviourTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SingleFileServiceTests(unittest.TestCase):
+    def setUp(self):
+        self.text = read_fixture("keepassium_a.csv")
+
+    def test_one_file_defaults_to_the_overview(self):
+        result = analyze("a.csv", self.text, None, None, {})
+        self.assertEqual(result["report"]["mode"], "overview")
+        self.assertIsNone(result["report"]["files"]["new"])
+        self.assertEqual(
+            result["command"],
+            "python3 compare_csv.py a.csv --overview --min-length=10 --max-age-days=730",
+        )
+
+    def test_one_file_matches_the_command_line(self):
+        _, out, _ = run(fixture_path("keepassium_a.csv"), "--stats")
+        result = analyze("keepassium_a.csv", self.text, None, None, {"mode": "stats"})
+        self.assertEqual(result["report"]["total"], {"old": 8})
+        self.assertIn("Gesamt", out)
+
+    def test_compare_needs_two_files(self):
+        with self.assertRaises(UsageError):
+            analyze("a.csv", self.text, None, None, {"mode": "compare"})
+
+    def test_exports_need_two_files(self):
+        with self.assertRaises(UsageError):
+            analyze("a.csv", self.text, None, None, {"mode": "stats", "export_added": True})
+
+    def test_search_in_one_file(self):
+        result = analyze("a.csv", self.text, None, None, {"mode": "search", "search": "mail"})
+        self.assertEqual([r["status"] for r in result["report"]["results"]], ["found"])

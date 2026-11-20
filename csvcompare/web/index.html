@@ -110,11 +110,14 @@ details.panel > summary::-webkit-details-marker { display: none; }
 .drop .meta { color: var(--muted); font-size: 13px; }
 .drop.filled { border-style: solid; background: var(--surface); }
 .swap { justify-self: start; }
+.file-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.section-title { margin: 6px 2px -6px; font-size: 15px; font-weight: 650; }
 
 /* ---------- Formularelemente ---------- */
-.modes { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--sunken); }
-.modes label { position: relative; text-align: center; padding: 8px 2px; font-size: 13px; cursor: pointer; border-right: 1px solid var(--line); line-height: 1.25; display: grid; place-items: center; }
-.modes label:last-child { border-right: 0; }
+.modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--line); }
+.modes label { position: relative; text-align: center; padding: 8px 2px; font-size: 13px; cursor: pointer; background: var(--sunken); line-height: 1.25; display: grid; place-items: center; }
+.modes label:has(input:disabled) { opacity: .45; cursor: not-allowed; }
+.modes label:has(input:disabled) input { cursor: not-allowed; }
 .modes input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
 .modes label:has(input:checked) { background: var(--ink); color: var(--surface); font-weight: 600; }
 .modes label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
@@ -278,12 +281,15 @@ pre.json { margin: 0; padding: 14px 16px; max-height: 420px; overflow: auto; fon
           </label>
           <label class="drop b" id="drop-b">
             <span class="tag" aria-hidden="true">2</span>
-            <span class="name" data-name>Zweite Datei wählen</span>
+            <span class="name" data-name>Zweite Datei (optional)</span>
             <span class="meta" data-meta>CSV oder JSON hierher ziehen oder klicken</span>
             <input type="file" id="file-b" accept=".csv,.json,text/csv,application/json,text/plain" aria-label="Zweite Datei (CSV oder JSON)">
           </label>
         </div>
-        <button class="btn quiet swap" type="button" id="swap">Dateien tauschen</button>
+        <div class="file-actions">
+          <button class="btn quiet swap" type="button" id="swap" disabled>Dateien tauschen</button>
+          <button class="btn quiet" type="button" id="clear-b" hidden>Zweite Datei entfernen</button>
+        </div>
       </div>
     </section>
 
@@ -291,7 +297,8 @@ pre.json { margin: 0; padding: 14px 16px; max-height: 420px; overflow: auto; fon
       <h2 id="h-mode">Was möchtest du sehen?</h2>
       <div class="body">
         <div class="modes" role="radiogroup" aria-labelledby="h-mode">
-          <label><input type="radio" name="mode" value="compare" checked><span>Vergleich</span></label>
+          <label><input type="radio" name="mode" value="compare" disabled><span>Vergleich</span></label>
+          <label><input type="radio" name="mode" value="overview" checked><span>Überblick</span></label>
           <label><input type="radio" name="mode" value="search"><span>Suche</span></label>
           <label><input type="radio" name="mode" value="stats"><span>Statistik</span></label>
           <label><input type="radio" name="mode" value="check"><span>Dubletten</span></label>
@@ -350,12 +357,12 @@ pre.json { margin: 0; padding: 14px 16px; max-height: 420px; overflow: auto; fon
 
   <section class="results" id="results" aria-live="polite">
     <div class="panel empty" id="empty">
-      <h2>Zwei Exporte, ein Überblick</h2>
-      <p>Du siehst, was sich zwischen den Dateien unterscheidet und in welcher davon die jeweils neuere Version liegt.</p>
+      <h2>Ein Export oder zwei, ein Überblick</h2>
+      <p>Mit zwei Dateien siehst du, was sich unterscheidet und in welcher die jeweils neuere Version liegt. Eine einzelne Datei kannst du auf Dubletten, Passwortqualität und mehr prüfen.</p>
       <ol>
-        <li>Wähle links die beiden Dateien aus (CSV oder JSON).</li>
+        <li>Wähle links eine oder zwei Dateien aus (CSV oder JSON).</li>
         <li>Lege fest, was du sehen möchtest.</li>
-        <li>Klicke auf „Vergleichen“.</li>
+        <li>Klicke auf die Schaltfläche darunter.</li>
       </ol>
     </div>
   </section>
@@ -372,22 +379,23 @@ const COLUMN_LABEL = { "Group": "Gruppe", "Title": "Titel", "Username": "Usernam
   "Reprompt": "Passwort-Nachfrage", "Fields": "Eigene Felder", "URLs": "Alle URLs" };
 const FORMAT_LABEL = { "keepass-csv": "KeePass-CSV", "bitwarden-json": "Bitwarden-JSON",
   "bitwarden-csv": "Bitwarden-CSV" };
-const MODE_LABEL = { "compare": "Vergleichen", "search": "Suchen", "stats": "Zählen",
-  "check": "Prüfen", "password-check": "Prüfen" };
+const MODE_LABEL = { "compare": "Vergleichen", "overview": "Auswerten", "search": "Suchen",
+  "stats": "Zählen", "check": "Prüfen", "password-check": "Prüfen" };
 const EXPORT_FORMAT_HINT = {
   "keepass-csv": "Zum Import in KeePassium oder KeePassXC (CSV).",
   "bitwarden-json": "Unverschlüsselt, zum Import in Bitwarden oder Vaultwarden (Dateityp „Bitwarden (json)“).",
 };
 const MODE_HINT = {
+  "overview": "Statistik, Dubletten und Passwortqualität auf einen Blick, für jede Datei einzeln.",
   "compare": "Was ist neu, entfernt, verschoben oder geändert – und in welcher Datei steht die neuere Version?",
-  "search": "Findet einen Eintrag über Gruppe, Titel oder Username und zeigt seinen Status.",
+  "search": "Findet einen Eintrag über Gruppe, Titel oder Username und zeigt seinen Status (bei zwei Dateien im Vergleich).",
   "stats": "Wie viele Einträge liegen pro Gruppe in jeder Datei?",
   "check": "Sucht in jeder Datei einzeln nach Dubletten, fehlenden Passwörtern und ungültigen URLs.",
   "password-check": "Zeigt wiederverwendete, kurze und lange nicht geänderte Passwörter. Passwörter selbst erscheinen nie."
 };
 
 const $ = (id) => document.getElementById(id);
-const state = { a: null, b: null, last: null, urls: [] };
+const state = { a: null, b: null, last: null, urls: [], userMode: false };
 
 /* ---------- DOM-Helfer: Inhalte nie als HTML einsetzen ---------- */
 function h(tag, attrs, ...children) {
@@ -415,7 +423,7 @@ function setupDrop(key, dropEl, input) {
     reader.onload = () => {
       state[key] = { name: file.name, text: String(reader.result), size: file.size };
       renderDrop(key, dropEl);
-      refreshRun();
+      syncModeToFiles();
     };
     reader.onerror = () => showError(`„${file.name}“ konnte nicht gelesen werden.`);
     reader.readAsText(file, "utf-8");
@@ -436,7 +444,7 @@ function sniffFormat(text) {
 function renderDrop(key, dropEl) {
   const f = state[key];
   dropEl.classList.toggle("filled", !!f);
-  dropEl.querySelector("[data-name]").textContent = f ? f.name : (key === "a" ? "Erste Datei wählen" : "Zweite Datei wählen");
+  dropEl.querySelector("[data-name]").textContent = f ? f.name : (key === "a" ? "Erste Datei wählen" : "Zweite Datei (optional)");
   dropEl.querySelector("[data-meta]").textContent = f
     ? `${FORMAT_LABEL[sniffFormat(f.text)]}, ${(f.size / 1024).toLocaleString("de-DE", { maximumFractionDigits: 1 })} KB – klicken zum Ersetzen`
     : "CSV oder JSON hierher ziehen oder klicken";
@@ -444,8 +452,24 @@ function renderDrop(key, dropEl) {
 function refreshRun() {
   const mode = currentMode();
   const needsSearch = mode === "search" && !$("search").value.trim();
-  $("run").disabled = !(state.a && state.b) || needsSearch;
+  const hasFiles = mode === "compare" ? state.a && state.b : state.a;
+  $("run").disabled = !hasFiles || needsSearch;
   $("run").textContent = MODE_LABEL[mode];
+  $("swap").disabled = !(state.a && state.b);
+  $("clear-b").hidden = !state.b;
+}
+
+/* Der Vergleich braucht zwei Dateien; ohne Wahl des Nutzers passt sich der Modus der Dateizahl an. */
+function setMode(value) {
+  document.querySelector(`input[name="mode"][value="${value}"]`).checked = true;
+  onModeChange();
+}
+function syncModeToFiles() {
+  const two = !!(state.a && state.b);
+  document.querySelector('input[name="mode"][value="compare"]').disabled = !two;
+  if (!two && currentMode() === "compare") setMode("overview");
+  else if (two && !state.userMode && currentMode() === "overview") setMode("compare");
+  else refreshRun();
 }
 
 /* ---------- Optionen ---------- */
@@ -462,7 +486,7 @@ function collectOptions() {
     show_secrets: $("show-secrets").checked,
   };
   if (mode === "search") opts.search = $("search").value;
-  if (mode === "password-check") {
+  if (mode === "password-check" || mode === "overview") {
     opts.min_length = Number($("min-length").value);
     opts.max_age_days = Number($("max-age").value);
   }
@@ -483,7 +507,7 @@ function onModeChange() {
   const mode = currentMode();
   $("mode-hint").textContent = MODE_HINT[mode];
   $("f-search").classList.toggle("is-hidden", mode !== "search");
-  $("f-pw").classList.toggle("is-hidden", mode !== "password-check");
+  $("f-pw").classList.toggle("is-hidden", mode !== "password-check" && mode !== "overview");
   const canExport = mode === "compare";
   for (const id of ["export-added", "export-merged"]) {
     $(id).disabled = !canExport;
@@ -507,7 +531,7 @@ async function run() {
       headers: { "Content-Type": "application/json", "X-Token": TOKEN },
       body: JSON.stringify({
         old: { name: state.a.name, text: state.a.text },
-        new: { name: state.b.name, text: state.b.text },
+        new: state.b ? { name: state.b.name, text: state.b.text } : null,
         options: collectOptions(),
       }),
     });
@@ -548,6 +572,7 @@ function render(data) {
   const out = $("results");
   out.append(headPanel(data));
   if (r.mode === "compare") renderCompare(out, r, data);
+  else if (r.mode === "overview") renderOverview(out, r);
   else if (r.mode === "search") renderSearch(out, r, data);
   else if (r.mode === "stats") renderStats(out, r);
   else renderFindings(out, r);
@@ -570,7 +595,7 @@ function headPanel(data) {
     catch (_) { copy.textContent = "Nicht möglich"; }
     setTimeout(() => (copy.textContent = "Kopieren"), 1600);
   });
-  const hints = [f.old, f.new].flatMap((side) => (side.notes || []).map((n) => `${side.name}: ${n}`));
+  const hints = [f.old, f.new].filter(Boolean).flatMap((side) => (side.notes || []).map((n) => `${side.name}: ${n}`));
   const skippedByReason = {};
   for (const a of fl.auto_ignored || []) (skippedByReason[a.reason] = skippedByReason[a.reason] || []).push(COLUMN_LABEL[a.column] || a.column);
   const skipped = Object.entries(skippedByReason).map(([reason, cols]) => `${cols.join(", ")} – ${reason}`);
@@ -578,8 +603,10 @@ function headPanel(data) {
   return h("section", { class: "panel head", id: "top" },
     h("div", { class: "pair" },
       sideTag("a", f.old.name), formatBadge(f.old), h("small", { class: "note", text: plural(f.old.entries, "Eintrag", "Einträge") }),
-      h("span", { class: "sep", "aria-hidden": "true", text: "⇄" }),
-      sideTag("b", f.new.name), formatBadge(f.new), h("small", { class: "note", text: plural(f.new.entries, "Eintrag", "Einträge") })),
+      f.new ? [
+        h("span", { class: "sep", "aria-hidden": "true", text: "⇄" }),
+        sideTag("b", f.new.name), formatBadge(f.new), h("small", { class: "note", text: plural(f.new.entries, "Eintrag", "Einträge") }),
+      ] : null),
     notes.length ? h("div", { class: "filters", text: notes.join("  ·  ") }) : null,
     hints.length ? h("ul", { class: "hints" }, hints.map((t) => h("li", { text: t }))) : null,
     skipped.length ? h("p", { class: "skipped" }, h("strong", { text: "Nicht verglichen: " }), skipped.join("  ·  ")) : null,
@@ -701,10 +728,10 @@ function exportsPanel(exps) {
 
 /* ----- Suche ----- */
 const SEARCH_STATUS = {
-  moved: ["Verschoben/umbenannt", "moved"], identical: ["Identisch in beiden Dateien", ""], unclear: ["Aktualität unklar", "warn"],
+  found: ["Gefunden", ""], moved: ["Verschoben/umbenannt", "moved"], identical: ["Identisch in beiden Dateien", ""], unclear: ["Aktualität unklar", "warn"],
 };
 function renderSearch(out, r) {
-  const a = r.files.old.name, b = r.files.new.name;
+  const a = r.files.old.name, b = r.files.new ? r.files.new.name : "";
   const status = (s) => ({
     only_in_old: [`Nur in ${a}`, "a"], only_in_new: [`Nur in ${b}`, "b"],
     newer_in_new: [`${b} ist aktueller`, "b"], newer_in_old: [`${a} ist aktueller`, "a"],
@@ -726,24 +753,34 @@ function renderSearch(out, r) {
 
 /* ----- Statistik ----- */
 function renderStats(out, r) {
-  const a = r.files.old.name, b = r.files.new.name;
-  const max = Math.max(1, ...r.groups.map((g) => Math.max(g.old, g.new)));
+  const a = r.files.old.name, b = r.files.new ? r.files.new.name : null;
+  const max = Math.max(1, ...r.groups.map((g) => Math.max(g.old, g.new || 0)));
   const bars = (g) => h("div", { class: "pair-bars" },
     h("div", { class: "bl a" }, h("i", { style: `width: ${(g.old / max) * 100}%` }), g.old),
-    h("div", { class: "bl b" }, h("i", { style: `width: ${(g.new / max) * 100}%` }), g.new));
+    b ? h("div", { class: "bl b" }, h("i", { style: `width: ${(g.new / max) * 100}%` }), g.new) : null);
   const diff = (n) => (n > 0 ? "+" : n < 0 ? "−" : "±") + Math.abs(n);
   out.append(h("section", { class: "panel" }, h("h2", { text: "Einträge pro Gruppe" }),
     h("table", { class: "stats" },
       h("thead", null, h("tr", null, h("th", { scope: "col", text: "Gruppe" }),
-        h("th", { scope: "col" }, sideTag("a", a), " ", sideTag("b", b)), h("th", { scope: "col", style: "text-align:right", text: "Differenz" }))),
+        h("th", { scope: "col" }, sideTag("a", a), b ? [" ", sideTag("b", b)] : null),
+        b ? h("th", { scope: "col", style: "text-align:right", text: "Differenz" }) : null)),
       h("tbody", null, r.groups.map((g) => h("tr", null,
-        h("td", { class: "g", text: g.group || "(ohne Gruppe)" }), h("td", null, bars(g)), h("td", { class: "d", text: diff(g.difference) })))),
+        h("td", { class: "g", text: g.group || "(ohne Gruppe)" }), h("td", null, bars(g)),
+        b ? h("td", { class: "d", text: diff(g.difference) }) : null))),
       h("tfoot", null, h("tr", null, h("td", { class: "g", text: "Gesamt" }),
-        h("td", { text: `${r.total.old} | ${r.total.new}` }), h("td", { class: "d", text: diff(r.total.difference) }))))));
+        h("td", { text: b ? `${r.total.old} | ${r.total.new}` : `${r.total.old}` }),
+        b ? h("td", { class: "d", text: diff(r.total.difference) }) : null)))));
 }
 
 /* ----- Prüfungen ----- */
-function renderFindings(out, r) {
+function renderOverview(out, r) {
+  out.append(h("h2", { class: "section-title", text: "Statistik" }));
+  renderStats(out, { ...r.stats, files: r.files });
+  renderFindings(out, { ...r.check, files: r.files }, "Dubletten und kaputte Einträge");
+  renderFindings(out, { ...r.password_check, files: r.files }, "Passwortqualität");
+}
+function renderFindings(out, r, title) {
+  if (title) out.append(h("h2", { class: "section-title", text: title }));
   r.results.forEach((res, i) => {
     const side = i === 0 ? "a" : "b";
     const entries = r.files[i === 0 ? "old" : "new"].entries;
@@ -785,7 +822,16 @@ $("swap").addEventListener("click", () => {
   [state.a, state.b] = [state.b, state.a];
   renderDrop("a", $("drop-a")); renderDrop("b", $("drop-b")); refreshRun();
 });
-document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener("change", onModeChange));
+$("clear-b").addEventListener("click", () => {
+  state.b = null;
+  $("file-b").value = "";
+  renderDrop("b", $("drop-b"));
+  syncModeToFiles();
+});
+document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener("change", () => {
+  state.userMode = true;
+  onModeChange();
+}));
 document.querySelectorAll('input[name="export-format"]').forEach((r) => r.addEventListener("change", onExportFormatChange));
 onExportFormatChange();
 $("search").addEventListener("input", refreshRun);

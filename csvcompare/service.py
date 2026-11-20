@@ -10,9 +10,8 @@ import shlex
 from .cli import build_comparison, build_parser, validate_args
 from .exports import export_path, pick_writer, prepare_added, prepare_merged
 from .importers import CsvError, load_any
+from .modes import COMPARE, MODES, OVERVIEW, PASSWORD_CHECK, SEARCH
 from .render_json import build_report, entry_ref
-
-MODES = ("compare", "search", "stats", "check", "password-check")
 
 
 class UsageError(Exception):
@@ -54,14 +53,14 @@ def filter_arguments(options):
 
 def mode_arguments(options, mode):
     """Argumente für den gewählten Auswertungsmodus."""
-    if mode == "search":
+    if mode == SEARCH:
         query = options.get("search")
         if not isinstance(query, str) or not query.strip():
             raise UsageError("Für die Suche fehlt der Suchbegriff.")
         return ["--search=" + query]
-    if mode == "password-check":
+    if mode in (PASSWORD_CHECK, OVERVIEW):
         return [
-            "--password-check",
+            "--password-check" if mode == PASSWORD_CHECK else "--overview",
             f"--min-length={_as_int(options, 'min_length', 10)}",
             f"--max-age-days={_as_int(options, 'max_age_days', 730)}",
         ]
@@ -81,11 +80,16 @@ def export_arguments(options):
     return flags
 
 
-def options_to_argv(options):
-    """Übersetzt UI-Optionen (Dict) in Kommandozeilen-Argumente."""
-    mode = options.get("mode", "compare")
+def options_to_argv(options, single=False):
+    """Übersetzt UI-Optionen (Dict) in Kommandozeilen-Argumente.
+
+    ``single``: Es liegt nur eine Datei vor; ohne Modus gilt dann der Überblick.
+    """
+    mode = options.get("mode") or (OVERVIEW if single else COMPARE)
     if mode not in MODES:
         raise UsageError(f"Unbekannter Modus '{mode}'.")
+    if single and mode == COMPARE:
+        raise UsageError("Der Vergleich braucht zwei Dateien.")
     return filter_arguments(options) + mode_arguments(options, mode) + export_arguments(options)
 
 
@@ -104,30 +108,38 @@ def export_payload(export, filename):
 
 
 def analyze(old_name, old_text, new_name, new_text, options):
-    """Vergleicht zwei CSV-Inhalte und gibt das Ergebnis als Dict zurück.
+    """Wertet einen oder zwei Dateiinhalte aus und gibt das Ergebnis als Dict zurück.
+
+    Ohne zweite Datei (``new_name=None``) gibt es keinen Vergleich, sondern die Auswertung der
+    ersten (Überblick, Statistik, Prüfung, Passwörter, Suche).
 
     Rückgabe: {"report", "status", "command", "exports"}; status 1 heißt „Suche ohne Treffer“.
     Wirft UsageError bei ungültigen Eingaben.
     """
-    argv = options_to_argv(options)
+    single = new_name is None
+    argv = options_to_argv(options, single=single)
 
     def fail(message):
         raise UsageError(message)
 
     parser = build_parser()
     parser.error = fail  # statt Programmabbruch eine Ausnahme auslösen
-    args = parser.parse_args(["alt", "neu", *argv])
+    args = parser.parse_args(["alt"] + ([] if single else ["neu"]) + argv)
     args.alt, args.neu = old_name, new_name  # im Bericht als Pfade ausgewiesen
     ignored = validate_args(parser, args)
 
     try:
         old_source = load_any(old_name, old_text, keep_db_name=args.keep_db_name)
-        new_source = load_any(new_name, new_text, keep_db_name=args.keep_db_name)
+        new_source = (
+            None if single else load_any(new_name, new_text, keep_db_name=args.keep_db_name)
+        )
     except CsvError as e:
         raise UsageError(str(e)) from None
 
     shown_old, shown_new = old_name, new_name
-    if shown_old == shown_new:  # gleicher Dateiname: im Bericht unterscheidbar machen
+    if (
+        not single and shown_old == shown_new
+    ):  # gleicher Dateiname: im Bericht unterscheidbar machen
         shown_old, shown_new = f"{old_name} (1)", f"{new_name} (2)"
     cmp = build_comparison(parser, args, ignored, old_source, new_source, shown_old, shown_new)
     report, status = build_report(args, cmp)
@@ -142,5 +154,6 @@ def analyze(old_name, old_text, new_name, new_text, options):
             path = export_path(value, kind, writer)
             exports[kind] = export_payload(prepare(cmp, path, writer), path)
 
-    command = shlex.join(["python3", "compare_csv.py", old_name, new_name, *argv])
+    files = [old_name] if single else [old_name, new_name]
+    command = shlex.join(["python3", "compare_csv.py", *files, *argv])
     return {"report": report, "status": status, "command": command, "exports": exports}
