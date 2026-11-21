@@ -132,6 +132,9 @@ table.members .base { color: var(--b); }
 .choices select, .conflicts select { padding: 4px 6px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); max-width: 100%; }
 .conflicts { display: grid; gap: 6px; padding: 8px 10px; background: var(--danger-soft); border-radius: var(--radius); font-size: 13.5px; }
 .conflicts label { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.cleanformat { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 13.5px; }
+.cleanformat .modes { width: auto; min-width: 260px; }
+.cleanformat .modes label:last-child { grid-column: auto; }
 .stale-note { padding: 10px 14px; border: 1px solid var(--warn); border-left-width: 4px; background: var(--warn-soft); color: var(--warn); border-radius: var(--radius); font-weight: 500; }
 .cleanbar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 12px 16px; }
 .cleanbar .count { font-weight: 600; margin-right: auto; }
@@ -314,6 +317,7 @@ pre.json { margin: 0; padding: 14px 16px; max-height: 420px; overflow: auto; fon
         </div>
         <div class="file-actions">
           <button class="btn quiet swap" type="button" id="swap" disabled>Dateien tauschen</button>
+          <button class="btn quiet" type="button" id="clear-a" hidden>Erste Datei entfernen</button>
           <button class="btn quiet" type="button" id="clear-b" hidden>Zweite Datei entfernen</button>
         </div>
       </div>
@@ -325,10 +329,10 @@ pre.json { margin: 0; padding: 14px 16px; max-height: 420px; overflow: auto; fon
         <div class="modes" role="radiogroup" aria-labelledby="h-mode">
           <label><input type="radio" name="mode" value="compare" disabled><span>Vergleich</span></label>
           <label><input type="radio" name="mode" value="overview" checked><span>Überblick</span></label>
-          <label><input type="radio" name="mode" value="clean"><span>Bereinigen</span></label>
+          <label><input type="radio" name="mode" value="clean"><span>Dubletten bereinigen</span></label>
           <label><input type="radio" name="mode" value="search"><span>Suche</span></label>
           <label><input type="radio" name="mode" value="stats"><span>Statistik</span></label>
-          <label><input type="radio" name="mode" value="check"><span>Dubletten</span></label>
+          <label><input type="radio" name="mode" value="check"><span>Prüfen</span></label>
           <label><input type="radio" name="mode" value="password-check"><span>Passwörter</span></label>
         </div>
         <p class="hint" id="mode-hint"></p>
@@ -406,7 +410,7 @@ const COLUMN_LABEL = { "Group": "Gruppe", "Title": "Titel", "Username": "Usernam
   "Reprompt": "Passwort-Nachfrage", "Fields": "Eigene Felder", "URLs": "Alle URLs" };
 const FORMAT_LABEL = { "keepass-csv": "KeePass-CSV", "bitwarden-json": "Bitwarden-JSON",
   "bitwarden-csv": "Bitwarden-CSV" };
-const MODE_LABEL = { "compare": "Vergleichen", "overview": "Auswerten", "clean": "Dubletten suchen", "search": "Suchen",
+const MODE_LABEL = { "compare": "Vergleichen", "overview": "Auswerten", "clean": "Dubletten anzeigen", "search": "Suchen",
   "stats": "Zählen", "check": "Prüfen", "password-check": "Prüfen" };
 const EXPORT_FORMAT_HINT = {
   "keepass-csv": "Zum Import in KeePassium oder KeePassXC (CSV).",
@@ -423,7 +427,7 @@ const MODE_HINT = {
 };
 
 const $ = (id) => document.getElementById(id);
-const state = { a: null, b: null, last: null, urls: [], userMode: false, run: null };
+const state = { a: null, b: null, last: null, urls: [], userMode: false, run: null, dirty: false };
 
 /* ---------- DOM-Helfer: Inhalte nie als HTML einsetzen ---------- */
 function h(tag, attrs, ...children) {
@@ -492,6 +496,7 @@ function refreshRun() {
   $("run").disabled = !hasFiles || needsSearch;
   $("run").textContent = MODE_LABEL[mode];
   $("swap").disabled = !(state.a && state.b);
+  $("clear-a").hidden = !state.a;
   $("clear-b").hidden = !state.b;
   checkStale();
 }
@@ -521,8 +526,12 @@ function setMode(value) {
 }
 function syncModeToFiles() {
   const two = !!(state.a && state.b);
-  document.querySelector('input[name="mode"][value="compare"]').disabled = !two;
-  document.querySelector('input[name="mode"][value="clean"]').disabled = two;
+  const compareRadio = document.querySelector('input[name="mode"][value="compare"]');
+  const cleanRadio = document.querySelector('input[name="mode"][value="clean"]');
+  compareRadio.disabled = !two;
+  cleanRadio.disabled = two;
+  compareRadio.closest("label").title = two ? "" : "Der Vergleich braucht zwei Dateien";
+  cleanRadio.closest("label").title = two ? "Dubletten bereinigen geht nur mit einer Datei" : "";
   if (!two && currentMode() === "compare") setMode("overview");
   else if (two && currentMode() === "clean") setMode("compare");
   else if (two && !state.userMode && currentMode() === "overview") setMode("compare");
@@ -560,6 +569,36 @@ function exportFormat() {
 }
 function onExportFormatChange() {
   $("format-hint").textContent = EXPORT_FORMAT_HINT[exportFormat()];
+  syncFormatChoosers();
+}
+/* Das Format der bereinigten Datei lässt sich neben dem Knopf wählen; es ist dieselbe Wahl wie unter „Exportieren“. */
+const CLEAN_FORMAT_HINT = {
+  "keepass-csv": "Frühere Passwörter zusammengeführter Einträge gehen in diesem Format verloren.",
+  "bitwarden-json": "Behält frühere Passwörter, Passkeys und Sammlungen.",
+};
+let formatChoosers = [];
+let onCleanFormatChange = () => {};
+function syncFormatChoosers() {
+  const current = exportFormat();
+  formatChoosers.forEach(({ radios, hint }) => {
+    radios.forEach((r) => (r.checked = r.value === current));
+    hint.textContent = CLEAN_FORMAT_HINT[current];
+  });
+}
+function formatChooser(index) {
+  const radios = ["keepass-csv", "bitwarden-json"].map((value) =>
+    h("input", { type: "radio", name: `clean-format-${index}`, value }));
+  const hint = h("span", { class: "note" });
+  radios.forEach((r) => r.addEventListener("change", () => {
+    document.querySelector(`input[name="export-format"][value="${r.value}"]`).click();
+    onCleanFormatChange();
+  }));
+  formatChoosers.push({ radios, hint });
+  return h("div", { class: "cleanformat" },
+    h("strong", { text: "Format:" }),
+    h("div", { class: "modes two", role: "radiogroup", "aria-label": "Format der bereinigten Datei" },
+      radios.map((r) => h("label", null, r, h("span", { text: FORMAT_LABEL[r.value] })))),
+    hint);
 }
 function onModeChange() {
   const mode = currentMode();
@@ -580,7 +619,11 @@ function onModeChange() {
 }
 
 /* ---------- Anfrage ---------- */
+window.addEventListener("beforeunload", (e) => {
+  if (state.dirty) { e.preventDefault(); e.returnValue = ""; }   // Entscheidungen gingen verloren
+});
 async function run() {
+  if (state.dirty && !confirm("Deine Entscheidungen zu den Dubletten gehen verloren, wenn du neu auswertest. Trotzdem fortfahren?")) return;
   clearResults();
   $("results").append(h("p", { class: "status", text: "Wird ausgewertet …" }));
   $("run").disabled = true;
@@ -611,6 +654,7 @@ async function run() {
 /* ---------- Anzeige ---------- */
 function clearResults() {
   state.run = null;
+  state.dirty = false;
   lockClean = () => {};
   state.urls.forEach((u) => URL.revokeObjectURL(u));
   state.urls = [];
@@ -804,31 +848,37 @@ function renderClean(out, r) {
   }
   const exportSlot = h("div", { id: "clean-export" });
   const counts = [], makes = [];
+  formatChoosers = [];
+  const invalidateExport = () => {
+    if (!exportSlot.dataset.made) return;   // es gibt noch keine erstellte Datei
+    delete exportSlot.dataset.made;
+    exportSlot.replaceChildren(h("p", { class: "note", role: "status", text: "Die Entscheidungen oder das Format haben sich geändert. Die zuvor erstellte Datei ist veraltet – bitte neu erstellen." }));
+  };
+  onCleanFormatChange = invalidateExport;
   const update = () => {
     const merged = cleanForm.filter((f) => f.action() === "merge").length;
     const removed = cleanForm.reduce((n, f) => n + (f.action() === "keep_all" ? 0 : f.group.members.length - 1), 0);
     const text = `${plural(r.group_count, "Gruppe", "Gruppen")}, ${merged} zusammenführen, ${plural(removed, "Eintrag", "Einträge")} entfallen`;
     counts.forEach((c) => (c.textContent = text));
-    if (exportSlot.dataset.made) {   // Entscheidungen haben sich seit dem Erstellen geändert
-      delete exportSlot.dataset.made;
-      exportSlot.replaceChildren(h("p", { class: "note", role: "status", text: "Die Entscheidungen haben sich geändert. Die zuvor erstellte Datei ist veraltet – bitte neu erstellen." }));
-    }
+    state.dirty = cleanForm.some((f) => f.changed());
+    invalidateExport();   // Entscheidungen haben sich seit dem Erstellen geändert
   };
   // Dieselbe Leiste oben und unten: so muss man nach dem Ändern nicht zurückscrollen.
   const cleanBar = () => {
     const count = h("span", { class: "count" });
     const make = h("button", { class: "btn", type: "button", text: "Datei ohne Dubletten erstellen" });
-    const reset = h("button", { class: "btn quiet", type: "button", text: "Vorschläge übernehmen" });
+    const reset = h("button", { class: "btn quiet", type: "button", text: "Auf Vorschläge zurücksetzen" });
     counts.push(count);
     makes.push(make);
     reset.addEventListener("click", () => { cleanForm.forEach((f) => f.reset()); update(); });
     make.addEventListener("click", () => makeCleanFile(makes, exportSlot));
-    return h("section", { class: "panel cleanbar" }, count, reset, make);
+    return h("section", { class: "panel cleanbar" }, count, reset, make, formatChooser(counts.length));
   };
   out.append(cleanBar());
   r.groups.forEach((g) => out.append(cleanCard(g, update)));
   out.append(cleanBar(), exportSlot);
   lockClean = (locked) => makes.forEach((b) => (b.disabled = locked));
+  syncFormatChoosers();
   update();
 }
 function memberName(g, i) {
@@ -896,23 +946,26 @@ function cleanCard(g, update) {
     Object.values(pickSelects).forEach((s) => (s.value = ""));
     sync();
   };
+  const decisionOf = () => {
+    const a = action();
+    if (a === "keep") return { action: a, keep: Number(keepSelect.value) };
+    if (a !== "merge") return { action: a };
+    const picks = {};
+    for (const [col, sel] of Object.entries(pickSelects)) {
+      if (sel.value !== "") picks[col] = sel.value === "both" ? "both" : Number(sel.value);
+    }
+    return { action: a, picks };
+  };
   radios().forEach((x) => x.addEventListener("change", sync));
   [keepSelect, ...Object.values(pickSelects)].forEach((s) => s.addEventListener("change", update));
+  let baseline = "";
   cleanForm.push({
     group: g, action,
-    reset,
-    decision: () => {
-      const a = action();
-      if (a === "keep") return { action: a, keep: Number(keepSelect.value) };
-      if (a !== "merge") return { action: a };
-      const picks = {};
-      for (const [col, sel] of Object.entries(pickSelects)) {
-        if (sel.value !== "") picks[col] = sel.value === "both" ? "both" : Number(sel.value);
-      }
-      return { action: a, picks };
-    },
+    reset: () => { reset(); baseline = JSON.stringify(decisionOf()); },
+    changed: () => JSON.stringify(decisionOf()) !== baseline,
+    decision: () => decisionOf(),
   });
-  reset();
+  cleanForm[cleanForm.length - 1].reset();
   return card;
 }
 async function makeCleanFile(buttons, slot) {
@@ -1040,6 +1093,14 @@ setupDrop("b", $("drop-b"), $("file-b"));
 $("swap").addEventListener("click", () => {
   [state.a, state.b] = [state.b, state.a];
   renderDrop("a", $("drop-a")); renderDrop("b", $("drop-b")); refreshRun();
+});
+$("clear-a").addEventListener("click", () => {
+  state.a = state.b;   // die zweite Datei rückt nach
+  state.b = null;
+  $("file-a").value = "";
+  $("file-b").value = "";
+  renderDrop("a", $("drop-a")); renderDrop("b", $("drop-b"));
+  syncModeToFiles();
 });
 $("clear-b").addEventListener("click", () => {
   state.b = null;

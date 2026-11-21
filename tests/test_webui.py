@@ -289,6 +289,24 @@ class StaticPageTests(unittest.TestCase):
         self.assertNotIn("readAsText", self.html)
         self.assertIn("keine UTF-8-Textdatei", self.html)
 
+    def test_cleaning_bar_offers_the_format_and_guards_unsaved_decisions(self):
+        for text in (
+            "formatChooser",
+            "CLEAN_FORMAT_HINT",
+            "beforeunload",
+            "state.dirty",
+            "confirm(",
+        ):
+            self.assertIn(text, self.html, text)
+        self.assertIn('id="clear-a"', self.html)
+        self.assertIn("Auf Vorschläge zurücksetzen", self.html)
+        self.assertNotIn("Vorschläge übernehmen", self.html)
+
+    def test_modes_are_named_by_what_they_do(self):
+        self.assertIn("<span>Dubletten bereinigen</span>", self.html)
+        self.assertIn('value="check"><span>Prüfen</span>', self.html)
+        self.assertIn("braucht zwei Dateien", self.html)  # Tooltip des gesperrten Vergleichs
+
     def test_file_contents_are_never_inserted_as_html(self):
         for risky in (
             "innerHTML",
