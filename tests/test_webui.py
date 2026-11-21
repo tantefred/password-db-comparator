@@ -247,7 +247,7 @@ class StaticPageTests(unittest.TestCase):
     def test_page_supports_a_single_file(self):
         self.assertIn('value="overview" checked', self.html)
         self.assertIn('value="compare" disabled', self.html)
-        self.assertIn("state.b ? {", self.html)
+        self.assertIn("snapshot.b ? {", self.html)
         self.assertIn('id="clear-b"', self.html)
 
     def test_page_offers_cleaning_with_decisions(self):
@@ -275,6 +275,19 @@ class StaticPageTests(unittest.TestCase):
         self.assertIn("var(--warn", lost)
         self.assertNotIn("--danger", lost)
         self.assertIn("color-scheme: light", self.html)  # „Hell“ auch bei dunklem System
+
+    def test_results_are_tied_to_the_files_and_options_they_were_made_with(self):
+        for text in ("state.run", "optionsJson", "stale-note", "Ergebnis veraltet", "lockClean"):
+            self.assertIn(text, self.html, text)
+        click = self.html[self.html.index("async function makeCleanFile") :]
+        self.assertIn("const run = state.run;", click)
+        self.assertNotIn("collectOptions()", click.split("/* ----- Suche")[0])  # gemerkte Optionen
+
+    def test_files_are_decoded_strictly_as_utf8(self):
+        self.assertIn("fatal: true", self.html)
+        self.assertIn("readAsArrayBuffer", self.html)
+        self.assertNotIn("readAsText", self.html)
+        self.assertIn("keine UTF-8-Textdatei", self.html)
 
     def test_file_contents_are_never_inserted_as_html(self):
         for risky in (

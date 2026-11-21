@@ -132,6 +132,7 @@ table.members .base { color: var(--b); }
 .choices select, .conflicts select { padding: 4px 6px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); max-width: 100%; }
 .conflicts { display: grid; gap: 6px; padding: 8px 10px; background: var(--danger-soft); border-radius: var(--radius); font-size: 13.5px; }
 .conflicts label { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.stale-note { padding: 10px 14px; border: 1px solid var(--warn); border-left-width: 4px; background: var(--warn-soft); color: var(--warn); border-radius: var(--radius); font-weight: 500; }
 .cleanbar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 12px 16px; }
 .cleanbar .count { font-weight: 600; margin-right: auto; }
 .file-actions { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -422,7 +423,7 @@ const MODE_HINT = {
 };
 
 const $ = (id) => document.getElementById(id);
-const state = { a: null, b: null, last: null, urls: [], userMode: false };
+const state = { a: null, b: null, last: null, urls: [], userMode: false, run: null };
 
 /* ---------- DOM-Helfer: Inhalte nie als HTML einsetzen ---------- */
 function h(tag, attrs, ...children) {
@@ -448,12 +449,20 @@ function setupDrop(key, dropEl, input) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      state[key] = { name: file.name, text: String(reader.result), size: file.size };
+      let text;
+      try {
+        // Strikt dekodieren: ungültige Bytes würden sonst still zu „�“ und Vergleiche verfälschen.
+        text = new TextDecoder("utf-8", { fatal: true }).decode(reader.result);
+      } catch (_) {
+        showError(`„${file.name}“ ist keine UTF-8-Textdatei und kann nicht gelesen werden.`);
+        return;
+      }
+      state[key] = { name: file.name, text, size: file.size };
       renderDrop(key, dropEl);
       syncModeToFiles();
     };
     reader.onerror = () => showError(`„${file.name}“ konnte nicht gelesen werden.`);
-    reader.readAsText(file, "utf-8");
+    reader.readAsArrayBuffer(file);
   };
   input.addEventListener("change", () => load(input.files[0]));
   ["dragenter", "dragover"].forEach((ev) => dropEl.addEventListener(ev, (e) => { e.preventDefault(); dropEl.classList.add("over"); }));
@@ -484,6 +493,25 @@ function refreshRun() {
   $("run").textContent = MODE_LABEL[mode];
   $("swap").disabled = !(state.a && state.b);
   $("clear-b").hidden = !state.b;
+  checkStale();
+}
+
+/* Ergebnisse gehören zu den Dateien und Optionen, mit denen sie berechnet wurden. */
+let lockClean = () => {};
+function isStale() {
+  const r = state.run;
+  return !!r && (state.a !== r.a || state.b !== r.b || JSON.stringify(collectOptions()) !== r.optionsJson);
+}
+function checkStale() {
+  const note = $("stale-note");
+  const stale = isStale();
+  if (stale && !note) {
+    $("results").prepend(h("div", { class: "stale-note", id: "stale-note", role: "status",
+      text: "Ergebnis veraltet: Dateien oder Einstellungen haben sich geändert. Bitte neu auswerten." }));
+  } else if (!stale && note) {
+    note.remove();
+  }
+  lockClean(stale);
 }
 
 /* Der Vergleich braucht zwei Dateien; ohne Wahl des Nutzers passt sich der Modus der Dateizahl an. */
@@ -556,14 +584,15 @@ async function run() {
   clearResults();
   $("results").append(h("p", { class: "status", text: "Wird ausgewertet …" }));
   $("run").disabled = true;
+  const snapshot = { a: state.a, b: state.b, options: collectOptions() };
   try {
     const resp = await fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Token": TOKEN },
       body: JSON.stringify({
-        old: { name: state.a.name, text: state.a.text },
-        new: state.b ? { name: state.b.name, text: state.b.text } : null,
-        options: collectOptions(),
+        old: { name: snapshot.a.name, text: snapshot.a.text },
+        new: snapshot.b ? { name: snapshot.b.name, text: snapshot.b.text } : null,
+        options: snapshot.options,
       }),
     });
     let data = null;
@@ -571,6 +600,7 @@ async function run() {
     if (!resp.ok) throw new Error((data && data.error) || `Fehler ${resp.status}`);
     state.last = data;
     render(data);
+    state.run = { ...snapshot, optionsJson: JSON.stringify(snapshot.options) };
   } catch (err) {
     showError(err.message || String(err));
   } finally {
@@ -580,6 +610,8 @@ async function run() {
 
 /* ---------- Anzeige ---------- */
 function clearResults() {
+  state.run = null;
+  lockClean = () => {};
   state.urls.forEach((u) => URL.revokeObjectURL(u));
   state.urls = [];
   $("results").replaceChildren();
@@ -796,6 +828,7 @@ function renderClean(out, r) {
   out.append(cleanBar());
   r.groups.forEach((g) => out.append(cleanCard(g, update)));
   out.append(cleanBar(), exportSlot);
+  lockClean = (locked) => makes.forEach((b) => (b.disabled = locked));
   update();
 }
 function memberName(g, i) {
@@ -887,13 +920,16 @@ async function makeCleanFile(buttons, slot) {
   delete slot.dataset.made;
   slot.replaceChildren(h("p", { class: "status", text: "Wird erstellt …" }));
   try {
+    // Dieselbe Datei und dieselben Optionen wie bei der Auswertung, zu der die Karten gehören
+    const run = state.run;
+    if (!run) throw new Error("Bitte zuerst auswerten.");
     const decisions = {};
     cleanForm.forEach((f) => (decisions[f.group.id] = f.decision()));
-    const opts = { ...collectOptions(), export_clean: true, decisions, export_format: exportFormat() };
+    const opts = { ...run.options, export_clean: true, decisions, export_format: exportFormat() };
     const resp = await fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Token": TOKEN },
-      body: JSON.stringify({ old: { name: state.a.name, text: state.a.text }, new: null, options: opts }),
+      body: JSON.stringify({ old: { name: run.a.name, text: run.a.text }, new: null, options: opts }),
     });
     let data = null;
     try { data = await resp.json(); } catch (_) { /* keine JSON-Antwort */ }
@@ -905,7 +941,7 @@ async function makeCleanFile(buttons, slot) {
   } catch (err) {
     slot.replaceChildren(h("div", { class: "alert", role: "alert", text: err.message || String(err) }));
   } finally {
-    buttons.forEach((b) => (b.disabled = false));
+    buttons.forEach((b) => (b.disabled = isStale()));
   }
 }
 
@@ -1018,6 +1054,8 @@ document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListene
 document.querySelectorAll('input[name="export-format"]').forEach((r) => r.addEventListener("change", onExportFormatChange));
 onExportFormatChange();
 $("search").addEventListener("input", refreshRun);
+$("form").addEventListener("input", checkStale);
+$("form").addEventListener("change", checkStale);
 $("form").addEventListener("submit", (e) => { e.preventDefault(); if (!$("run").disabled) run(); });
 $("theme").addEventListener("click", () => {
   const root = document.documentElement;
