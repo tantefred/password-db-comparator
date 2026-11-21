@@ -257,6 +257,25 @@ class StaticPageTests(unittest.TestCase):
             self.assertIn(text, self.html, text)
         self.assertIn("cleanForm", self.html)
 
+    def test_create_button_is_offered_above_and_below_the_cards(self):
+        self.assertIn("out.append(cleanBar());", self.html)  # oben
+        self.assertIn("out.append(cleanBar(), exportSlot)", self.html)
+        # die Entscheidungen werden erst beim Klick gelesen, nicht beim Aufbau der Leiste
+        click = self.html[self.html.index("async function makeCleanFile") :]
+        self.assertIn("cleanForm.forEach((f) => (decisions[f.group.id] = f.decision()))", click)
+
+    def test_changed_decisions_mark_the_created_file_as_outdated(self):
+        self.assertIn("exportSlot.dataset.made", self.html)
+        self.assertIn("veraltet", self.html)
+        self.assertIn('addEventListener("change", update)', self.html)
+
+    def test_unsupported_data_is_a_warning_not_an_error(self):
+        self.assertEqual(self.html.count("--warn-soft:"), 3)  # hell, Systemdunkel, Dunkel-Schalter
+        lost = next(line for line in self.html.splitlines() if line.startswith(".lost {"))
+        self.assertIn("var(--warn", lost)
+        self.assertNotIn("--danger", lost)
+        self.assertIn("color-scheme: light", self.html)  # „Hell“ auch bei dunklem System
+
     def test_file_contents_are_never_inserted_as_html(self):
         for risky in (
             "innerHTML",
