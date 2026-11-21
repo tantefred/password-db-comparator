@@ -1,7 +1,8 @@
 """KeePassium/KeePassXC-CSV: Group, Title, Username, Password, URL, Notes, TOTP, Icon,
 Last Modified, Created."""
 
-from ..columns import CORE_NAMES
+from ..columns import CORE_NAMES, MODIFIED
+from ..values import has_naive_time
 from .base import KEEPASS_CSV, CsvError, CsvTable, LoadResult
 
 
@@ -34,6 +35,12 @@ def parse(text, name, keep_db_name=False):
     prefix = None if keep_db_name else strip_db_prefix(rows)
     notes = [f"Datenbankname „{prefix}“ aus den Gruppenpfaden entfernt."] if prefix else []
     notes += table.notes()
+    naive = sum(1 for row in rows if has_naive_time(row.get(MODIFIED, "")))
+    if naive:
+        notes.append(
+            f"{naive} Zeitstempel „Last Modified“ haben keine Zeitzone und gelten als UTC; "
+            f"beim Vergleich mit anderen Formaten kann die Aktualität um Stunden abweichen."
+        )
     return LoadResult(
         rows=rows,
         format=KEEPASS_CSV,

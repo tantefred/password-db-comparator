@@ -2,7 +2,16 @@
 
 from .analysis import audit_entries, check_entries, stats_rows
 from .columns import MODIFIED, SECRET_NAMES
-from .compare import CERTAIN, FRESHNESS, LIKELY, NEWER_IN_NEW, NEWER_IN_OLD, UNCLEAR
+from .compare import (
+    CERTAIN,
+    FRESHNESS,
+    LIKELY,
+    NEWER_IN_NEW,
+    NEWER_IN_OLD,
+    UNCLEAR,
+    Side,
+    side_notes,
+)
 from .display import display_value, plural
 from .duplicates import find_duplicates
 from .entries import entry_label
@@ -70,7 +79,7 @@ def print_header(cmp, args):
         if source and source.format != KEEPASS_CSV:
             format_label = FORMAT_LABELS[source.format]
         print(f"{name}: {len(entries)} Einträge" + (f" ({format_label})" if format_label else ""))
-        for note in source.notes if source else []:
+        for note in side_notes(cmp, Side(name, entries, source)):
             print(f"  Hinweis: {note}")
     if cmp.ignored:
         print(f"Ignorierte Spalten: {', '.join(cmp.ignored)}")
@@ -171,6 +180,13 @@ def print_overview(cmp, min_length, max_age_days):
     print_stats(cmp)
     print("\n== Prüfung auf Dubletten und kaputte Einträge ==")
     print_check(cmp)
+    for name, entries, _ in cmp.sides:
+        groups = len(find_duplicates(entries))
+        if groups:
+            print(
+                f"Zusammenführbare Dublettengruppen in {name}: {groups} "
+                f"(jeder Eintrag nur in der stärksten Gruppe; siehe --dedupe)\n"
+            )
     print("== Passwortqualität ==")
     print_password_check(cmp, min_length, max_age_days)
 

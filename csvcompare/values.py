@@ -1,5 +1,6 @@
 """Werte inhaltlich vergleichen und normalisieren (Zeiten, TOTP, Leerraum)."""
 
+import re
 from datetime import UTC, datetime
 from urllib.parse import parse_qs, urlsplit
 
@@ -15,6 +16,14 @@ TIME_FORMATS = (
     "%Y-%m-%d",
     "%m/%d/%Y %H:%M:%S",
 )
+
+
+NAIVE_TIME = re.compile(r"^\d{4}-\d\d-\d\d[T ]\d\d:\d\d(:\d\d(\.\d+)?)?$")
+
+
+def has_naive_time(text):
+    """Ist es eine Zeitangabe ohne Zeitzone (die als UTC gelesen wird)?"""
+    return bool(NAIVE_TIME.match((text or "").strip()))
 
 
 def parse_time(text):

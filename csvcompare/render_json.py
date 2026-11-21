@@ -5,7 +5,7 @@ from string import ascii_uppercase
 
 from .analysis import audit_entries, check_entries, stats_rows
 from .columns import MODIFIED, SECRET_NAMES
-from .compare import FRESHNESS, NEWER_IN_NEW, NEWER_IN_OLD, UNCLEAR
+from .compare import FRESHNESS, NEWER_IN_NEW, NEWER_IN_OLD, UNCLEAR, Side, side_notes
 from .display import mask_secret
 from .duplicates import find_duplicates
 from .exports import export_path, pick_writer, prepare_clean
@@ -70,7 +70,7 @@ def base_report(cmp, args):
             "entries": len(entries),
             "format": source.format if source else None,
             "db_prefix": source.db_prefix if source else None,
-            "notes": list(source.notes) if source else [],
+            "notes": side_notes(cmp, Side(name, entries, source)),
         }
 
     return {
@@ -245,6 +245,9 @@ def overview_report(base, cmp, min_length, max_age_days):
         **base,
         "stats": section(stats_report({}, cmp)),
         "check": section(check_report({}, cmp)),
+        "mergeable_groups": [
+            {"file": name, "count": len(find_duplicates(entries))} for name, entries, _ in cmp.sides
+        ],
         "password_check": section(password_report({}, cmp, min_length, max_age_days)),
     }
 

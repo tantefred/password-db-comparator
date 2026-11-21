@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import NamedTuple
 
 from .columns import ALL_NAMES, CORE_NAMES, KEY_NAMES, MODIFIED, TIME_NAMES
-from .display import human_delta
+from .display import human_delta, plural
 from .values import differing_columns, parse_time, values_equal
 
 # Welche Datei ist bei einem geänderten Eintrag aktueller?
@@ -27,6 +27,20 @@ class Side(NamedTuple):
     name: str
     entries: dict
     source: object
+
+
+def side_notes(cmp, side):
+    """Hinweise zu einer Datei: die des Einlesens, beim Vergleich zusätzlich zur Zuordnung."""
+    notes = list(side.source.notes) if side.source else []
+    numbered = sum(1 for key in side.entries if key.number > 1)
+    if numbered and not cmp.single:
+        subject = plural(numbered, "Eintrag hat", "Einträge haben")
+        verb = "wird" if numbered == 1 else "werden"
+        notes.append(
+            f"{subject} denselben Schlüssel (Gruppe, Titel, Username) wie ein anderer und {verb} "
+            f"nur nach der Reihenfolge in der Datei zugeordnet."
+        )
+    return notes
 
 
 class Move(NamedTuple):

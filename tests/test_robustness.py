@@ -112,6 +112,47 @@ class TimeSpanTests(unittest.TestCase):
         self.assertNotIn("(n)", out)
 
 
+class HintTests(unittest.TestCase):
+    def test_entries_matched_by_order_are_reported_when_comparing(self):
+        path = fixture_path("dubletten.csv")
+        _, report = run_json(path, path)
+        self.assertTrue(
+            any("nur nach der Reihenfolge" in n for n in report["files"]["old"]["notes"])
+        )
+        self.assertIn(
+            "2 Einträge haben denselben Schlüssel", " ".join(report["files"]["old"]["notes"])
+        )
+        _, out, _ = run(path, path)
+        self.assertIn("Hinweis: 2 Einträge haben denselben Schlüssel", out)
+        self.assertIn("und werden nur nach der Reihenfolge", out)
+        one = fixture_path("probleme.csv")
+        _, out, _ = run(one, fixture_path("passwoerter.csv"))
+        self.assertIn("1 Eintrag hat denselben Schlüssel", out)
+        self.assertIn("und wird nur nach der Reihenfolge", out)
+
+    def test_no_order_hint_for_a_single_file_or_clean_data(self):
+        _, report = run_json(fixture_path("dubletten.csv"))
+        self.assertFalse(any("Reihenfolge" in n for n in report["files"]["old"]["notes"]))
+        a, b = fixture_path("keepassium_a.csv"), fixture_path("keepassium_b.csv")
+        _, report = run_json(a, b)
+        self.assertFalse(any("Reihenfolge" in n for n in report["files"]["old"]["notes"]))
+
+    def test_times_without_a_time_zone_are_reported(self):
+        naive = load_any("x.csv", KEEPASS_HEADER + "Web,A,u,pw,,,,,2024-01-10T10:00:00,\n")
+        self.assertTrue(any("keine Zeitzone" in n for n in naive.notes))
+        zoned = load_any("x.csv", KEEPASS_HEADER + "Web,A,u,pw,,,,,2024-01-10T10:00:00Z,\n")
+        self.assertFalse(any("Zeitzone" in n for n in zoned.notes))
+
+    def test_overview_names_the_mergeable_groups(self):
+        path = fixture_path("dubletten.csv")
+        _, out, _ = run(path)
+        self.assertIn("Zusammenführbare Dublettengruppen in dubletten.csv: 3", out)
+        _, report = run_json(path)
+        self.assertEqual(report["mergeable_groups"], [{"file": "dubletten.csv", "count": 3}])
+        _, out, _ = run(fixture_path("keepassium_a.csv"))
+        self.assertNotIn("Zusammenführbare", out)
+
+
 class GitignoreTests(unittest.TestCase):
     def ignored(self, path):
         proc = subprocess.run(
