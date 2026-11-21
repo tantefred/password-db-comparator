@@ -1,12 +1,14 @@
 # CSV Comparator
 
 Kleines Python-3-Skript (nur Standardbibliothek), das zwei Passwort-Exporte vergleicht und
-zeigt, was sich unterscheidet. Unterstützt werden **KeePassium/KeePassXC-CSV** sowie
+zeigt, was sich unterscheidet. Auch mit **einer** Datei lässt sich arbeiten: Überblick,
+Dubletten finden und zusammenführen (siehe „Eine einzelne Datei“). Unterstützt werden **KeePassium/KeePassXC-CSV** sowie
 **Bitwarden/Vaultwarden-JSON und -CSV**, auch untereinander (siehe „Unterstützte Formate“).
 Einträge werden über Gruppe, Titel und Username zugeordnet.
 
 ```
-python3 compare_csv.py tests/alt.csv tests/neu.csv
+python3 compare_csv.py tests/alt.csv tests/neu.csv    # Vergleich zweier Dateien
+python3 compare_csv.py tests/dubletten.csv            # eine Datei: Überblick
 ```
 
 | Option | Wirkung |
@@ -17,6 +19,11 @@ python3 compare_csv.py tests/alt.csv tests/neu.csv
 | `-s`, `--search TEXT` | Nur Einträge zeigen, deren Gruppe/Titel/Username `TEXT` enthält, samt Status (nicht mit `--export-added` / `--export-merged` kombinierbar) |
 | `--hide-trash` | Papierkorb-Gruppen komplett ausblenden (Vergleich, Suche und Exporte) |
 | `-g`, `--group TEXT` | Nur Einträge betrachten, deren Gruppenpfad `TEXT` enthält (Groß-/Kleinschreibung egal) |
+| `--overview` | Statistik, Prüfung und Passwortqualität in einem Bericht; bei **einer** Datei ohne weitere Wahl der Standard |
+| `--dedupe` | Dublettengruppen **einer** Datei auflisten (siehe „Eine einzelne Datei“) |
+| `--dedupe-kinds ARTEN` | Arten für `--dedupe`: `key`, `login`, `title` (kommagetrennt; Standard: alle) |
+| `--export-clean [DATEI]` | **Eine** Datei ohne Dubletten schreiben (Standard: `bereinigt.csv` bzw. `.json`) |
+| `--clean-kinds ARTEN` | Welche Arten `--export-clean` zusammenführt: `key` (Standard), `login`; `title` nie automatisch |
 | `--stats` | Nur die Anzahl der Einträge pro Gruppe in beiden Dateien samt Differenz anzeigen (mit `--group`/`--hide-trash` kombinierbar, nicht mit `--search` oder den Exporten) |
 | `--check` | Jede Datei einzeln auf Dubletten und kaputte Einträge prüfen (ohne Passwörter anzuzeigen; mit `--group`/`--hide-trash` kombinierbar, nicht mit `--search`, `--stats` oder den Exporten) |
 | `--password-check` | Passwortqualität je Datei prüfen (Passwörter werden nie angezeigt; nicht kombinierbar mit `--search`, `--stats`, `--check` oder den Exporten) |
@@ -33,6 +40,49 @@ python3 compare_csv.py tests/alt.csv tests/neu.csv
 
 Geänderte Einträge werden danach gruppiert, in welcher Datei die jeweils
 aktuellere Version liegt.
+
+## Eine einzelne Datei
+
+Gibst du nur eine Datei an, gibt es keinen Vergleich. Alles, was für eine Datei Sinn ergibt,
+funktioniert trotzdem, im Terminal, als JSON und in der Weboberfläche:
+
+- **ohne weitere Wahl** (oder mit `--overview`): Überblick aus Statistik, Prüfung und Passwortqualität
+  (JSON: `mode: "overview"` mit den Abschnitten `stats`, `check`, `password_check`; `files.new` ist `null`),
+- `--stats`, `--check`, `--password-check` und `--search` (Treffer ohne Vergleichsstatus, JSON-Status `found`),
+- `--dedupe` und `--export-clean` (unten).
+
+Der Vergleich und `--export-added` / `--export-merged` brauchen zwei Dateien und melden das klar.
+
+### Dubletten finden (`--dedupe`)
+
+Es gibt drei Arten; ein Eintrag gehört höchstens zur stärksten, Papierkorb-Einträge zählen nicht:
+
+| Art | Bedeutung |
+|---|---|
+| `key` | gleiche Gruppe, gleicher Titel, gleicher Username |
+| `login` | gleiche URL und gleicher Username (Groß-/Kleinschreibung und Schlusszeichen `/` egal) |
+| `title` | gleicher Titel und Username in anderen Gruppen (nur ein Hinweis) |
+
+Die Ausgabe nennt je Gruppe die Mitglieder und die Spalten, in denen sie sich unterscheiden
+(Passwörter maskiert, außer mit `--show-secrets`). JSON: `mode: "dedupe"` mit `groups` (`id`, `kind`,
+`members`, `differing_columns`, `conflicts`). Beispieldaten: `tests/dubletten.csv`.
+
+### Bereinigen (`--export-clean`)
+
+Zusammengeführt wird so: Der **zuletzt geänderte** Eintrag ist die Basis, leere Felder werden aus den
+anderen ergänzt, `Created` ist das früheste Datum, alle URLs bleiben erhalten. Haben zwei Einträge
+**verschiedene** Werte (Passwort, Notizen, TOTP, URL, Icon, Gruppe/Titel/Username), ist das ein
+Konflikt: Im Terminal gewinnt die Basis, und die Konflikte stehen in der Meldung. Die Datei enthält
+Passwörter im Klartext; Papierkorb-Gruppen werden ausgelassen.
+
+- Im Terminal ohne Rückfragen: `--export-clean` führt nur Gruppen der Art `key` zusammen, mit
+  `--clean-kinds key,login` auch `login`. `title` wird nie automatisch zusammengeführt.
+  Zusammen mit `--dedupe` erscheint zuerst die Liste der Gruppen.
+- **Frühere Passwörter** der zusammengeführten Einträge speichert nur das **Bitwarden-JSON**
+  (`passwordHistory`). Im KeePass-CSV gehen sie verloren; das meldet das Skript als
+  „Frühere Passwörter (n)“. Wer sie behalten will, wählt `--export-format bitwarden-json`.
+- „Gleicher Login“ kann bewusst getrennte Konten treffen (z. B. Test- und Produktivkonto);
+  deshalb ist `login` nur auf ausdrücklichen Wunsch oder in der Oberfläche mit Rückfrage vorgesehen.
 
 ## Unterstützte Formate
 
@@ -117,8 +167,8 @@ Das „Alter“ wird relativ zum heutigen Datum berechnet, die Ausgabe für
 ## JSON-Ausgabe (`--format json`)
 
 Mit `--format json` wird statt des Textes ein JSON-Objekt ausgegeben, und zwar für
-das, was du sonst angefragt hättest (Vergleich, `--search`, `--stats`, `--check`
-oder `--password-check`). Alle Filter und Optionen (`--group`, `--hide-trash`,
+das, was du sonst angefragt hättest (Vergleich, `--search`, `--stats`, `--check`,
+`--password-check`, `--overview` oder `--dedupe`). Alle Filter und Optionen (`--group`, `--hide-trash`,
 `--ignore`, `--no-detect-moves`, …) gelten unverändert und stehen unter `filters`.
 Exporte (`--export-added`, `--export-merged`) lassen sich mit dem Vergleich
 kombinieren; ihre Hinweise gehen dann nach stderr, damit stdout gültiges JSON bleibt.
@@ -133,6 +183,9 @@ Jedes Objekt hat `mode`, `files` (Name, Pfad, Anzahl, `format`, `db_prefix`, `no
 | `stats` | `groups` (je `old`, `new`, `difference`) und `total` |
 | `check` | `results` je Datei mit `findings` (`category`, `count`, `items`) |
 | `password-check` | wie `check`, dazu `totp` je Datei und `thresholds` |
+| `overview` | `stats`, `check` und `password_check` (jeweils wie oben, ohne `mode`) |
+| `dedupe` | `kinds`, `group_count` und `groups` mit `id`, `kind`, `reason`, `members`, `differing_columns`, `conflicts`, `newest_member` |
+| `clean` | `export` (Pfad, Format, Anzahl, Konflikte, Verluste) bei `--export-clean` ohne weiteren Modus |
 
 Einträge werden als `{"group", "title", "username"}` ausgegeben. Passwörter und TOTP
 bleiben maskiert (`"masked": true`), außer mit `--show-secrets`.
@@ -192,12 +245,23 @@ python3 compare_csv.py --ui
 ```
 
 Das öffnet im Browser eine schlichte Oberfläche, die alles kann, was das Terminal kann:
-Vergleich, Suche, Statistik, Dubletten-Prüfung und Passwortqualität, dazu alle Filter,
+Vergleich, Überblick, Suche, Statistik, Dubletten-Prüfung und Passwortqualität, dazu alle Filter,
 das Ignorieren von Spalten und beide Exporte als Download. Die Ergebnisse erscheinen
 übersichtlich statt als Text: jede Datei hat ihre feste Farbe, ein Balken zeigt die
 Verteilung (identisch, geändert, verschoben, nur in einer Datei), und bei jedem Unterschied
 steht der Wert aus Datei 1 neben dem aus Datei 2. Unter dem Ergebnis steht, wie du dasselbe
 im Terminal aufrufst, und der JSON-Bericht lässt sich speichern.
+
+Die **zweite Datei ist optional**. Mit einer Datei ist „Vergleich“ nicht wählbar, und der Standard
+ist „Überblick“; mit „Zweite Datei entfernen“ kehrst du dazu zurück.
+
+**Bereinigen:** Der Modus „Bereinigen“ (eine Datei) zeigt je Dublettengruppe eine Karte mit den
+Mitgliedern nebeneinander, den abweichenden Werten und der Wahl: *Zusammenführen* (Vorgabe bei `key`
+und `login`), *Nur diesen behalten* oder *Alle behalten* (Vorgabe bei `title`). Bei Konflikten wählst du
+je Feld, welcher Wert gelten soll (bei Notizen auch „Alle verbinden“). Ein Klick auf „Datei ohne
+Dubletten erstellen“ liefert die bereinigte Datei als Download, im gewählten Format. Der Server bleibt
+zustandslos: Dafür werden die Dateien ein zweites Mal gesendet, zusammen mit deinen Entscheidungen, die
+gegen die Gruppen-IDs geprüft werden.
 
 Die Oberfläche nimmt CSV- und JSON-Dateien an, zeigt das erkannte Format an jeder Datei, nennt die
 Hinweise der Importer und die ausgelassenen Spalten und sagt bei Exporten, was im gewählten
@@ -233,10 +297,13 @@ einer Anfrage: **einlesen → Einträge bilden → vergleichen → ausgeben**.
 | `columns.py` | alle Spalten aller Formate (Name, Beschriftung, geheim?, Schlüsselspalten) |
 | `entries.py` | Einträge und ihr Schlüssel (`Key`), Beschriftung, Papierkorb-Erkennung |
 | `values.py` | Zeiten, TOTP und Leerraum nach Bedeutung vergleichen |
-| `compare.py` | der Vergleich (`compare_files`): Verschoben-Erkennung, Aktualität, verglichene Spalten |
+| `compare.py` | der Vergleich (`compare_files`) und `single_file` für eine Datei ohne Gegenseite |
 | `search.py` | Suche nach einem Eintrag samt Status |
 | `analysis.py` | Statistik, Prüfung (`--check`) und Passwortqualität (`--password-check`) |
-| `exports.py` | die beiden Exporte: Auswahl der Einträge, Meldungen, Dateinamen |
+| `duplicates.py` | Dublettengruppen einer Datei (`key`, `login`, `title`) mit stabilen IDs |
+| `merge.py` | Zeilen zusammenführen (`merge_rows`) und die Datei bereinigen (`clean_entries`) |
+| `modes.py` | welche Auswertung gewählt ist (Vergleich, Überblick, Dubletten, …) |
+| `exports.py` | die Exporte (neu, zusammengeführt, bereinigt): Auswahl der Einträge, Meldungen, Dateinamen |
 | `writers/` | die Zielformate (KeePass-CSV, Bitwarden-JSON) samt Meldung „nicht speicherbar“ |
 | `render_text.py`, `render_json.py` | Textausgabe bzw. JSON-Berichte (`build_report` wählt den Bericht) |
 | `display.py` | Darstellung für Menschen: Maskierung, Zeitabstände, Dateinamen |
@@ -257,7 +324,8 @@ python3 -m unittest discover -s tests -v
 Die Tests starten das Skript wie ein Nutzer über die Kommandozeile und prüfen auch die Module
 direkt; gemeinsame Hilfen stehen in `tests/helpers.py`. Sie verwenden erfundene Beispieldaten
 in `tests/` (nur Standardbibliothek, kein Netzwerk): dieselben Einträge als KeePassium-CSV
-(`keepassium_a/b.csv`), Bitwarden-JSON (`bitwarden.json`) und Bitwarden-CSV (`bitwarden.csv`).
+(`keepassium_a/b.csv`), Bitwarden-JSON (`bitwarden.json`) und Bitwarden-CSV (`bitwarden.csv`);
+`dubletten.csv` enthält alle drei Dublettenarten.
 
 ## Entwicklung
 
