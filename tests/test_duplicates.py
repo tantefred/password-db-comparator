@@ -101,6 +101,27 @@ class DedupeCliTests(unittest.TestCase):
         self.assertEqual((first["masked_columns"], first["variants"]), ([], {}))
         self.assertEqual(first["members"][1]["values"]["Password"], "pw-neu")
 
+    def test_conflict_columns_without_difference_columns_are_reported_with_values(self):
+        _, report = run_json(SAMPLE, "--dedupe")
+        login = next(g for g in report["groups"] if g["kind"] == "login")
+        self.assertEqual(sorted(login["conflicts"]), ["Group", "Title"])
+        self.assertNotIn("Group", login["differing_columns"])  # Schlüsselspalten bleiben außen vor
+        self.assertEqual([m["values"]["Group"] for m in login["members"]], ["Konten", "Web"])
+        self.assertEqual([m["values"]["Title"] for m in login["members"]], ["Bank Online", "Bank"])
+
+    def test_equivalent_totp_values_get_the_same_letter(self):
+        from csvcompare.service import analyze
+
+        header = "Group,Title,Username,Password,URL,Notes,TOTP,Icon,Last Modified,Created\n"
+        text = (
+            header
+            + "Web,A,u,pw,,,JBSWY3DPEHPK3PXP,,2024-01-01T00:00:00Z,\n"
+            + "Web,A,u,pw,,,otpauth://totp/x?secret=JBSWY3DPEHPK3PXP,,2024-02-01T00:00:00Z,\n"
+            + "Web,A,u,pw,,,OTHERSECRET234567,,2024-03-01T00:00:00Z,\n"
+        )
+        group = analyze("t.csv", text, None, None, {"mode": "clean"})["report"]["groups"][0]
+        self.assertEqual(group["variants"]["TOTP"], ["A", "A", "B"])
+
     def test_kinds_option(self):
         _, report = run_json(SAMPLE, "--dedupe", "--dedupe-kinds", "title,key")
         self.assertEqual([g["kind"] for g in report["groups"]], ["key", "title"])

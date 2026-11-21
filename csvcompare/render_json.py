@@ -12,6 +12,7 @@ from .exports import export_path, pick_writer, prepare_clean
 from .merge import merge_rows, newest_first
 from .modes import CHECK, CLEAN, DEDUPE, OVERVIEW, PASSWORD_CHECK, SEARCH, STATS, selected_mode
 from .search import MOVED, ONLY_IN_NEW, search
+from .values import values_equal
 
 
 def dump(report):
@@ -181,14 +182,22 @@ def clean_summary(cmp, args):
     }
 
 
-def variant_letters(values):
-    """Je Wert ein Buchstabe (A, B, …): gleiche Werte bekommen denselben, leere keinen."""
-    letters, result = {}, []
+def variant_letters(column, values):
+    """Je Wert ein Buchstabe (A, B, …): gleichwertige Werte bekommen denselben, leere keinen.
+
+    „Gleichwertig“ wie bei der Konflikterkennung (z. B. otpauth-Link und reines TOTP-Secret).
+    """
+    known, result = [], []
     for value in values:
         if not value:
             result.append(None)
             continue
-        number = letters.setdefault(value, len(letters))
+        number = next(
+            (i for i, other in enumerate(known) if values_equal(column, value, other)), None
+        )
+        if number is None:
+            known.append(value)
+            number = len(known) - 1
         result.append(ascii_uppercase[number] if number < len(ascii_uppercase) else str(number + 1))
     return result
 
@@ -197,21 +206,25 @@ def dedupe_report(base, cmp, kinds, show_secrets):
     """Die Dublettengruppen mit ihren Mitgliedern und den abweichenden Spalten."""
     groups = []
     for group in find_duplicates(cmp.old, kinds):
+        rows = [cmp.old[key] for key in group.keys]
+        conflicts = merge_rows(rows)[1]
+        # Gezeigt werden die abweichenden Spalten und die Konfliktspalten (darunter auch Gruppe,
+        # Titel und Username, die sonst nicht als „abweichend“ gelten)
+        shown = list(group.differing) + [c for c in conflicts if c not in group.differing]
+        masked = [c for c in shown if c in SECRET_NAMES and not show_secrets]
         members = []
-        for key in group.keys:
-            row = cmp.old[key]
-            values = {}
-            for column in group.differing:
-                masked = column in SECRET_NAMES and not show_secrets
-                values[column] = mask_secret(row[column]) if masked else row[column]
+        for key, row in zip(group.keys, rows, strict=True):
+            values = {
+                column: mask_secret(row.get(column, ""))
+                if column in masked
+                else row.get(column, "")
+                for column in shown
+            }
             members.append(
                 {"entry": entry_ref(key), "last_modified": row[MODIFIED], "values": values}
             )
-        rows = [cmp.old[key] for key in group.keys]
-        conflicts = merge_rows(rows)[1]
-        masked = [c for c in group.differing if c in SECRET_NAMES and not show_secrets]
         # Verborgene Werte unterscheidbar machen, ohne sie zu zeigen (gleicher Wert = Buchstabe)
-        variants = {c: variant_letters([row.get(c, "") for row in rows]) for c in masked}
+        variants = {c: variant_letters(c, [row.get(c, "") for row in rows]) for c in masked}
         groups.append(
             {
                 "id": group.id,

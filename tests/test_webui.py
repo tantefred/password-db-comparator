@@ -320,6 +320,11 @@ class StaticPageTests(unittest.TestCase):
         self.assertIn('table.diff td.a::before { content: "1: "', self.html)
         self.assertIn('table.diff td.b::before { content: "2: "', self.html)
 
+    def test_variants_are_named_per_column_and_times_accept_fractions(self):
+        self.assertIn('VARIANT_PREFIX = { Password: "P", TOTP: "T", Fields: "F" }', self.html)
+        self.assertIn("(:\\d\\d(\\.\\d+)?)?$/.test(text)", self.html)
+        self.assertIn("markSaved", self.html)
+
     def test_file_contents_are_never_inserted_as_html(self):
         for risky in (
             "innerHTML",

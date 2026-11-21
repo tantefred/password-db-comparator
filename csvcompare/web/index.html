@@ -437,7 +437,7 @@ const DATE_FORMAT = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2
 const RELATIVE_FORMAT = new Intl.RelativeTimeFormat("de", { numeric: "auto" });
 function toDate(text) {
   // Zeiten ohne Zeitzone gelten wie auf dem Server als UTC
-  const zoned = /^\d{4}-\d\d-\d\d[T ]\d\d:\d\d(:\d\d)?$/.test(text) ? `${text.replace(" ", "T")}Z` : text;
+  const zoned = /^\d{4}-\d\d-\d\d[T ]\d\d:\d\d(:\d\d(\.\d+)?)?$/.test(text) ? `${text.replace(" ", "T")}Z` : text;
   const date = new Date(zoned);
   return isNaN(date) ? null : date;
 }
@@ -909,11 +909,13 @@ function renderClean(out, r) {
   update();
 }
 /* Wie ein Wert in der Auswahl heißt: der Wert selbst, bei verborgenen Werten „Variante A“ (gleiche Werte, gleicher Buchstabe). */
+const VARIANT_PREFIX = { Password: "P", TOTP: "T", Fields: "F" };   // Buchstaben gelten je Spalte
+const variantName = (col, letter) => `Variante ${VARIANT_PREFIX[col] || "?"}-${letter}`;
 function valueLabel(g, col, i) {
   const v = g.members[i].values[col];
   if (g.masked_columns.includes(col)) {
     const letter = g.variants[col][i];
-    return letter ? `Variante ${letter}` : "leer";
+    return letter ? variantName(col, letter) : "leer";
   }
   if (v === "" || v == null) return "leer";
   return v.length > 40 ? `${v.slice(0, 40)} …` : v.replace(/\s+/g, " ");
@@ -961,7 +963,7 @@ function cleanCard(g, update) {
           const masked = g.masked_columns.includes(c);
           if (v === "" || (masked && v === "(leer)")) return h("td", { class: "empty", text: "(leer)" });
           const letter = masked ? g.variants[c][g.members.indexOf(m)] : null;
-          return h("td", { text: letter ? `${v} · Variante ${letter}` : v });
+          return h("td", { text: letter ? `${v} · ${variantName(c, letter)}` : v });
         })))));
 
   const body = h("div", { class: "dbody" }, table,
@@ -1006,6 +1008,7 @@ function cleanCard(g, update) {
     group: g, action,
     reset: () => { reset(); baseline = JSON.stringify(decisionOf()); },
     changed: () => JSON.stringify(decisionOf()) !== baseline,
+    markSaved: () => { baseline = JSON.stringify(decisionOf()); },
     decision: () => decisionOf(),
   });
   cleanForm[cleanForm.length - 1].reset();
@@ -1033,6 +1036,8 @@ async function makeCleanFile(buttons, slot) {
     const panel = exportsPanel(data.exports);
     slot.replaceChildren(panel);
     slot.dataset.made = "1";
+    cleanForm.forEach((f) => f.markSaved());   // die Datei ist erstellt: kein Warnen vor Verlust mehr
+    state.dirty = false;
     panel.scrollIntoView({ block: "nearest" });
   } catch (err) {
     slot.replaceChildren(h("div", { class: "alert", role: "alert", text: err.message || String(err) }));
