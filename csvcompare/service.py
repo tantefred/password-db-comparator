@@ -25,9 +25,12 @@ def _as_int(options, key, default):
     if isinstance(value, bool) or not isinstance(value, (int, str)):
         raise UsageError(f"'{key}' muss eine ganze Zahl sein.")
     try:
-        return int(value)
+        number = int(value)
     except ValueError:
         raise UsageError(f"'{key}' muss eine ganze Zahl sein.") from None
+    if number < 1:
+        raise UsageError(f"'{key}' muss mindestens 1 sein.")
+    return number
 
 
 def filter_arguments(options):

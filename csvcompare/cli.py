@@ -27,10 +27,21 @@ from .search import search
 from .writers import WRITERS
 
 
+def positive_int(text):
+    """argparse-Typ: eine ganze Zahl größer als 0."""
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"'{text}' ist keine ganze Zahl.") from None
+    if value < 1:
+        raise argparse.ArgumentTypeError("muss mindestens 1 sein.")
+    return value
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
-        description="Zwei Passwort-Exporte vergleichen "
-        "(KeePass-CSV, Bitwarden/Vaultwarden-JSON oder -CSV)"
+        description="Passwort-Exporte vergleichen, auswerten und bereinigen: zwei Dateien "
+        "vergleichen oder eine Datei prüfen (KeePass-CSV, Bitwarden/Vaultwarden-JSON oder -CSV)"
     )
     parser.add_argument("alt", nargs="?", help="Erste Datei (CSV oder JSON)")
     parser.add_argument(
@@ -129,14 +140,14 @@ def build_parser():
     )
     parser.add_argument(
         "--min-length",
-        type=int,
+        type=positive_int,
         default=10,
         metavar="N",
         help="Mindestlänge für --password-check (Standard: 10)",
     )
     parser.add_argument(
         "--max-age-days",
-        type=int,
+        type=positive_int,
         default=730,
         metavar="TAGE",
         help="Maximales Alter seit der letzten Änderung für --password-check (Standard: 730)",
@@ -340,10 +351,11 @@ def log_to_stderr(*args, **kwargs):
 
 
 def run_exports(args, cmp, log):
+    """Schreibt die angeforderten Exporte und meldet, was dabei passiert ist."""
+
     def prepare_clean_export(cmp, path, writer):
         return prepare_clean(cmp, path, writer, auto_kinds=args.clean_kinds)
 
-    """Schreibt die angeforderten Exporte und meldet, was dabei passiert ist."""
     writer = pick_writer(args.export_format)
     requested = (
         (args.export_added, "added", prepare_added),

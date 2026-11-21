@@ -287,7 +287,7 @@ pre.json { margin: 0; padding: 14px 16px; max-height: 420px; overflow: auto; fon
 <body>
 <header class="topbar">
   <h1>CSV Comparator</h1>
-  <p>Vergleicht zwei KeePassium-Exporte. Läuft nur auf diesem Rechner, nichts wird gespeichert oder verschickt.</p>
+  <p>Vergleicht und bereinigt Passwort-Exporte (KeePass, Bitwarden). Läuft nur auf diesem Rechner, nichts wird gespeichert oder verschickt.</p>
   <span class="spacer"></span>
   <button class="linkish" id="theme" type="button">Dunkel / Hell wechseln</button>
 </header>
@@ -516,8 +516,9 @@ function collectOptions() {
   };
   if (mode === "search") opts.search = $("search").value;
   if (mode === "password-check" || mode === "overview") {
-    opts.min_length = Number($("min-length").value);
-    opts.max_age_days = Number($("max-age").value);
+    // Leere Felder nicht als 0 senden: dann gilt der Standard des Servers
+    if ($("min-length").value.trim()) opts.min_length = Number($("min-length").value);
+    if ($("max-age").value.trim()) opts.max_age_days = Number($("max-age").value);
   }
   if (mode === "compare") {
     opts.export_added = $("export-added").checked;

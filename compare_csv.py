@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Vergleicht zwei KeePassium-CSV-Exporte und zeigt die Unterschiede.
+"""Vergleicht, wertet aus und bereinigt Passwort-Exporte (KeePass-CSV, Bitwarden-JSON/-CSV).
 
-Aufruf: python3 compare_csv.py alt.csv neu.csv [Optionen]   (Optionen: --help)
+Aufruf: python3 compare_csv.py alt.csv [neu.csv] [Optionen]   (Optionen: --help)
 """
 
 from csvcompare.cli import main

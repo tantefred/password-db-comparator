@@ -15,13 +15,16 @@ class Hit(NamedTuple):
 def search(cmp, query):
     """Alle Einträge, deren Gruppe/Titel/Username ``query`` enthält, mit Status.
 
-    Ein verschobenes oder umbenanntes Paar erscheint nur einmal, auch wenn beide Schlüssel passen.
+    Gesucht wird in jedem der drei Felder einzeln (nicht über Feldgrenzen hinweg). Ein
+    verschobenes oder umbenanntes Paar erscheint nur einmal, auch wenn beide Schlüssel passen.
     """
     needle = query.strip().lower()
+
+    def matches(key):
+        return any(needle in field.lower() for field in key.identity)
+
     if cmp.single:
-        return [
-            Hit(FOUND, key) for key in sorted(cmp.old) if needle in " / ".join(key.identity).lower()
-        ]
+        return [Hit(FOUND, key) for key in sorted(cmp.old) if matches(key)]
     only_old, only_new = set(cmp.only_old), set(cmp.only_new)
     move_of = {key: move for move in cmp.moves for key in (move.old_key, move.new_key)}
     change_of = {
@@ -32,7 +35,7 @@ def search(cmp, query):
 
     hits, shown_moves = [], set()
     for key in sorted(set(cmp.old) | set(cmp.new)):
-        if needle not in " / ".join(key.identity).lower():
+        if not matches(key):
             continue
         if key in move_of:
             move = move_of[key]
