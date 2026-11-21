@@ -13,6 +13,9 @@ __pycache__/
 # nur die Beispieldaten in tests/ sind erlaubt
 *.csv
 !tests/*.csv
+# Bitwarden-Exporte und Ausgaben als JSON enthalten ebenfalls Passwörter
+*.json
+!tests/*.json
 
 # Werkzeuge
 .ruff_cache/

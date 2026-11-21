@@ -28,7 +28,7 @@ class Decision(NamedTuple):
 
     action: str = MERGE
     keep: int = 0  # Nummer des Mitglieds bei ``KEEP_ONE``
-    picks: dict = {}  # {Spalte: Nummer des Mitglieds oder BOTH} für Konflikte
+    picks: dict | None = None  # {Spalte: Nummer des Mitglieds oder BOTH} für Konflikte
 
 
 def modified_at(row):
@@ -155,7 +155,7 @@ def check_decisions(groups, decisions):
         size = len(group.keys)
         if decision.action == KEEP_ONE and not 0 <= decision.keep < size:
             raise ValueError("Das zu behaltende Mitglied gibt es nicht.")
-        for column, pick in decision.picks.items():
+        for column, pick in (decision.picks or {}).items():
             if column not in CONFLICT_COLUMNS:
                 raise ValueError(f"Für die Spalte '{column}' kann nichts gewählt werden.")
             if not (pick == BOTH or (isinstance(pick, int) and 0 <= pick < size)):
@@ -178,7 +178,7 @@ def clean_entries(entries, groups, decisions=None, auto_kinds=(KEY,)):
             removed += len(members) - 1
             merged.append(MergedGroup(group, KEEP_ONE, (), (group.keys[decision.keep],)))
         else:
-            row, conflicts = merge_rows(members, decision.picks)
+            row, conflicts = merge_rows(members, decision.picks or {})
             rows.append(row)
             removed += len(members) - 1
             merged.append(MergedGroup(group, MERGE, tuple(conflicts), ()))

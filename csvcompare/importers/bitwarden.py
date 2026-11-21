@@ -6,14 +6,12 @@ steckt in ``SOURCE_KEY`` (mit ``id``, ``collectionIds``, ``passwordHistory`` usw
 späterer Export in Bitwarden-Formate nichts verliert.
 """
 
-import csv
-import io
 import json
 
 from ..columns import ALL_NAMES, SOURCE_KEY, UNMAPPED_KEY
 from ..display import plural
 from ..values import collapse_whitespace, normalize_time
-from .base import BITWARDEN_CSV, BITWARDEN_JSON, CsvError, LoadResult
+from .base import BITWARDEN_CSV, BITWARDEN_JSON, CsvError, CsvTable, LoadResult
 
 # Diese Spalten liefert Bitwarden; ein Icon gibt es nicht.
 PROVIDED_JSON = frozenset(ALL_NAMES) - {"Icon"}
@@ -271,7 +269,8 @@ def parse_csv(content, name):
     Leerzeichen als Text verglichen. Das Original bleibt in ``SOURCE_KEY``.
     """
     rows, skipped_by_kind = [], {}
-    for source in csv.DictReader(io.StringIO(content, newline="")):
+    table = CsvTable(content)
+    for source in table.rows:
         kind = (source.get("type") or "login").strip().lower()
         if kind in ("login", "note"):
             rows.append(csv_row(source, kind))
@@ -282,5 +281,6 @@ def parse_csv(content, name):
     if skipped_by_kind:
         names = ", ".join(f"{count} {kind}" for kind, count in sorted(skipped_by_kind.items()))
         notes.append(skipped_note(sum(skipped_by_kind.values()), names))
+    notes += table.notes()
     notes.append(NO_TIMESTAMPS_NOTE)
     return LoadResult(rows=rows, format=BITWARDEN_CSV, provided_columns=PROVIDED_CSV, notes=notes)

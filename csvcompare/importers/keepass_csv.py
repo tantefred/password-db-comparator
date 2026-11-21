@@ -1,11 +1,8 @@
 """KeePassium/KeePassXC-CSV: Group, Title, Username, Password, URL, Notes, TOTP, Icon,
 Last Modified, Created."""
 
-import csv
-import io
-
 from ..columns import CORE_NAMES
-from .base import KEEPASS_CSV, CsvError, LoadResult
+from .base import KEEPASS_CSV, CsvError, CsvTable, LoadResult
 
 
 def strip_db_prefix(rows):
@@ -29,13 +26,14 @@ def strip_db_prefix(rows):
 
 def parse(text, name, keep_db_name=False):
     """Liest KeePass-CSV-Text. Wirft CsvError, wenn Pflichtspalten fehlen."""
-    reader = csv.DictReader(io.StringIO(text, newline=""))
-    missing = [c for c in CORE_NAMES if c not in (reader.fieldnames or [])]
+    table = CsvTable(text)
+    missing = [c for c in CORE_NAMES if c not in table.fieldnames]
     if missing:
         raise CsvError(f"In '{name}' fehlen Spalten: {', '.join(missing)}")
-    rows = list(reader)
+    rows = table.rows
     prefix = None if keep_db_name else strip_db_prefix(rows)
     notes = [f"Datenbankname „{prefix}“ aus den Gruppenpfaden entfernt."] if prefix else []
+    notes += table.notes()
     return LoadResult(
         rows=rows,
         format=KEEPASS_CSV,
