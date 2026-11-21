@@ -110,12 +110,30 @@ details.panel > summary::-webkit-details-marker { display: none; }
 .drop .meta { color: var(--muted); font-size: 13px; }
 .drop.filled { border-style: solid; background: var(--surface); }
 .swap { justify-self: start; }
+.dgroup .dhead { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 12px 16px 0; }
+.dgroup .dhead .reason { font-weight: 650; overflow-wrap: anywhere; }
+.dgroup .dbody { padding: 10px 16px 14px; display: grid; gap: 12px; }
+table.members { width: 100%; border-collapse: collapse; font-size: 13.5px; table-layout: fixed; }
+table.members th, table.members td { text-align: left; vertical-align: top; padding: 4px 10px 4px 0; overflow-wrap: anywhere; }
+table.members thead th { font-size: 12.5px; font-weight: 600; }
+table.members tbody th { width: 96px; font-weight: 500; color: var(--muted); }
+table.members td { font: 13px/1.45 var(--mono); white-space: pre-wrap; }
+table.members td.empty { font-family: var(--font); color: var(--muted); font-style: italic; }
+table.members .base { color: var(--b); }
+.choices { display: grid; gap: 6px; }
+.choices .opt { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 14px; }
+.choices select { padding: 4px 6px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); max-width: 100%; }
+.conflicts { display: grid; gap: 6px; padding: 8px 10px; background: var(--danger-soft); border-radius: var(--radius); font-size: 13.5px; }
+.conflicts label { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.cleanbar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 12px 16px; }
+.cleanbar .count { font-weight: 600; margin-right: auto; }
 .file-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .section-title { margin: 6px 2px -6px; font-size: 15px; font-weight: 650; }
 
 /* ---------- Formularelemente ---------- */
-.modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--line); }
+.modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--line); }
 .modes label { position: relative; text-align: center; padding: 8px 2px; font-size: 13px; cursor: pointer; background: var(--sunken); line-height: 1.25; display: grid; place-items: center; }
+.modes:not(.two) label:last-child { grid-column: span 2; }
 .modes label:has(input:disabled) { opacity: .45; cursor: not-allowed; }
 .modes label:has(input:disabled) input { cursor: not-allowed; }
 .modes input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
@@ -299,6 +317,7 @@ pre.json { margin: 0; padding: 14px 16px; max-height: 420px; overflow: auto; fon
         <div class="modes" role="radiogroup" aria-labelledby="h-mode">
           <label><input type="radio" name="mode" value="compare" disabled><span>Vergleich</span></label>
           <label><input type="radio" name="mode" value="overview" checked><span>Überblick</span></label>
+          <label><input type="radio" name="mode" value="clean"><span>Bereinigen</span></label>
           <label><input type="radio" name="mode" value="search"><span>Suche</span></label>
           <label><input type="radio" name="mode" value="stats"><span>Statistik</span></label>
           <label><input type="radio" name="mode" value="check"><span>Dubletten</span></label>
@@ -379,13 +398,14 @@ const COLUMN_LABEL = { "Group": "Gruppe", "Title": "Titel", "Username": "Usernam
   "Reprompt": "Passwort-Nachfrage", "Fields": "Eigene Felder", "URLs": "Alle URLs" };
 const FORMAT_LABEL = { "keepass-csv": "KeePass-CSV", "bitwarden-json": "Bitwarden-JSON",
   "bitwarden-csv": "Bitwarden-CSV" };
-const MODE_LABEL = { "compare": "Vergleichen", "overview": "Auswerten", "search": "Suchen",
+const MODE_LABEL = { "compare": "Vergleichen", "overview": "Auswerten", "clean": "Dubletten suchen", "search": "Suchen",
   "stats": "Zählen", "check": "Prüfen", "password-check": "Prüfen" };
 const EXPORT_FORMAT_HINT = {
   "keepass-csv": "Zum Import in KeePassium oder KeePassXC (CSV).",
   "bitwarden-json": "Unverschlüsselt, zum Import in Bitwarden oder Vaultwarden (Dateityp „Bitwarden (json)“).",
 };
 const MODE_HINT = {
+  "clean": "Findet Dubletten in einer Datei. Du entscheidest je Gruppe, ob zusammengeführt wird, und bekommst die Datei ohne Dubletten.",
   "overview": "Statistik, Dubletten und Passwortqualität auf einen Blick, für jede Datei einzeln.",
   "compare": "Was ist neu, entfernt, verschoben oder geändert – und in welcher Datei steht die neuere Version?",
   "search": "Findet einen Eintrag über Gruppe, Titel oder Username und zeigt seinen Status (bei zwei Dateien im Vergleich).",
@@ -467,7 +487,9 @@ function setMode(value) {
 function syncModeToFiles() {
   const two = !!(state.a && state.b);
   document.querySelector('input[name="mode"][value="compare"]').disabled = !two;
+  document.querySelector('input[name="mode"][value="clean"]').disabled = two;
   if (!two && currentMode() === "compare") setMode("overview");
+  else if (two && currentMode() === "clean") setMode("compare");
   else if (two && !state.userMode && currentMode() === "overview") setMode("compare");
   else refreshRun();
 }
@@ -509,13 +531,14 @@ function onModeChange() {
   $("f-search").classList.toggle("is-hidden", mode !== "search");
   $("f-pw").classList.toggle("is-hidden", mode !== "password-check" && mode !== "overview");
   const canExport = mode === "compare";
+  const canChooseFormat = canExport || mode === "clean";
   for (const id of ["export-added", "export-merged"]) {
     $(id).disabled = !canExport;
     if (!canExport) $(id).checked = false;
   }
-  document.querySelectorAll('input[name="export-format"]').forEach((r) => (r.disabled = !canExport));
-  $("export-format-modes").classList.toggle("is-disabled", !canExport);
-  $("export-hint").classList.toggle("is-hidden", canExport);
+  document.querySelectorAll('input[name="export-format"]').forEach((r) => (r.disabled = !canChooseFormat));
+  $("export-format-modes").classList.toggle("is-disabled", !canChooseFormat);
+  $("export-hint").classList.toggle("is-hidden", canChooseFormat);
   refreshRun();
   if (mode === "search") $("search").focus();
 }
@@ -572,6 +595,7 @@ function render(data) {
   const out = $("results");
   out.append(headPanel(data));
   if (r.mode === "compare") renderCompare(out, r, data);
+  else if (r.mode === "dedupe") renderClean(out, r);
   else if (r.mode === "overview") renderOverview(out, r);
   else if (r.mode === "search") renderSearch(out, r, data);
   else if (r.mode === "stats") renderStats(out, r);
@@ -709,7 +733,7 @@ function exportsPanel(exps) {
     const e = exps[k];
     const url = URL.createObjectURL(new Blob([e.content], { type: `${e.mime};charset=utf-8` }));
     state.urls.push(url);
-    const title = k === "added" ? "Neu hinzugefügte Einträge" : "Zusammengeführte Datei";
+    const title = { added: "Neu hinzugefügte Einträge", merged: "Zusammengeführte Datei", clean: "Datei ohne Dubletten" }[k];
     const lost = [
       ...Object.entries(e.lost.columns).map(([col, n]) => `${COLUMN_LABEL[col] || col}: ${plural(n, "Eintrag", "Einträge")}`),
       ...Object.entries(e.lost.source).map(([label, n]) => `${label}: ${plural(n, "Eintrag", "Einträge")}`),
@@ -724,6 +748,142 @@ function exportsPanel(exps) {
   });
   return h("section", { class: "panel" }, h("h2", { text: "Exporte" }),
     h("div", { class: "exports" }, h("p", { class: "hint", text: "Die Dateien enthalten Passwörter im Klartext. Nach dem Import wieder löschen." }), items));
+}
+
+/* ----- Bereinigen ----- */
+const KIND_DEFAULT = { key: "merge", login: "merge", title: "keep_all" };
+const KIND_BADGE = { key: "Identischer Schlüssel", login: "Gleicher Login", title: "Nur ein Hinweis" };
+let cleanForm = [];   // je Gruppe: { group, action(), keep(), picks(), root }
+
+function renderClean(out, r) {
+  cleanForm = [];
+  if (!r.groups.length) {
+    out.append(h("div", { class: "panel empty" }, h("h2", { text: "Keine Dubletten" }),
+      h("p", { text: "In dieser Datei gibt es nichts zusammenzuführen." })));
+    return;
+  }
+  const count = h("span", { class: "count" });
+  const make = h("button", { class: "btn", type: "button", text: "Datei ohne Dubletten erstellen" });
+  const reset = h("button", { class: "btn quiet", type: "button", text: "Vorschläge übernehmen" });
+  const update = () => {
+    const merged = cleanForm.filter((f) => f.action() === "merge").length;
+    const removed = cleanForm.reduce((n, f) => n + (f.action() === "keep_all" ? 0 : f.group.members.length - 1), 0);
+    count.textContent = `${plural(r.group_count, "Gruppe", "Gruppen")}, ${merged} zusammenführen, ${plural(removed, "Eintrag", "Einträge")} entfallen`;
+  };
+  const exportSlot = h("div", { id: "clean-export" });
+  out.append(h("section", { class: "panel cleanbar" }, count, reset, make));
+  r.groups.forEach((g) => out.append(cleanCard(g, update)));
+  out.append(exportSlot);
+  reset.addEventListener("click", () => { cleanForm.forEach((f) => f.reset()); update(); });
+  make.addEventListener("click", () => makeCleanFile(make, exportSlot));
+  update();
+}
+function memberName(g, i) {
+  const m = g.members[i], l = entryLabel(m.entry);
+  return `${i + 1}. ${l.title} (${l.path}) – geändert ${m.last_modified || "unbekannt"}`;
+}
+function cleanCard(g, update) {
+  const radioName = `act-${g.id}`;
+  const mk = (value, label) => h("label", { class: "opt" },
+    h("input", { type: "radio", name: radioName, value }), label);
+  const optMerge = mk("merge", `Zusammenführen (neuester Eintrag ${g.newest_member + 1} gewinnt, Lücken werden gefüllt)`);
+  const keepSelect = h("select", { "aria-label": "Eintrag, der behalten wird" },
+    g.members.map((_, i) => h("option", { value: i, text: memberName(g, i) })));
+  const optKeep = mk("keep", "Nur diesen behalten: ");
+  optKeep.append(keepSelect);
+  const optAll = mk("keep_all", "Alle behalten");
+
+  const pickSelects = {};
+  const conflictBox = h("div", { class: "conflicts" },
+    h("strong", { text: "Verschiedene Werte – welcher soll gelten?" }),
+    g.conflicts.map((col) => {
+      const sel = h("select", { "aria-label": COLUMN_LABEL[col] || col },
+        h("option", { value: "", text: `Neuester Eintrag (${g.newest_member + 1})` }),
+        g.members.map((_, i) => h("option", { value: i, text: `Eintrag ${i + 1}` })),
+        col === "Notes" ? h("option", { value: "both", text: "Alle verbinden" }) : null);
+      pickSelects[col] = sel;
+      return h("label", null, h("span", { text: `${COLUMN_LABEL[col] || col}:` }), sel);
+    }));
+
+  const cols = g.differing_columns;
+  const table = h("table", { class: "members" },
+    h("thead", null, h("tr", null, h("th", { scope: "col" }, h("span", { class: "sr-only", text: "Feld" })),
+      g.members.map((_, i) => h("th", { scope: "col", class: i === g.newest_member ? "base" : null,
+        text: `Eintrag ${i + 1}${i === g.newest_member ? " (neuester)" : ""}` })))),
+    h("tbody", null,
+      h("tr", null, h("th", { scope: "row", text: "Eintrag" }),
+        g.members.map((m) => { const l = entryLabel(m.entry); return h("td", { text: `${l.title}\n${l.path}` }); })),
+      h("tr", null, h("th", { scope: "row", text: "Geändert" }),
+        g.members.map((m) => h("td", { text: m.last_modified || "–" }))),
+      cols.map((c) => h("tr", null, h("th", { scope: "row", text: COLUMN_LABEL[c] || c }),
+        g.members.map((m) => {
+          const v = m.values[c];
+          return v === "" ? h("td", { class: "empty", text: "(leer)" }) : h("td", { text: v });
+        })))));
+
+  const body = h("div", { class: "dbody" }, table,
+    h("div", { class: "choices", role: "radiogroup", "aria-label": "Was soll mit der Gruppe geschehen?" }, optMerge, optKeep, optAll),
+    g.conflicts.length ? conflictBox : null);
+  const card = h("section", { class: "panel dgroup" },
+    h("div", { class: "dhead" }, h("span", { class: "reason", text: g.reason }),
+      h("span", { class: `badge ${g.kind === "title" ? "" : "b"}`, text: KIND_BADGE[g.kind] }),
+      h("span", { class: "note", text: plural(g.members.length, "Eintrag", "Einträge") })),
+    body);
+
+  const radios = () => [...card.querySelectorAll(`input[name="${radioName}"]`)];
+  const action = () => radios().find((x) => x.checked).value;
+  const sync = () => {
+    conflictBox.classList.toggle("is-hidden", action() !== "merge");
+    keepSelect.disabled = action() !== "keep";
+    update();
+  };
+  const reset = () => {
+    radios().forEach((x) => (x.checked = x.value === KIND_DEFAULT[g.kind]));
+    keepSelect.value = String(g.newest_member);
+    Object.values(pickSelects).forEach((s) => (s.value = ""));
+    sync();
+  };
+  radios().forEach((x) => x.addEventListener("change", sync));
+  cleanForm.push({
+    group: g, action,
+    reset,
+    decision: () => {
+      const a = action();
+      if (a === "keep") return { action: a, keep: Number(keepSelect.value) };
+      if (a !== "merge") return { action: a };
+      const picks = {};
+      for (const [col, sel] of Object.entries(pickSelects)) {
+        if (sel.value !== "") picks[col] = sel.value === "both" ? "both" : Number(sel.value);
+      }
+      return { action: a, picks };
+    },
+  });
+  reset();
+  return card;
+}
+async function makeCleanFile(button, slot) {
+  button.disabled = true;
+  slot.replaceChildren(h("p", { class: "status", text: "Wird erstellt …" }));
+  try {
+    const decisions = {};
+    cleanForm.forEach((f) => (decisions[f.group.id] = f.decision()));
+    const opts = { ...collectOptions(), export_clean: true, decisions, export_format: exportFormat() };
+    const resp = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Token": TOKEN },
+      body: JSON.stringify({ old: { name: state.a.name, text: state.a.text }, new: null, options: opts }),
+    });
+    let data = null;
+    try { data = await resp.json(); } catch (_) { /* keine JSON-Antwort */ }
+    if (!resp.ok) throw new Error((data && data.error) || `Fehler ${resp.status}`);
+    const panel = exportsPanel(data.exports);
+    slot.replaceChildren(panel);
+    panel.scrollIntoView({ block: "nearest" });
+  } catch (err) {
+    slot.replaceChildren(h("div", { class: "alert", role: "alert", text: err.message || String(err) }));
+  } finally {
+    button.disabled = false;
+  }
 }
 
 /* ----- Suche ----- */

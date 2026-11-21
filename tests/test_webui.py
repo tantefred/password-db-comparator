@@ -3,6 +3,7 @@
 import http.client
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -248,6 +249,13 @@ class StaticPageTests(unittest.TestCase):
         self.assertIn('value="compare" disabled', self.html)
         self.assertIn("state.b ? {", self.html)
         self.assertIn('id="clear-b"', self.html)
+
+    def test_page_offers_cleaning_with_decisions(self):
+        self.assertEqual(len(re.findall(r'<input type="radio" name="mode"', self.html)), 7)
+        self.assertIn('value="clean"', self.html)
+        for text in ("export_clean: true", "decisions", "keep_all", "newest_member", "both"):
+            self.assertIn(text, self.html, text)
+        self.assertIn("cleanForm", self.html)
 
     def test_file_contents_are_never_inserted_as_html(self):
         for risky in (
