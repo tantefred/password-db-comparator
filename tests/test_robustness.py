@@ -88,6 +88,30 @@ class NumberOptionTests(unittest.TestCase):
                 analyze("a.csv", text, None, None, {"mode": "password-check", **options})
 
 
+class TimeSpanTests(unittest.TestCase):
+    def test_spans_use_real_plurals(self):
+        from csvcompare.display import human_delta
+
+        cases = {
+            1: "1 Sekunde",
+            59: "59 Sekunden",
+            60: "1 Minute",
+            7200: "2 Stunden",
+            3600: "1 Stunde",
+            86400: "1 Tag",
+            3 * 86400: "3 Tage",
+            -3 * 86400: "3 Tage",
+        }
+        for seconds, text in cases.items():
+            with self.subTest(seconds=seconds):
+                self.assertEqual(human_delta(seconds), text)
+
+    def test_notes_do_not_contain_placeholders_like_tag_e(self):
+        _, out, _ = run(fixture_path("alt.csv"), fixture_path("neu.csv"))
+        self.assertNotIn("(e)", out)
+        self.assertNotIn("(n)", out)
+
+
 class GitignoreTests(unittest.TestCase):
     def ignored(self, path):
         proc = subprocess.run(

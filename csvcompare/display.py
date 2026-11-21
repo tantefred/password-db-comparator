@@ -19,12 +19,16 @@ def display_value(value, secret, show_secrets):
 
 
 def human_delta(seconds):
-    """Zeitabstand als größte passende Einheit, z. B. ``3 Tag(e)``."""
+    """Zeitabstand als größte passende Einheit, z. B. ``3 Tage`` oder ``1 Stunde``."""
     seconds = int(abs(seconds))
-    for unit, size in (("Tag(e)", 86400), ("Stunde(n)", 3600), ("Minute(n)", 60)):
+    for one, many, size in (
+        ("Tag", "Tage", 86400),
+        ("Stunde", "Stunden", 3600),
+        ("Minute", "Minuten", 60),
+    ):
         if seconds >= size:
-            return f"{seconds // size} {unit}"
-    return f"{seconds} Sekunde(n)"
+            return plural(seconds // size, one, many)
+    return plural(seconds, "Sekunde", "Sekunden")
 
 
 def display_names(path_old, path_new):

@@ -9,6 +9,7 @@ from typing import NamedTuple
 from urllib.parse import urlsplit
 
 from .columns import MODIFIED
+from .display import plural
 from .entries import entry_label
 from .values import parse_time
 
@@ -152,7 +153,7 @@ def stale_entries(entries, max_age_days, now):
         if modified is not None and (now - modified).days > max_age_days:
             lines.append(
                 f"{entry_label(key)}  (zuletzt geändert {modified.date().isoformat()}, "
-                f"vor {(now - modified).days} Tagen)"
+                f"vor {plural((now - modified).days, 'Tag', 'Tagen')})"
             )
     return lines
 

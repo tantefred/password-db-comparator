@@ -254,6 +254,9 @@ table.diff td.a { color: var(--a); }
 table.diff td.b { color: var(--b); }
 table.diff td.masked { font-family: var(--font); font-size: 13.5px; font-style: italic; color: var(--muted); }
 @media (max-width: 560px) {
+  /* Ohne Spaltenköpfe sagt sonst nur die Farbe, welcher Wert aus welcher Datei stammt */
+  table.diff td.a::before { content: "1: "; font-weight: 700; }
+  table.diff td.b::before { content: "2: "; font-weight: 700; }
   table.diff, table.diff tbody, table.diff tr, table.diff th, table.diff td { display: block; width: auto; }
   table.diff thead { display: none; }
   table.diff tr { padding: 4px 0; }
@@ -428,6 +431,29 @@ const MODE_HINT = {
 };
 
 const $ = (id) => document.getElementById(id);
+
+/* Zeiten für Menschen: lokale Zeit und Abstand zu heute. Rohwerte bleiben im JSON-Bericht. */
+const DATE_FORMAT = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+const RELATIVE_FORMAT = new Intl.RelativeTimeFormat("de", { numeric: "auto" });
+function toDate(text) {
+  // Zeiten ohne Zeitzone gelten wie auf dem Server als UTC
+  const zoned = /^\d{4}-\d\d-\d\d[T ]\d\d:\d\d(:\d\d)?$/.test(text) ? `${text.replace(" ", "T")}Z` : text;
+  const date = new Date(zoned);
+  return isNaN(date) ? null : date;
+}
+function relativeTime(date) {
+  const seconds = (date - Date.now()) / 1000;
+  for (const [unit, size] of [["year", 31536000], ["month", 2592000], ["day", 86400], ["hour", 3600], ["minute", 60]]) {
+    if (Math.abs(seconds) >= size) return RELATIVE_FORMAT.format(Math.round(seconds / size), unit);
+  }
+  return "gerade eben";
+}
+function formatTime(text, withRelative = true) {
+  const date = text ? toDate(text) : null;
+  if (!date) return text || "–";
+  const absolute = DATE_FORMAT.format(date);
+  return withRelative ? `${absolute} (${relativeTime(date)})` : absolute;
+}
 const state = { a: null, b: null, last: null, urls: [], userMode: false, run: null, dirty: false };
 
 /* ---------- DOM-Helfer: Inhalte nie als HTML einsetzen ---------- */
@@ -793,7 +819,7 @@ function changedBody(it, r) {
   const nodes = [entryNode(it.entry)];
   if (it.only_timestamp) nodes.push(h("div", null, h("span", { class: "badge", text: "nur Zeitstempel" })));
   if (cols.length) nodes.push(fieldRows(it.changes, cols, r));
-  nodes.push(h("div", { class: "note" }, it.note ? `${it.note}.  ` : "", `Zuletzt geändert: ${lm.old}  |  ${lm.new}`));
+  nodes.push(h("div", { class: "note" }, it.note ? `${it.note}.  ` : "", `Zuletzt geändert: ${formatTime(lm.old)}  |  ${formatTime(lm.new)}`));
   return nodes;
 }
 function movedBody(it, r) {
@@ -894,7 +920,7 @@ function valueLabel(g, col, i) {
 }
 function memberName(g, i) {
   const m = g.members[i], l = entryLabel(m.entry);
-  return `${i + 1}. ${l.title} (${l.path}) – geändert ${m.last_modified || "unbekannt"}`;
+  return `${i + 1}. ${l.title} (${l.path}) – geändert ${formatTime(m.last_modified, false)}`;
 }
 function cleanCard(g, update) {
   const radioName = `act-${g.id}`;
@@ -928,7 +954,7 @@ function cleanCard(g, update) {
       h("tr", null, h("th", { scope: "row", text: "Eintrag" }),
         g.members.map((m) => { const l = entryLabel(m.entry); return h("td", { text: `${l.title}\n${l.path}` }); })),
       h("tr", null, h("th", { scope: "row", text: "Geändert" }),
-        g.members.map((m) => h("td", { text: m.last_modified || "–" }))),
+        g.members.map((m) => h("td", { text: formatTime(m.last_modified), title: m.last_modified || null }))),
       cols.map((c) => h("tr", null, h("th", { scope: "row", text: COLUMN_LABEL[c] || c }),
         g.members.map((m) => {
           const v = m.values[c];
@@ -1033,7 +1059,7 @@ function renderSearch(out, r) {
   const list = h("ul", { class: "entries" }, r.results.map((it) => {
     const [label, tone] = status(it.status);
     const body = it.status === "moved" ? movedBody(it, r)
-      : it.differing_columns ? changedBody(it, r) : [entryNode(it.entry), h("div", { class: "note", text: `Zuletzt geändert: ${it.last_modified}` })];
+      : it.differing_columns ? changedBody(it, r) : [entryNode(it.entry), h("div", { class: "note", text: `Zuletzt geändert: ${formatTime(it.last_modified)}` })];
     return h("li", { class: "entry" }, h("div", null, h("span", { class: `badge ${tone}`, text: label })), body);
   }));
   out.append(h("section", { class: "panel group" },

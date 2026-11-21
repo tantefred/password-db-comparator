@@ -49,7 +49,7 @@ class Change(NamedTuple):
     key: tuple
     new_key: tuple  # gleich ``key``, außer bei verschobenen Einträgen
     columns: list  # Spalten mit Unterschieden (leer: nur der Schlüssel unterscheidet sich)
-    note: str  # welche Datei aktueller ist, z. B. „neu.csv ist 3 Tag(e) neuer“
+    note: str  # welche Datei aktueller ist, z. B. „neu.csv ist 3 Tage neuer“
 
 
 @dataclass

@@ -314,6 +314,12 @@ class StaticPageTests(unittest.TestCase):
         for text in ("valueLabel", "Variante", "masked_columns"):
             self.assertIn(text, self.html, text)
 
+    def test_times_are_shown_for_humans_and_values_are_labelled_on_phones(self):
+        for text in ("formatTime", "Intl.DateTimeFormat", "Intl.RelativeTimeFormat"):
+            self.assertIn(text, self.html, text)
+        self.assertIn('table.diff td.a::before { content: "1: "', self.html)
+        self.assertIn('table.diff td.b::before { content: "2: "', self.html)
+
     def test_file_contents_are_never_inserted_as_html(self):
         for risky in (
             "innerHTML",
