@@ -33,7 +33,14 @@ def parse(text, name, keep_db_name=False):
         raise CsvError(f"In '{name}' fehlen Spalten: {', '.join(missing)}")
     rows = table.rows
     prefix = None if keep_db_name else strip_db_prefix(rows)
-    notes = [f"Datenbankname „{prefix}“ aus den Gruppenpfaden entfernt."] if prefix else []
+    notes = (
+        [
+            f"Datenbankname „{prefix}“ aus den Gruppenpfaden entfernt. Ist „{prefix}“ in Wahrheit "
+            f"eine Gruppe, nutze --keep-db-name (Oberfläche: „Datenbanknamen in Gruppen behalten“)."
+        ]
+        if prefix
+        else []
+    )
     notes += table.notes()
     naive = sum(1 for row in rows if has_naive_time(row.get(MODIFIED, "")))
     if naive:

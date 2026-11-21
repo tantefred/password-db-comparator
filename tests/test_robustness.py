@@ -153,6 +153,47 @@ class HintTests(unittest.TestCase):
         self.assertNotIn("Zusammenführbare", out)
 
 
+class DatabaseNameTests(unittest.TestCase):
+    def test_note_names_the_escape_hatch(self):
+        text = KEEPASS_HEADER + "Web/Shop,A,u,pw,,,,,,\nWeb,B,u,pw,,,,,,\n"
+        notes = load_any("x.csv", text).notes
+        self.assertTrue(any("Datenbankname „Web“" in n and "--keep-db-name" in n for n in notes))
+
+    def test_keep_db_name_keeps_the_only_top_group(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "k.csv")
+            with open(path, "w", encoding="utf-8", newline="") as f:
+                f.write(KEEPASS_HEADER + "Web/Shop,A,u,pw,,,,,,\nWeb,B,u,pw,,,,,,\n")
+            _, out, _ = run(path, "--stats")
+            self.assertIn("Datenbankname „Web“", out)
+            _, out, _ = run(path, "--stats", "--keep-db-name")
+            self.assertNotIn("Datenbankname", out)
+            self.assertIn("Web/Shop", out)
+
+    def test_export_to_a_format_without_database_names_says_so(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            _, out, _ = run(fixture_path("keepassium_a.csv"), "--export-clean", cwd=tmp)
+            self.assertNotIn("nicht gespeichert", out)  # KeePass-CSV stellt den Namen wieder voran
+            _, out, _ = run(
+                fixture_path("keepassium_a.csv"),
+                "--export-clean",
+                "--export-format",
+                "bitwarden-json",
+                cwd=tmp,
+            )
+            self.assertIn(
+                "Datenbankname „Privat-DB“ aus den Gruppenpfaden wird im Bitwarden-JSON nicht",
+                out,
+            )
+            self.assertEqual(sorted(os.listdir(tmp)), ["bereinigt.csv", "bereinigt.json"])
+
+
 class GitignoreTests(unittest.TestCase):
     def ignored(self, path):
         proc = subprocess.run(

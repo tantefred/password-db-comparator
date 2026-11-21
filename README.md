@@ -94,7 +94,7 @@ lassen sich miteinander vergleichen.
 
 | Format | Erkennung | Hinweise |
 |---|---|---|
-| KeePass-CSV (KeePassium, KeePassXC) | Kopfzeile mit den 10 Spalten unten | Jeder Gruppenpfad beginnt mit dem Datenbanknamen (`DB1/Web`); er wird für den Vergleich entfernt und beim Export wieder vorangestellt |
+| KeePass-CSV (KeePassium, KeePassXC) | Kopfzeile mit den 10 Spalten unten | Jeder Gruppenpfad beginnt mit dem Datenbanknamen (`DB1/Web`); er wird für den Vergleich entfernt und beim KeePass-CSV-Export wieder vorangestellt. Entfernt wird das gemeinsame erste Pfadsegment aller Einträge; liegt alles unter einer einzigen echten Gruppe (z. B. nur `Web/…`), hält das Skript sie für den Namen. Das nennt der Hinweis in jedem Bericht; mit `--keep-db-name` bleibt der Pfad unverändert. Das Bitwarden-JSON kennt keinen Datenbanknamen; die Exportmeldung sagt, dass er dort nicht gespeichert wird |
 | Bitwarden/Vaultwarden-JSON | beginnt mit `{` | nur **unverschlüsselter** Export; Logins und sichere Notizen, Karten und Identitäten werden übersprungen (und im Bericht gezählt) |
 | Bitwarden/Vaultwarden-CSV | Kopfzeile mit `login_uri` und `login_username` | enthält **keine Zeitstempel**; `fields` steht als `Name: Wert Name: Wert` |
 

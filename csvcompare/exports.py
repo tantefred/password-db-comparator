@@ -103,6 +103,17 @@ def prefix_rows(cmp, rows, writer):
     return restore_db_prefix(rows, db_prefix_for_export(cmp) if writer.prefix_groups else None)
 
 
+def db_name_lines(cmp, writer):
+    """Hinweis, wenn der entfernte Datenbankname im Zielformat nicht wieder vorkommt."""
+    prefix = db_prefix_for_export(cmp)
+    if not prefix or writer.prefix_groups:
+        return []
+    return [
+        f"  Hinweis: Der Datenbankname „{prefix}“ aus den Gruppenpfaden wird im {writer.label} "
+        f"nicht gespeichert."
+    ]
+
+
 def with_losses(rows, lines, writer, **extra):
     """Hängt an die Meldungen an, was das Zielformat nicht speichern kann."""
     lost = lost_data(rows, writer)
@@ -120,7 +131,7 @@ def prepare_added(cmp, path, writer=DEFAULT_WRITER):
         f"{count} nach '{path}' exportiert ({skipped} aus Papierkorb ausgelassen; "
         f"Datei enthält Passwörter im Klartext)."
     ]
-    return with_losses(rows, lines, writer)
+    return with_losses(rows, lines + db_name_lines(cmp, writer), writer)
 
 
 def prepare_merged(cmp, path, writer=DEFAULT_WRITER):
@@ -143,7 +154,7 @@ def prepare_merged(cmp, path, writer=DEFAULT_WRITER):
             f"Version aus {cmp.new_name} übernommen, bitte prüfen:"
         )
         lines += [f"    ! {entry_label(key)}" for key in conflicts]
-    return with_losses(rows, lines, writer, conflicts=conflicts)
+    return with_losses(rows, lines + db_name_lines(cmp, writer), writer, conflicts=conflicts)
 
 
 def prepare_clean(
@@ -181,4 +192,4 @@ def prepare_clean(
     if kept_one:
         lines.append(f"  {plural(kept_one, 'Gruppe', 'Gruppen')}: nur ein Eintrag behalten.")
     conflicts = [merged.group.keys[0] for merged in conflicted]
-    return with_losses(rows, lines, writer, conflicts=conflicts)
+    return with_losses(rows, lines + db_name_lines(cmp, writer), writer, conflicts=conflicts)
