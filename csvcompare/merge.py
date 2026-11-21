@@ -63,10 +63,15 @@ def merged_urls(ordered):
     return urls
 
 
+def newest_first(rows):
+    """Die Nummern der Zeilen, die zuletzt geänderte zuerst (bei Gleichstand die spätere)."""
+    return sorted(range(len(rows)), key=lambda i: (modified_at(rows[i]), i), reverse=True)
+
+
 def merge_rows(rows, picks=None):
     """Führt Zeilen zu einer zusammen. Rückgabe: (zeile, spalten_mit_konflikt)."""
     picks = picks or {}
-    order = sorted(range(len(rows)), key=lambda i: (modified_at(rows[i]), i), reverse=True)
+    order = newest_first(rows)
     ordered = [rows[i] for i in order]
     result = dict(ordered[0])
     conflicts = []

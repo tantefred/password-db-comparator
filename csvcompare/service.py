@@ -8,10 +8,12 @@ funktionieren.
 import shlex
 
 from .cli import build_comparison, build_parser, validate_args
-from .exports import export_path, pick_writer, prepare_added, prepare_merged
+from .exports import export_path, pick_writer, prepare_added, prepare_clean, prepare_merged
 from .importers import CsvError, load_any
-from .modes import COMPARE, MODES, OVERVIEW, PASSWORD_CHECK, SEARCH
+from .merge import Decision
+from .modes import CLEAN, COMPARE, DEDUPE, OVERVIEW, PASSWORD_CHECK, SEARCH, UI_MODES
 from .render_json import build_report, entry_ref
+from .writers import WRITERS
 
 
 class UsageError(Exception):
@@ -58,6 +60,8 @@ def mode_arguments(options, mode):
         if not isinstance(query, str) or not query.strip():
             raise UsageError("Für die Suche fehlt der Suchbegriff.")
         return ["--search=" + query]
+    if mode in (DEDUPE, CLEAN):
+        return ["--dedupe"]  # „Bereinigen“ beginnt mit der Liste der Dublettengruppen
     if mode in (PASSWORD_CHECK, OVERVIEW):
         return [
             "--password-check" if mode == PASSWORD_CHECK else "--overview",
@@ -86,11 +90,54 @@ def options_to_argv(options, single=False):
     ``single``: Es liegt nur eine Datei vor; ohne Modus gilt dann der Überblick.
     """
     mode = options.get("mode") or (OVERVIEW if single else COMPARE)
-    if mode not in MODES:
+    if mode not in UI_MODES:
         raise UsageError(f"Unbekannter Modus '{mode}'.")
     if single and mode == COMPARE:
         raise UsageError("Der Vergleich braucht zwei Dateien.")
     return filter_arguments(options) + mode_arguments(options, mode) + export_arguments(options)
+
+
+def is_count(value, limit):
+    return isinstance(value, int) and not isinstance(value, bool) and 0 <= value < limit
+
+
+def parse_decisions(options):
+    """Die Entscheidungen der Oberfläche als ``{gruppen_id: Decision}``; prüft nur die Form."""
+    raw = options.get("decisions")
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, dict):
+        raise UsageError("'decisions' muss ein Objekt sein.")
+    decisions = {}
+    for group_id, item in raw.items():
+        if not isinstance(item, dict) or not isinstance(item.get("action"), str):
+            raise UsageError("Ungültige Entscheidung.")
+        keep, picks = item.get("keep", 0), item.get("picks") or {}
+        if not is_count(keep, 10**6) or not isinstance(picks, dict):
+            raise UsageError("Ungültige Entscheidung.")
+        decisions[group_id] = Decision(item["action"], keep, picks)
+    return decisions
+
+
+def clean_export(cmp, args, options):
+    """Die bereinigte Datei nach den Entscheidungen der Oberfläche (als Antwort-Inhalt)."""
+    export_format = options.get("export_format")
+    if export_format is not None and export_format not in WRITERS:
+        raise UsageError(f"Unbekanntes Exportformat '{export_format}'.")
+    writer = pick_writer(export_format)
+    path = export_path(True, "clean", writer)
+    try:
+        export = prepare_clean(
+            cmp,
+            path,
+            writer,
+            kinds=args.dedupe_kinds,
+            auto_kinds=(),
+            decisions=parse_decisions(options),
+        )
+    except ValueError as e:
+        raise UsageError(str(e)) from None
+    return export_payload(export, path)
 
 
 def export_payload(export, filename):
@@ -153,6 +200,11 @@ def analyze(old_name, old_text, new_name, new_text, options):
         if value:
             path = export_path(value, kind, writer)
             exports[kind] = export_payload(prepare(cmp, path, writer), path)
+
+    if options.get("export_clean"):
+        if not (single and args.dedupe):
+            raise UsageError("Bereinigen braucht genau eine Datei und den Modus „Bereinigen“.")
+        exports["clean"] = clean_export(cmp, args, options)
 
     files = [old_name] if single else [old_name, new_name]
     command = shlex.join(["python3", "compare_csv.py", *files, *argv])

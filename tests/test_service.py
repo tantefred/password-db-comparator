@@ -182,3 +182,79 @@ class SingleFileServiceTests(unittest.TestCase):
     def test_search_in_one_file(self):
         result = analyze("a.csv", self.text, None, None, {"mode": "search", "search": "mail"})
         self.assertEqual([r["status"] for r in result["report"]["results"]], ["found"])
+
+
+class CleanServiceTests(unittest.TestCase):
+    def setUp(self):
+        self.text = read_fixture("dubletten.csv")
+
+    def first_call(self, **options):
+        return analyze("d.csv", self.text, None, None, {"mode": "clean", **options})
+
+    def test_first_call_lists_groups_with_conflicts_and_newest_member(self):
+        result = self.first_call()
+        report = result["report"]
+        self.assertEqual(report["mode"], "dedupe")
+        self.assertEqual(result["exports"], {})
+        first = report["groups"][0]
+        self.assertEqual(first["conflicts"], ["Password"])
+        self.assertEqual(first["newest_member"], 1)
+        self.assertEqual(result["command"], "python3 compare_csv.py d.csv --dedupe")
+
+    def test_second_call_returns_the_cleaned_file(self):
+        groups = {g["kind"]: g["id"] for g in self.first_call()["report"]["groups"]}
+        decisions = {
+            groups["key"]: {"action": "merge", "picks": {"Password": 0}},
+            groups["login"]: {"action": "keep", "keep": 1},
+        }
+        result = self.first_call(
+            export_clean=True, decisions=decisions, export_format="keepass-csv"
+        )
+        export = result["exports"]["clean"]
+        self.assertEqual(export["filename"], "bereinigt.csv")
+        self.assertEqual(export["entries"], 9 - 1 - 2 - 1)  # Papierkorb, key, login
+        self.assertIn("pw-alt", export["content"])
+        self.assertNotIn("pw-neu", export["content"])
+        self.assertEqual(export["lost"]["source"], {"Frühere Passwörter": 1})
+
+    def test_groups_without_a_decision_are_kept(self):
+        export = self.first_call(export_clean=True, decisions={})["exports"]["clean"]
+        self.assertEqual(export["entries"], 8)  # nur der Papierkorb fällt weg
+
+    def test_bitwarden_format_keeps_the_history(self):
+        groups = {g["kind"]: g["id"] for g in self.first_call()["report"]["groups"]}
+        result = self.first_call(
+            export_clean=True,
+            decisions={groups["key"]: {"action": "merge"}},
+            export_format="bitwarden-json",
+        )
+        export = result["exports"]["clean"]
+        self.assertEqual(export["filename"], "bereinigt.json")
+        self.assertIn("passwordHistory", export["content"])
+        self.assertEqual(export["lost"]["source"], {})
+
+    def test_invalid_decisions_are_rejected(self):
+        group_id = self.first_call()["report"]["groups"][0]["id"]
+        bad = (
+            {"gibtsnicht": {"action": "merge"}},
+            {group_id: {"action": "löschen"}},
+            {group_id: {"action": "keep", "keep": 7}},
+            {group_id: {"action": "merge", "picks": {"Password": 7}}},
+            {group_id: {"action": "merge", "picks": {"Created": 0}}},
+            {group_id: "merge"},
+            {group_id: {"action": "keep", "keep": True}},
+            [],
+        )
+        for decisions in bad:
+            with self.subTest(decisions=decisions), self.assertRaises(UsageError):
+                self.first_call(export_clean=True, decisions=decisions)
+
+    def test_clean_needs_one_file_and_the_clean_mode(self):
+        with self.assertRaises(UsageError):
+            analyze("a.csv", self.text, "b.csv", self.text, {"mode": "clean"})
+        with self.assertRaises(UsageError):
+            analyze("a.csv", self.text, None, None, {"mode": "stats", "export_clean": True})
+
+    def test_unknown_export_format_is_rejected(self):
+        with self.assertRaises(UsageError):
+            self.first_call(export_clean=True, decisions={}, export_format="docx")

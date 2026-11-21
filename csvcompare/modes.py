@@ -12,6 +12,8 @@ COMPARE, OVERVIEW, DEDUPE, STATS, CHECK, PASSWORD_CHECK, SEARCH = (
     "search",
 )
 MODES = (COMPARE, OVERVIEW, DEDUPE, STATS, CHECK, PASSWORD_CHECK, SEARCH)
+# Nur in der Weboberfläche: Dubletten suchen, dann nach eigener Wahl bereinigen
+UI_MODES = (*MODES, CLEAN)
 
 
 def selected_mode(args, single):

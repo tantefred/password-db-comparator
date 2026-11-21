@@ -8,6 +8,7 @@ from .compare import FRESHNESS, NEWER_IN_NEW, NEWER_IN_OLD, UNCLEAR
 from .display import mask_secret
 from .duplicates import find_duplicates
 from .exports import export_path, pick_writer, prepare_clean
+from .merge import merge_rows, newest_first
 from .modes import CHECK, CLEAN, DEDUPE, OVERVIEW, PASSWORD_CHECK, SEARCH, STATS, selected_mode
 from .search import MOVED, ONLY_IN_NEW, search
 
@@ -193,12 +194,16 @@ def dedupe_report(base, cmp, kinds, show_secrets):
             members.append(
                 {"entry": entry_ref(key), "last_modified": row[MODIFIED], "values": values}
             )
+        rows = [cmp.old[key] for key in group.keys]
+        conflicts = merge_rows(rows)[1]
         groups.append(
             {
                 "id": group.id,
                 "kind": group.kind,
                 "reason": group.reason,
                 "differing_columns": list(group.differing),
+                "conflicts": conflicts,
+                "newest_member": newest_first(rows)[0],
                 "members": members,
             }
         )
