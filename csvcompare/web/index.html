@@ -130,7 +130,8 @@ table.members .base { color: var(--b); }
 .choices { display: grid; gap: 6px; }
 .choices .opt { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 14px; }
 .choices select, .conflicts select { padding: 4px 6px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); max-width: 100%; }
-.conflicts { display: grid; gap: 6px; padding: 8px 10px; background: var(--danger-soft); border-radius: var(--radius); font-size: 13.5px; }
+.conflicts { display: grid; gap: 6px; padding: 8px 10px; background: var(--warn-soft); border-left: 4px solid var(--warn); border-radius: 0 var(--radius) var(--radius) 0; font-size: 13.5px; }
+.conflicts .note { color: inherit; opacity: .85; }
 .conflicts label { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
 .cleanformat { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 13.5px; }
 .cleanformat .modes { width: auto; min-width: 260px; }
@@ -881,6 +882,16 @@ function renderClean(out, r) {
   syncFormatChoosers();
   update();
 }
+/* Wie ein Wert in der Auswahl heißt: der Wert selbst, bei verborgenen Werten „Variante A“ (gleiche Werte, gleicher Buchstabe). */
+function valueLabel(g, col, i) {
+  const v = g.members[i].values[col];
+  if (g.masked_columns.includes(col)) {
+    const letter = g.variants[col][i];
+    return letter ? `Variante ${letter}` : "leer";
+  }
+  if (v === "" || v == null) return "leer";
+  return v.length > 40 ? `${v.slice(0, 40)} …` : v.replace(/\s+/g, " ");
+}
 function memberName(g, i) {
   const m = g.members[i], l = entryLabel(m.entry);
   return `${i + 1}. ${l.title} (${l.path}) – geändert ${m.last_modified || "unbekannt"}`;
@@ -901,8 +912,8 @@ function cleanCard(g, update) {
     h("strong", { text: "Verschiedene Werte – welcher soll gelten?" }),
     g.conflicts.map((col) => {
       const sel = h("select", { "aria-label": COLUMN_LABEL[col] || col },
-        h("option", { value: "", text: `Neuester Eintrag (${g.newest_member + 1})` }),
-        g.members.map((_, i) => h("option", { value: i, text: `Eintrag ${i + 1}` })),
+        h("option", { value: "", text: `Neuester Eintrag (${g.newest_member + 1}) – ${valueLabel(g, col, g.newest_member)}` }),
+        g.members.map((_, i) => h("option", { value: i, text: `Eintrag ${i + 1} – ${valueLabel(g, col, i)}` })),
         col === "Notes" ? h("option", { value: "both", text: "Alle verbinden" }) : null);
       pickSelects[col] = sel;
       return h("label", null, h("span", { text: `${COLUMN_LABEL[col] || col}:` }), sel);
@@ -921,12 +932,18 @@ function cleanCard(g, update) {
       cols.map((c) => h("tr", null, h("th", { scope: "row", text: COLUMN_LABEL[c] || c }),
         g.members.map((m) => {
           const v = m.values[c];
-          return v === "" ? h("td", { class: "empty", text: "(leer)" }) : h("td", { text: v });
+          const masked = g.masked_columns.includes(c);
+          if (v === "" || (masked && v === "(leer)")) return h("td", { class: "empty", text: "(leer)" });
+          const letter = masked ? g.variants[c][g.members.indexOf(m)] : null;
+          return h("td", { text: letter ? `${v} · Variante ${letter}` : v });
         })))));
 
   const body = h("div", { class: "dbody" }, table,
     h("div", { class: "choices", role: "radiogroup", "aria-label": "Was soll mit der Gruppe geschehen?" }, optMerge, optKeep, optAll),
     g.conflicts.length ? conflictBox : null);
+  if (g.conflicts.some((c) => g.masked_columns.includes(c))) {
+    conflictBox.append(h("span", { class: "note", text: "Verborgene Werte sind nur durch Buchstaben unterscheidbar: gleicher Buchstabe = gleicher Wert. Die Werte selbst siehst du mit „Passwörter im Klartext zeigen“ (Optionen) nach erneutem Auswerten." }));
+  }
   const card = h("section", { class: "panel dgroup" },
     h("div", { class: "dhead" }, h("span", { class: "reason", text: g.reason }),
       h("span", { class: `badge ${g.kind === "title" ? "" : "b"}`, text: KIND_BADGE[g.kind] }),

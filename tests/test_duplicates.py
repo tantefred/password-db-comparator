@@ -1,5 +1,6 @@
 """Tests der Dublettengruppen (Modul und ``--dedupe``)."""
 
+import json
 import unittest
 
 from csvcompare.duplicates import KEY, KINDS, LOGIN, TITLE, find_duplicates
@@ -85,6 +86,20 @@ class DedupeCliTests(unittest.TestCase):
         self.assertEqual(len(first["members"]), 3)
         self.assertEqual(first["members"][1]["values"]["Password"], "(gesetzt)")
         self.assertEqual(first["members"][1]["entry"]["duplicate_index"], 2)
+
+    def test_hidden_values_are_told_apart_by_letters(self):
+        _, report = run_json(SAMPLE, "--dedupe")
+        first = report["groups"][0]
+        self.assertEqual(first["masked_columns"], ["Password", "TOTP"])
+        self.assertEqual(first["variants"]["Password"], ["A", "B", "B"])  # pw-alt, pw-neu, pw-neu
+        self.assertEqual(first["variants"]["TOTP"], [None, "A", None])
+        self.assertNotIn("pw-neu", json.dumps(report))
+
+    def test_no_letters_when_values_are_shown(self):
+        _, report = run_json(SAMPLE, "--dedupe", "--show-secrets")
+        first = report["groups"][0]
+        self.assertEqual((first["masked_columns"], first["variants"]), ([], {}))
+        self.assertEqual(first["members"][1]["values"]["Password"], "pw-neu")
 
     def test_kinds_option(self):
         _, report = run_json(SAMPLE, "--dedupe", "--dedupe-kinds", "title,key")

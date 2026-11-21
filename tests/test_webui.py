@@ -307,6 +307,13 @@ class StaticPageTests(unittest.TestCase):
         self.assertIn('value="check"><span>Prüfen</span>', self.html)
         self.assertIn("braucht zwei Dateien", self.html)  # Tooltip des gesperrten Vergleichs
 
+    def test_conflicts_are_a_decision_with_visible_variants(self):
+        conflicts = next(line for line in self.html.splitlines() if line.startswith(".conflicts {"))
+        self.assertIn("var(--warn", conflicts)
+        self.assertNotIn("--danger", conflicts)
+        for text in ("valueLabel", "Variante", "masked_columns"):
+            self.assertIn(text, self.html, text)
+
     def test_file_contents_are_never_inserted_as_html(self):
         for risky in (
             "innerHTML",

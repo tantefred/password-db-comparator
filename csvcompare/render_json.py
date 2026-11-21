@@ -1,6 +1,7 @@
 """JSON-Berichte: je Auswertungsmodus ein Bericht, den Terminal und Weboberfläche teilen."""
 
 import json
+from string import ascii_uppercase
 
 from .analysis import audit_entries, check_entries, stats_rows
 from .columns import MODIFIED, SECRET_NAMES
@@ -180,6 +181,18 @@ def clean_summary(cmp, args):
     }
 
 
+def variant_letters(values):
+    """Je Wert ein Buchstabe (A, B, …): gleiche Werte bekommen denselben, leere keinen."""
+    letters, result = {}, []
+    for value in values:
+        if not value:
+            result.append(None)
+            continue
+        number = letters.setdefault(value, len(letters))
+        result.append(ascii_uppercase[number] if number < len(ascii_uppercase) else str(number + 1))
+    return result
+
+
 def dedupe_report(base, cmp, kinds, show_secrets):
     """Die Dublettengruppen mit ihren Mitgliedern und den abweichenden Spalten."""
     groups = []
@@ -196,6 +209,9 @@ def dedupe_report(base, cmp, kinds, show_secrets):
             )
         rows = [cmp.old[key] for key in group.keys]
         conflicts = merge_rows(rows)[1]
+        masked = [c for c in group.differing if c in SECRET_NAMES and not show_secrets]
+        # Verborgene Werte unterscheidbar machen, ohne sie zu zeigen (gleicher Wert = Buchstabe)
+        variants = {c: variant_letters([row.get(c, "") for row in rows]) for c in masked}
         groups.append(
             {
                 "id": group.id,
@@ -203,6 +219,8 @@ def dedupe_report(base, cmp, kinds, show_secrets):
                 "reason": group.reason,
                 "differing_columns": list(group.differing),
                 "conflicts": conflicts,
+                "masked_columns": masked,
+                "variants": variants,
                 "newest_member": newest_first(rows)[0],
                 "members": members,
             }
