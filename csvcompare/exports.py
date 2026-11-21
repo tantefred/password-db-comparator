@@ -173,6 +173,10 @@ def prepare_clean(
         for merged in conflicted:
             first = merged.group.keys[0]
             lines.append(f"    ! {entry_label(first)}: {', '.join(merged.conflicts)}")
+    unmerged = [(merged, note) for merged in cleaned.merged for note in merged.notes]
+    if unmerged:
+        lines.append("  Beim Zusammenführen nicht vereinbar (der Basis-Eintrag gilt):")
+        lines += [f"    ! {entry_label(m.group.keys[0])}: {note}" for m, note in unmerged]
     kept_one = sum(1 for merged in cleaned.merged if merged.action == KEEP_ONE)
     if kept_one:
         lines.append(f"  {plural(kept_one, 'Gruppe', 'Gruppen')}: nur ein Eintrag behalten.")

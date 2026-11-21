@@ -112,10 +112,11 @@ def build_parser():
     )
     parser.add_argument(
         "--dedupe-kinds",
-        default=",".join(KINDS),
+        default=None,
         metavar="ARTEN",
-        help="Arten für --dedupe, kommagetrennt: key (gleicher Schlüssel), login (gleiche URL "
-        "und Username), title (gleicher Titel in anderen Gruppen); Standard: alle",
+        help="Arten für --dedupe und --export-clean, kommagetrennt: key (gleicher Schlüssel), "
+        "login (gleiche URL und Username), title (gleicher Titel in anderen Gruppen); "
+        "Standard: alle",
     )
     parser.add_argument(
         "--stats",
@@ -202,7 +203,7 @@ def build_parser():
     )
     parser.add_argument(
         "--clean-kinds",
-        default="key",
+        default=None,
         metavar="ARTEN",
         help="Arten, die --export-clean zusammenführt (key, login; Standard: key). "
         "„title“ wird nie automatisch zusammengeführt.",
@@ -281,6 +282,10 @@ def parse_ignored(parser, args):
 
 def parse_kinds(parser, args):
     """Macht aus ``--dedupe-kinds`` ein Tupel gültiger Arten (in fester Reihenfolge)."""
+    if args.dedupe_kinds is None:
+        args.dedupe_kinds = ",".join(KINDS)
+    elif not (args.dedupe or args.export_clean):
+        parser.error("--dedupe-kinds braucht --dedupe oder --export-clean.")
     wanted = [part.strip().lower() for part in args.dedupe_kinds.split(",") if part.strip()]
     unknown = [part for part in wanted if part not in KINDS]
     if unknown or not wanted:
@@ -292,6 +297,10 @@ def parse_kinds(parser, args):
 
 def parse_clean_kinds(parser, args):
     """Macht aus ``--clean-kinds`` ein Tupel der Arten, die automatisch zusammengeführt werden."""
+    if args.clean_kinds is None:
+        args.clean_kinds = KEY
+    elif not args.export_clean:
+        parser.error("--clean-kinds braucht --export-clean.")
     wanted = [part.strip().lower() for part in args.clean_kinds.split(",") if part.strip()]
     allowed = (KEY, LOGIN)
     bad = [part for part in wanted if part not in allowed]
@@ -302,6 +311,12 @@ def parse_clean_kinds(parser, args):
             f"(„title“ wird nie automatisch zusammengeführt)."
         )
     args.clean_kinds = tuple(kind for kind in allowed if kind in wanted)
+    if args.export_clean and not set(args.clean_kinds) & set(args.dedupe_kinds):
+        clean, found = ",".join(args.clean_kinds), ",".join(args.dedupe_kinds)
+        parser.error(
+            f"--export-clean würde nichts zusammenführen: --clean-kinds ({clean}) kommt "
+            f"in --dedupe-kinds ({found}) nicht vor."
+        )
 
 
 def validate_args(parser, args):
@@ -354,7 +369,9 @@ def run_exports(args, cmp, log):
     """Schreibt die angeforderten Exporte und meldet, was dabei passiert ist."""
 
     def prepare_clean_export(cmp, path, writer):
-        return prepare_clean(cmp, path, writer, auto_kinds=args.clean_kinds)
+        return prepare_clean(
+            cmp, path, writer, kinds=args.dedupe_kinds, auto_kinds=args.clean_kinds
+        )
 
     writer = pick_writer(args.export_format)
     requested = (

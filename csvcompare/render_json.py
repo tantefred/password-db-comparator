@@ -170,7 +170,7 @@ def clean_summary(cmp, args):
     """Zusammenfassung des Exports ohne Dubletten (die Datei selbst wird nebenbei geschrieben)."""
     writer = pick_writer(args.export_format)
     path = export_path(args.export_clean, "clean", writer)
-    export = prepare_clean(cmp, path, writer, auto_kinds=args.clean_kinds)
+    export = prepare_clean(cmp, path, writer, kinds=args.dedupe_kinds, auto_kinds=args.clean_kinds)
     return {
         "path": path,
         "format": writer.format,

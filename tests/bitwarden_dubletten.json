@@ -1,0 +1,130 @@
+{
+  "encrypted": false,
+  "folders": [
+    {
+      "id": "f-web",
+      "name": "Web"
+    }
+  ],
+  "items": [
+    {
+      "passwordHistory": [
+        {
+          "lastUsedDate": "2023-06-01T00:00:00.000Z",
+          "password": "pw-aelter"
+        }
+      ],
+      "revisionDate": "2024-01-10T10:00:00.000Z",
+      "creationDate": "2023-01-01T09:00:00.000Z",
+      "deletedDate": null,
+      "id": "old-1",
+      "organizationId": null,
+      "folderId": "f-web",
+      "type": 1,
+      "reprompt": 0,
+      "name": "Mail",
+      "notes": null,
+      "favorite": true,
+      "fields": [
+        {
+          "name": "PIN",
+          "value": "1234",
+          "type": 1,
+          "linkedId": null
+        }
+      ],
+      "login": {
+        "fido2Credentials": [
+          {
+            "credentialId": "cred-1",
+            "rpId": "example.org"
+          }
+        ],
+        "uris": [
+          {
+            "match": 3,
+            "uri": "https://mail.example.org"
+          },
+          {
+            "match": 1,
+            "uri": "https://alt.example.org"
+          }
+        ],
+        "username": "max",
+        "password": "pw-alt",
+        "totp": null
+      },
+      "collectionIds": [
+        "coll-1"
+      ]
+    },
+    {
+      "passwordHistory": [
+        {
+          "lastUsedDate": "2024-01-10T00:00:00.000Z",
+          "password": "pw-alt"
+        }
+      ],
+      "revisionDate": "2024-06-10T10:00:00.000Z",
+      "creationDate": "2023-01-01T09:00:00.000Z",
+      "deletedDate": null,
+      "id": "new-1",
+      "organizationId": null,
+      "folderId": "f-web",
+      "type": 1,
+      "reprompt": 0,
+      "name": "Mail",
+      "notes": null,
+      "favorite": false,
+      "fields": null,
+      "login": {
+        "fido2Credentials": [
+          {
+            "credentialId": "cred-2",
+            "rpId": "example.org"
+          }
+        ],
+        "uris": [
+          {
+            "match": null,
+            "uri": "https://mail.example.org"
+          }
+        ],
+        "username": "max",
+        "password": "pw-neu",
+        "totp": null
+      },
+      "collectionIds": [
+        "coll-2"
+      ]
+    },
+    {
+      "passwordHistory": null,
+      "revisionDate": "2024-01-01T00:00:00.000Z",
+      "creationDate": "2023-01-01T09:00:00.000Z",
+      "deletedDate": null,
+      "id": "other-1",
+      "organizationId": null,
+      "folderId": "f-web",
+      "type": 1,
+      "reprompt": 0,
+      "name": "Forum",
+      "notes": null,
+      "favorite": false,
+      "fields": null,
+      "login": {
+        "fido2Credentials": [],
+        "uris": [
+          {
+            "match": null,
+            "uri": "https://mail.example.org"
+          }
+        ],
+        "username": "max",
+        "password": "pw-forum",
+        "totp": null
+      },
+      "collectionIds": null
+    }
+  ]
+}

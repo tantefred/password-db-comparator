@@ -6,20 +6,44 @@ einfach mischen kann (Passwort, Notizen, ...), ist das ein Konflikt: Ohne Entsch
 die Basis, und die älteren Passwörter bleiben als Verlauf erhalten (wo das Zielformat es kann).
 """
 
+import copy
 from datetime import UTC, datetime
 from typing import NamedTuple
 
-from .columns import ALL_NAMES, BY_NAME, CREATED, MODIFIED, OLD_PASSWORDS_KEY
+from .columns import (
+    ALL_NAMES,
+    BY_NAME,
+    CREATED,
+    MODIFIED,
+    OLD_PASSWORDS_KEY,
+    SOURCE_KEY,
+    UNMAPPED_KEY,
+)
 from .duplicates import KEY, normalized_url
 from .entries import is_trash
+from .importers.bitwarden import canonical_fields
 from .values import parse_time, values_equal
 
 MERGE, KEEP_ALL, KEEP_ONE = "merge", "keep_all", "keep"
 ACTIONS = (MERGE, KEEP_ALL, KEEP_ONE)
-BOTH = "both"  # Entscheidung für Notizen: alle verbinden
+BOTH = "both"  # Entscheidung: die Werte aller Mitglieder verbinden
 # Spalten, in denen verschiedene Werte nicht einfach vereinbar sind
-CONFLICT_COLUMNS = ("Group", "Title", "Username", "Password", "URL", "Notes", "TOTP", "Icon")
-NOTES_SEPARATOR = "\n\n"
+CONFLICT_COLUMNS = (
+    "Group",
+    "Title",
+    "Username",
+    "Password",
+    "URL",
+    "Notes",
+    "TOTP",
+    "Icon",
+    "Fields",
+    "Type",
+)
+# Nur hier lassen sich mehrere Werte sinnvoll hintereinander schreiben
+JOIN_SEPARATORS = {"Notes": "\n\n", "Fields": " "}
+# Schalter: ist er bei einem Mitglied gesetzt, ist er es im Ergebnis
+ANY_WINS_COLUMNS = ("Favorite", "Reprompt")
 EARLIEST = datetime.min.replace(tzinfo=UTC)
 
 
@@ -63,6 +87,86 @@ def merged_urls(ordered):
     return urls
 
 
+def merged_uri_objects(ordered, urls):
+    """Die Bitwarden-URI-Objekte (mit Abgleichsmodus) zu den URLs des Ergebnisses."""
+    originals = [
+        uri
+        for row in ordered
+        for uri in ((row.get(SOURCE_KEY) or {}).get("login") or {}).get("uris") or []
+        if isinstance(uri, dict) and uri.get("uri")
+    ]
+    objects = []
+    for url in urls:
+        matching = [u for u in originals if same_value("URL", u["uri"], url)]
+        # ein ausdrücklich gesetzter Abgleichsmodus geht vor „Standard“ (None)
+        found = next((u for u in matching if u.get("match") is not None), None) or next(
+            iter(matching), None
+        )
+        objects.append(copy.deepcopy(found) if found else {"match": None, "uri": url})
+    return objects
+
+
+def union(items, key):
+    """Die Elemente aller Listen ohne Wiederholung (nach ``key``), in der Reihenfolge."""
+    seen, result = set(), []
+    for item in items:
+        marker = key(item)
+        if marker not in seen:
+            seen.add(marker)
+            result.append(item)
+    return result
+
+
+def merge_sources(ordered, result):
+    """Der Originaleintrag des Ergebnisses: der der Basis, ergänzt um Daten der anderen.
+
+    Passwort-Verlauf, Passkeys, Sammlungen, URI-Abgleichsmodi und die Typen eigener Felder
+    der übrigen Einträge gehen so nicht verloren.
+    """
+    sources = [row[SOURCE_KEY] for row in ordered if isinstance(row.get(SOURCE_KEY), dict)]
+    if not isinstance(ordered[0].get(SOURCE_KEY), dict):
+        return None  # die Basis stammt nicht aus Bitwarden-JSON: es gibt nichts fortzuschreiben
+    merged = copy.deepcopy(sources[0])
+    history = union(
+        [h for s in sources for h in s.get("passwordHistory") or [] if isinstance(h, dict)],
+        lambda h: (h.get("password"), h.get("lastUsedDate")),
+    )
+    merged["passwordHistory"] = history or None
+    collections = union([c for s in sources for c in s.get("collectionIds") or []], lambda c: c)
+    merged["collectionIds"] = collections or None
+    login = merged.get("login")
+    if isinstance(login, dict):
+        passkeys = [
+            k
+            for s in sources
+            for k in (s.get("login") or {}).get("fido2Credentials") or []
+            if isinstance(k, dict)
+        ]
+        login["fido2Credentials"] = union(
+            passkeys, lambda k: k.get("credentialId") or repr(sorted(k.items()))
+        )
+        urls = result.get("URLs", "").split() or ([result["URL"]] if result.get("URL") else [])
+        login["uris"] = merged_uri_objects(ordered, urls)
+    # Eigene Felder mit ihren Typen von dem Mitglied, dessen Text im Ergebnis steht
+    for source in sources:
+        if canonical_fields(source.get("fields")) == result.get("Fields", ""):
+            merged["fields"] = copy.deepcopy(source.get("fields"))
+            break
+    return merged
+
+
+def merge_notes(rows):
+    """Daten, die sich beim Zusammenführen nicht vereinen lassen (für die Meldung)."""
+    organizations = {
+        s.get("organizationId")
+        for s in (row.get(SOURCE_KEY) for row in rows)
+        if isinstance(s, dict) and s.get("organizationId")
+    }
+    return (
+        ["Organisation (die Einträge gehören zu verschiedenen)"] if len(organizations) > 1 else []
+    )
+
+
 def newest_first(rows):
     """Die Nummern der Zeilen, die zuletzt geänderte zuerst (bei Gleichstand die spätere)."""
     return sorted(range(len(rows)), key=lambda i: (modified_at(rows[i]), i), reverse=True)
@@ -77,23 +181,31 @@ def merge_rows(rows, picks=None):
     conflicts = []
 
     for column in ALL_NAMES:
-        if column in (MODIFIED, CREATED, "URLs", "Fields") or column not in result:
+        if column in (MODIFIED, CREATED, "URLs") or column not in result:
             continue
         values = [row.get(column, "") for row in ordered]
         found = distinct_values(column, values)
+        if column == "Type":  # „login“ gilt als Standardwert, ist hier aber ein echter Wert
+            found = union([v for v in values if v], lambda v: v)
         if column in CONFLICT_COLUMNS and len(found) > 1:
             conflicts.append(column)
         if column in picks:
             pick = picks[column]
-            if pick == BOTH and column == "Notes":
-                result[column] = NOTES_SEPARATOR.join(found)
+            if pick == BOTH:
+                if column not in JOIN_SEPARATORS:
+                    raise ValueError(
+                        f"Die Werte der Spalte '{column}' lassen sich nicht verbinden."
+                    )
+                result[column] = JOIN_SEPARATORS[column].join(found)
             else:
                 result[column] = rows[pick].get(column, "")
+        elif column in ANY_WINS_COLUMNS:
+            result[column] = "1" if "1" in values else result[column]
+        elif column == "Type":
+            result[column] = result[column] or (found[0] if found else "")
         elif is_empty(column, result[column]) and found:
             result[column] = found[0]
 
-    fields = [row.get("Fields", "") for row in ordered]
-    result["Fields"] = next((value for value in fields if value), "")
     created = [(parse_time(row.get(CREATED, "")), row) for row in ordered]
     created = [pair for pair in created if pair[0]]
     if created:
@@ -119,6 +231,13 @@ def merge_rows(rows, picks=None):
                 old_passwords.append((password, used))
     if old_passwords:
         result[OLD_PASSWORDS_KEY] = old_passwords
+
+    source = merge_sources(ordered, result)
+    if source is not None:
+        result[SOURCE_KEY] = source
+    labels = union([label for row in ordered for label in row.get(UNMAPPED_KEY) or []], lambda x: x)
+    if UNMAPPED_KEY in result:
+        result[UNMAPPED_KEY] = labels
     return result, conflicts
 
 
@@ -127,6 +246,7 @@ class MergedGroup(NamedTuple):
     action: str
     conflicts: tuple  # Spalten mit verschiedenen Werten (auch wenn entschieden wurde)
     kept: tuple  # Schlüssel der Einträge, die in der Datei bleiben, oder ()
+    notes: tuple = ()  # Daten, die sich nicht vereinen ließen
 
 
 class Cleaned(NamedTuple):
@@ -143,22 +263,35 @@ def decision_for(group, decisions, auto_kinds):
     return Decision(MERGE if group.kind in auto_kinds else KEEP_ALL)
 
 
+def is_index(value, size):
+    """Eine gültige Mitgliedsnummer (``True``/``False`` zählen nicht als Zahl)."""
+    return isinstance(value, int) and not isinstance(value, bool) and 0 <= value < size
+
+
 def check_decisions(groups, decisions):
     """Wirft ``ValueError`` bei unbekannten Gruppen oder ungültigen Entscheidungen."""
     by_id = {group.id: group for group in groups}
     for group_id, decision in (decisions or {}).items():
         group = by_id.get(group_id)
         if group is None:
-            raise ValueError(f"Unbekannte Dublettengruppe '{group_id}'.")
+            raise ValueError(
+                "Die Entscheidungen passen nicht zur Datei (unbekannte Dublettengruppe). "
+                "Bitte neu auswerten."
+            )
         if decision.action not in ACTIONS:
             raise ValueError(f"Unbekannte Aktion '{decision.action}'.")
         size = len(group.keys)
-        if decision.action == KEEP_ONE and not 0 <= decision.keep < size:
+        if decision.action == KEEP_ONE and not is_index(decision.keep, size):
             raise ValueError("Das zu behaltende Mitglied gibt es nicht.")
         for column, pick in (decision.picks or {}).items():
             if column not in CONFLICT_COLUMNS:
                 raise ValueError(f"Für die Spalte '{column}' kann nichts gewählt werden.")
-            if not (pick == BOTH or (isinstance(pick, int) and 0 <= pick < size)):
+            if pick == BOTH:
+                if column not in JOIN_SEPARATORS:
+                    raise ValueError(
+                        f"Die Werte der Spalte '{column}' lassen sich nicht verbinden."
+                    )
+            elif not is_index(pick, size):
                 raise ValueError("Die gewählte Quelle gibt es nicht.")
 
 
@@ -181,7 +314,9 @@ def clean_entries(entries, groups, decisions=None, auto_kinds=(KEY,)):
             row, conflicts = merge_rows(members, decision.picks or {})
             rows.append(row)
             removed += len(members) - 1
-            merged.append(MergedGroup(group, MERGE, tuple(conflicts), ()))
+            merged.append(
+                MergedGroup(group, MERGE, tuple(conflicts), (), tuple(merge_notes(members)))
+            )
     trash = sum(1 for row in entries.values() if is_trash(row))
     rows.sort(key=lambda row: (row["Group"], row["Title"], row["Username"]))
     return Cleaned(rows, merged, removed, trash)

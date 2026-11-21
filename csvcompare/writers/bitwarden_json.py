@@ -153,10 +153,17 @@ class BitwardenJsonWriter(Writer):
         for key in ("organizationId", "collectionIds", "deletedDate", "passwordHistory"):
             item.setdefault(key, None)
         if row.get(OLD_PASSWORDS_KEY):
-            item["passwordHistory"] = [
+            added = [
                 {"lastUsedDate": json_time(used, None), "password": password}
                 for password, used in row[OLD_PASSWORDS_KEY]
-            ] + list(item.get("passwordHistory") or [])
+            ]
+            known = {entry["password"] for entry in added}
+            kept = [
+                entry
+                for entry in item.get("passwordHistory") or []
+                if not (isinstance(entry, dict) and entry.get("password") in known)
+            ]
+            item["passwordHistory"] = added + kept
         if is_note:
             item.pop("login", None)
             item.setdefault("secureNote", {"type": 0})
