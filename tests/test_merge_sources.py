@@ -108,15 +108,69 @@ class ConflictColumnTests(unittest.TestCase):
         b = self.row(Type="login", **{"Last Modified": "2024-02-01T00:00:00Z"})
         self.assertEqual(merge_rows([a, b])[0]["Type"], "login")
 
-    def test_fields_can_be_joined(self):
+    def test_both_is_refused_for_fields(self):
+        # aus dem verbundenen Text ließen sich Typ und Namen mit Leerzeichen nicht mehr zerlegen
         a = self.row(Fields="A: 1", **{"Last Modified": "2024-01-01T00:00:00Z"})
         b = self.row(Fields="B: 2", **{"Last Modified": "2024-02-01T00:00:00Z"})
-        self.assertEqual(merge_rows([a, b], {"Fields": BOTH})[0]["Fields"], "B: 2 A: 1")
+        with self.assertRaises(ValueError):
+            merge_rows([a, b], {"Fields": BOTH})
 
     def test_both_is_refused_for_other_columns(self):
         a, b = self.row(Password="a"), self.row(Password="b")
         with self.assertRaises(ValueError):
             merge_rows([a, b], {"Password": BOTH})
+
+
+class BitwardenCsvFieldsTests(unittest.TestCase):
+    header = (
+        "folder,favorite,type,name,notes,fields,reprompt,login_uri,login_username,"
+        "login_password,login_totp\n"
+    )
+
+    def test_custom_fields_of_the_older_entry_survive_in_the_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "b.csv")
+            out_path = os.path.join(tmp, "out.json")
+            with open(path, "w", encoding="utf-8", newline="") as f:
+                f.write(
+                    self.header
+                    + "Web,0,login,Mail,,PIN: 1234,0,https://m.example.org,max,pw,\n"
+                    + "Web,0,login,Mail,,,0,https://m.example.org,max,pw,\n"
+                )
+            rc, _, err = run(path, "--export-clean", out_path, "--export-format", "bitwarden-json")
+            self.assertEqual(rc, 0, err)
+            with open(out_path, encoding="utf-8") as f:
+                items = json.load(f)["items"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual([(f["name"], f["value"]) for f in items[0]["fields"]], [("PIN", "1234")])
+
+    def test_custom_fields_follow_the_chosen_member(self):
+        rows = [
+            {
+                "Group": "Web",
+                "Title": "Mail",
+                "Username": "max",
+                "Fields": text,
+                "_format": "bitwarden-csv",
+                "_source": {"fields": text},
+                "Password": "pw",
+                "URL": "",
+                "URLs": "",
+                "Notes": "",
+                "TOTP": "",
+                "Icon": "",
+                "Last Modified": "",
+                "Created": "",
+            }
+            for text in ("PIN: 1234", "")
+        ]
+        merged, _ = merge_rows(rows, {"Fields": 0})
+        self.assertEqual(
+            (merged["Fields"], merged["_source"]["fields"]), ("PIN: 1234", "PIN: 1234")
+        )
+        merged, _ = merge_rows(rows)  # Lücke gefüllt
+        self.assertEqual(merged["_source"]["fields"], "PIN: 1234")
+        self.assertEqual(rows[1]["_source"]["fields"], "")  # Eingabe unverändert
 
 
 class DecisionValidationTests(unittest.TestCase):

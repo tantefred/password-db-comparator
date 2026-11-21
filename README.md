@@ -269,7 +269,7 @@ Zeiten erscheinen lokal und lesbar (`10.06.2024, 12:00 (vor 5 Monaten)`); JSON-B
 **Dubletten bereinigen:** Der Modus „Dubletten bereinigen“ (eine Datei) zeigt je Dublettengruppe eine Karte mit den
 Mitgliedern nebeneinander, den abweichenden Werten und der Wahl: *Zusammenführen* (Vorgabe bei `key`
 und `login`), *Nur diesen behalten* oder *Alle behalten* (Vorgabe bei `title`). Bei Konflikten wählst du
-je Feld, welcher Wert gelten soll (bei Notizen und eigenen Feldern auch „Alle verbinden“); verborgene Passwörter erscheinen als „Variante A/B“, gleicher Buchstabe heißt gleicher Wert. Ein Klick auf „Datei ohne
+je Feld, welcher Wert gelten soll (bei Notizen auch „Alle verbinden“); verborgene Passwörter erscheinen als „Variante A/B“, gleicher Buchstabe heißt gleicher Wert. Ein Klick auf „Datei ohne
 Dubletten erstellen“ liefert die bereinigte Datei als Download. Das **Format** wählst du direkt neben dem Knopf (oben und unten gibt es dieselbe Leiste). Die Auswertung, zu der die Karten gehören, wird mitgeschickt, nicht der aktuelle Stand der Eingabefelder; ändern sich Entscheidungen oder Format nach dem Erstellen, gilt die Datei als veraltet. Vor dem Neuladen oder erneuten Auswerten warnt die Seite, wenn du Entscheidungen geändert hast. Der Server bleibt
 zustandslos: Dafür werden die Dateien ein zweites Mal gesendet, zusammen mit deinen Entscheidungen, die
 gegen die Gruppen-IDs geprüft werden.

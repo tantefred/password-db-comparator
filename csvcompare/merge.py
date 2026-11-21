@@ -14,6 +14,7 @@ from .columns import (
     ALL_NAMES,
     BY_NAME,
     CREATED,
+    FORMAT_KEY,
     MODIFIED,
     OLD_PASSWORDS_KEY,
     SOURCE_KEY,
@@ -21,8 +22,9 @@ from .columns import (
 )
 from .duplicates import KEY, normalized_url
 from .entries import is_trash
+from .importers.base import BITWARDEN_CSV, BITWARDEN_JSON
 from .importers.bitwarden import canonical_fields
-from .values import parse_time, values_equal
+from .values import collapse_whitespace, parse_time, values_equal
 
 MERGE, KEEP_ALL, KEEP_ONE = "merge", "keep_all", "keep"
 ACTIONS = (MERGE, KEEP_ALL, KEEP_ONE)
@@ -40,8 +42,9 @@ CONFLICT_COLUMNS = (
     "Fields",
     "Type",
 )
-# Nur hier lassen sich mehrere Werte sinnvoll hintereinander schreiben
-JOIN_SEPARATORS = {"Notes": "\n\n", "Fields": " "}
+# Nur hier lassen sich mehrere Werte sinnvoll hintereinander schreiben (eigene Felder nicht:
+# aus dem verbundenen Text ließen sich Typ und Namen mit Leerzeichen nicht mehr zerlegen)
+JOIN_SEPARATORS = {"Notes": "\n\n"}
 # Schalter: ist er bei einem Mitglied gesetzt, ist er es im Ergebnis
 ANY_WINS_COLUMNS = ("Favorite", "Reprompt")
 EARLIEST = datetime.min.replace(tzinfo=UTC)
@@ -123,8 +126,12 @@ def merge_sources(ordered, result):
     Passwort-Verlauf, Passkeys, Sammlungen, URI-Abgleichsmodi und die Typen eigener Felder
     der übrigen Einträge gehen so nicht verloren.
     """
-    sources = [row[SOURCE_KEY] for row in ordered if isinstance(row.get(SOURCE_KEY), dict)]
-    if not isinstance(ordered[0].get(SOURCE_KEY), dict):
+    sources = [
+        row[SOURCE_KEY]
+        for row in ordered
+        if row.get(FORMAT_KEY) == BITWARDEN_JSON and isinstance(row.get(SOURCE_KEY), dict)
+    ]
+    if ordered[0].get(FORMAT_KEY) != BITWARDEN_JSON or not sources:
         return None  # die Basis stammt nicht aus Bitwarden-JSON: es gibt nichts fortzuschreiben
     merged = copy.deepcopy(sources[0])
     history = union(
@@ -152,6 +159,24 @@ def merge_sources(ordered, result):
         if canonical_fields(source.get("fields")) == result.get("Fields", ""):
             merged["fields"] = copy.deepcopy(source.get("fields"))
             break
+    return merged
+
+
+def merge_csv_source(ordered, result):
+    """Der Originaleintrag einer Bitwarden-CSV-Zeile mit den eigenen Feldern des Ergebnisses.
+
+    Der Writer liest die Felder aus dem Originaltext; er muss also den Text enthalten, der im
+    Ergebnis steht, auch wenn er von einem anderen Mitglied als der Basis stammt.
+    """
+    merged = dict(ordered[0][SOURCE_KEY])
+    wanted = result.get("Fields", "")
+    for row in ordered:
+        source = row.get(SOURCE_KEY)
+        is_csv = row.get(FORMAT_KEY) == BITWARDEN_CSV and isinstance(source, dict)
+        if is_csv and collapse_whitespace(source.get("fields")) == wanted:
+            merged["fields"] = source.get("fields") or ""
+            return merged
+    merged["fields"] = wanted
     return merged
 
 
@@ -232,9 +257,12 @@ def merge_rows(rows, picks=None):
     if old_passwords:
         result[OLD_PASSWORDS_KEY] = old_passwords
 
-    source = merge_sources(ordered, result)
-    if source is not None:
-        result[SOURCE_KEY] = source
+    if result.get(FORMAT_KEY) == BITWARDEN_CSV and isinstance(result.get(SOURCE_KEY), dict):
+        result[SOURCE_KEY] = merge_csv_source(ordered, result)
+    else:
+        source = merge_sources(ordered, result)
+        if source is not None:
+            result[SOURCE_KEY] = source
     labels = union([label for row in ordered for label in row.get(UNMAPPED_KEY) or []], lambda x: x)
     if UNMAPPED_KEY in result:
         result[UNMAPPED_KEY] = labels
