@@ -16,19 +16,19 @@ python3 compare_csv.py tests/dubletten.csv            # eine Datei: Überblick
 | `--show-secrets` | Passwörter/TOTP im Klartext anzeigen (sonst maskiert) |
 | `-i`, `--ignore SPALTE...` | Spalten beim Vergleich ignorieren, z. B. `--ignore Icon "Last Modified"`; möglich sind alle Spalten außer Gruppe, Titel und Username (Tabelle unter „Unterstützte Formate“) |
 | `--keep-db-name` | Den Datenbanknamen am Anfang der KeePassium-Gruppenpfade (`DB1/Web`) nicht entfernen |
-| `-s`, `--search TEXT` | Nur Einträge zeigen, deren Gruppe/Titel/Username `TEXT` enthält, samt Status (nicht mit `--export-added` / `--export-merged` kombinierbar) |
+| `-s`, `--search TEXT` | Nur Einträge zeigen, bei denen Gruppe, Titel **oder** Username `TEXT` enthält (jedes Feld einzeln, nicht über Feldgrenzen hinweg), samt Status (nicht mit `--export-added` / `--export-merged` kombinierbar) |
 | `--hide-trash` | Papierkorb-Gruppen komplett ausblenden (Vergleich, Suche und Exporte) |
 | `-g`, `--group TEXT` | Nur Einträge betrachten, deren Gruppenpfad `TEXT` enthält (Groß-/Kleinschreibung egal) |
 | `--overview` | Statistik, Prüfung und Passwortqualität in einem Bericht; bei **einer** Datei ohne weitere Wahl der Standard |
 | `--dedupe` | Dublettengruppen **einer** Datei auflisten (siehe „Eine einzelne Datei“) |
-| `--dedupe-kinds ARTEN` | Arten für `--dedupe`: `key`, `login`, `title` (kommagetrennt; Standard: alle) |
+| `--dedupe-kinds ARTEN` | Arten für `--dedupe` und `--export-clean`: `key`, `login`, `title` (kommagetrennt; Standard: alle; nur zusammen mit einer dieser Optionen) |
 | `--export-clean [DATEI]` | **Eine** Datei ohne Dubletten schreiben (Standard: `bereinigt.csv` bzw. `.json`) |
-| `--clean-kinds ARTEN` | Welche Arten `--export-clean` zusammenführt: `key` (Standard), `login`; `title` nie automatisch |
+| `--clean-kinds ARTEN` | Welche Arten `--export-clean` zusammenführt: `key` (Standard), `login`; `title` nie automatisch; muss in `--dedupe-kinds` vorkommen, sonst gäbe es nichts zu tun |
 | `--stats` | Nur die Anzahl der Einträge pro Gruppe in beiden Dateien samt Differenz anzeigen (mit `--group`/`--hide-trash` kombinierbar, nicht mit `--search` oder den Exporten) |
 | `--check` | Jede Datei einzeln auf Dubletten und kaputte Einträge prüfen (ohne Passwörter anzuzeigen; mit `--group`/`--hide-trash` kombinierbar, nicht mit `--search`, `--stats` oder den Exporten) |
 | `--password-check` | Passwortqualität je Datei prüfen (Passwörter werden nie angezeigt; nicht kombinierbar mit `--search`, `--stats`, `--check` oder den Exporten) |
-| `--min-length N` | Mindestlänge für `--password-check` (Standard: 10) |
-| `--max-age-days TAGE` | Maximales Alter seit der letzten Änderung für `--password-check` (Standard: 730) |
+| `--min-length N` | Mindestlänge für `--password-check` (ganze Zahl ≥ 1; Standard: 10) |
+| `--max-age-days TAGE` | Maximales Alter seit der letzten Änderung für `--password-check` (ganze Zahl ≥ 1; Standard: 730) |
 | `--format text\|json` | Ausgabeformat (Standard: `text`). Mit `json` steht nur JSON auf stdout; Hinweise zu Exporten gehen nach stderr |
 | `--ui` | Weboberfläche starten statt im Terminal zu arbeiten (siehe unten; ohne Dateiangabe) |
 | `--port N` | Port für `--ui` (Standard: 8765; bei belegtem Port wird der nächste freie genommen) |
@@ -47,7 +47,7 @@ Gibst du nur eine Datei an, gibt es keinen Vergleich. Alles, was für eine Datei
 funktioniert trotzdem, im Terminal, als JSON und in der Weboberfläche:
 
 - **ohne weitere Wahl** (oder mit `--overview`): Überblick aus Statistik, Prüfung und Passwortqualität
-  (JSON: `mode: "overview"` mit den Abschnitten `stats`, `check`, `password_check`; `files.new` ist `null`),
+  (JSON: `mode: "overview"` mit den Abschnitten `stats`, `check`, `password_check` und `mergeable_groups`; `files.new` ist `null`); gibt es zusammenführbare Dubletten, nennt der Überblick ihre Zahl,
 - `--stats`, `--check`, `--password-check` und `--search` (Treffer ohne Vergleichsstatus, JSON-Status `found`),
 - `--dedupe` und `--export-clean` (unten).
 
@@ -65,19 +65,22 @@ Es gibt drei Arten; ein Eintrag gehört höchstens zur stärksten, Papierkorb-Ei
 
 Die Ausgabe nennt je Gruppe die Mitglieder und die Spalten, in denen sie sich unterscheiden
 (Passwörter maskiert, außer mit `--show-secrets`). JSON: `mode: "dedupe"` mit `groups` (`id`, `kind`,
-`members`, `differing_columns`, `conflicts`). Beispieldaten: `tests/dubletten.csv`.
+`members`, `differing_columns`, `conflicts`, `masked_columns`, `variants`). `variants` unterscheidet verborgene Werte, ohne sie zu zeigen: gleicher Wert, gleicher Buchstabe (A, B, …). Beispieldaten: `tests/dubletten.csv`.
+
+**Zwei Begriffe von „Dublette“:** `--check` (und „Prüfen“ in der Oberfläche) meldet jede Übereinstimmung für sich; ein Eintrag kann dort mehrfach vorkommen. `--dedupe` ordnet jeden Eintrag nur der **stärksten** Gruppe zu (`key` vor `login` vor `title`), weil nur das zum Zusammenführen taugt. Deshalb können die Zahlen abweichen.
 
 ### Bereinigen (`--export-clean`)
 
 Zusammengeführt wird so: Der **zuletzt geänderte** Eintrag ist die Basis, leere Felder werden aus den
 anderen ergänzt, `Created` ist das früheste Datum, alle URLs bleiben erhalten. Haben zwei Einträge
 **verschiedene** Werte (Passwort, Notizen, TOTP, URL, Icon, Gruppe/Titel/Username), ist das ein
-Konflikt: Im Terminal gewinnt die Basis, und die Konflikte stehen in der Meldung. Die Datei enthält
+Konflikt (auch bei eigenen Feldern und beim Typ Login/Notiz): Im Terminal gewinnt die Basis, und die Konflikte stehen in der Meldung. Favorit und Passwort-Nachfrage gelten als gesetzt, sobald ein Mitglied sie hat. Die Datei enthält
 Passwörter im Klartext; Papierkorb-Gruppen werden ausgelassen.
 
 - Im Terminal ohne Rückfragen: `--export-clean` führt nur Gruppen der Art `key` zusammen, mit
   `--clean-kinds key,login` auch `login`. `title` wird nie automatisch zusammengeführt.
   Zusammen mit `--dedupe` erscheint zuerst die Liste der Gruppen.
+- **Daten aus Bitwarden bleiben erhalten:** Passwort-Verlauf, Passkeys, Sammlungen, URL-Abgleichsmodi und die Typen eigener Felder **aller** zusammengeführten Einträge landen im Ergebnis (Bitwarden-JSON). Nur was sich nicht vereinen lässt (z. B. verschiedene Organisationen), steht in der Meldung; in anderen Zielformaten nennt die Verlustmeldung, was nicht gespeichert wird.
 - **Frühere Passwörter** der zusammengeführten Einträge speichert nur das **Bitwarden-JSON**
   (`passwordHistory`). Im KeePass-CSV gehen sie verloren; das meldet das Skript als
   „Frühere Passwörter (n)“. Wer sie behalten will, wählt `--export-format bitwarden-json`.
@@ -219,6 +222,11 @@ Was das gewählte Format nicht speichern kann (z. B. beim KeePass-CSV Favorit, T
 weitere URLs, Passwort-Verlauf, Passkeys), nennt das Skript nach dem Export mit der Zahl der
 betroffenen Einträge, im Terminal wie in der Oberfläche.
 
+## Grenzen der Zuordnung
+
+- **Gleichnamige Einträge** (gleiche Gruppe, Titel und Username) werden in beiden Dateien nach ihrer **Reihenfolge** durchnummeriert und so einander zugeordnet. Ist die Reihenfolge verschieden, vergleicht das Skript womöglich die falschen Gegenstücke; deshalb nennt der Kopf (und `files.*.notes` im JSON), wie viele Einträge betroffen sind. Wer sicher gehen will, bereinigt zuerst die Dubletten (`--export-clean`).
+- **Zeitstempel ohne Zeitzone** (manche KeePass-CSV) gelten als UTC; das meldet das Skript je Datei. Wurde die Zeit in Ortszeit exportiert, kann beim Vergleich mit einem Format mit Zeitzone (Bitwarden) die Frage „welche Datei ist aktueller“ um Stunden danebenliegen.
+
 ## Verschobene und umbenannte Einträge
 
 Da Einträge über Gruppe, Titel und Username zugeordnet werden, würde ein
@@ -236,7 +244,7 @@ ein neues Passwort, wird er nicht erkannt. Per `--ignore` ignorierte Spalten
 zählen beim Paaren nicht mit (ohne `Created` entfällt die Stufe „sicher“).
 
 **Achtung:** Echte Exporte und `--export-added`-Dateien enthalten Passwörter im
-Klartext. Alle `*.csv` außer `tests/*.csv` sind per `.gitignore` ausgeschlossen.
+Klartext. Alle `*.csv` und `*.json` außer `tests/*.csv` und `tests/*.json` sind per `.gitignore` ausgeschlossen.
 
 ## Weboberfläche (`--ui`)
 
@@ -252,14 +260,17 @@ Verteilung (identisch, geändert, verschoben, nur in einer Datei), und bei jedem
 steht der Wert aus Datei 1 neben dem aus Datei 2. Unter dem Ergebnis steht, wie du dasselbe
 im Terminal aufrufst, und der JSON-Bericht lässt sich speichern.
 
-Die **zweite Datei ist optional**. Mit einer Datei ist „Vergleich“ nicht wählbar, und der Standard
-ist „Überblick“; mit „Zweite Datei entfernen“ kehrst du dazu zurück.
+Die **zweite Datei ist optional**. Mit einer Datei ist „Vergleich“ nicht wählbar (ein Hinweis am Eintrag sagt warum), und der Standard
+ist „Überblick“; mit „Zweite Datei entfernen“ kehrst du dazu zurück, mit „Erste Datei entfernen“ rückt die zweite nach.
+Dateien müssen UTF-8 sein; andere Kodierungen lehnt die Oberfläche mit einer Meldung ab, statt Zeichen still zu verfälschen.
+Zeiten erscheinen lokal und lesbar (`10.06.2024, 12:00 (vor 5 Monaten)`); JSON-Bericht und Terminal behalten die Rohwerte.
+Ändern sich Dateien oder Einstellungen nach einer Auswertung, markiert die Seite das Ergebnis als **veraltet** und sperrt das Erstellen der Datei.
 
-**Bereinigen:** Der Modus „Bereinigen“ (eine Datei) zeigt je Dublettengruppe eine Karte mit den
+**Dubletten bereinigen:** Der Modus „Dubletten bereinigen“ (eine Datei) zeigt je Dublettengruppe eine Karte mit den
 Mitgliedern nebeneinander, den abweichenden Werten und der Wahl: *Zusammenführen* (Vorgabe bei `key`
 und `login`), *Nur diesen behalten* oder *Alle behalten* (Vorgabe bei `title`). Bei Konflikten wählst du
-je Feld, welcher Wert gelten soll (bei Notizen auch „Alle verbinden“). Ein Klick auf „Datei ohne
-Dubletten erstellen“ liefert die bereinigte Datei als Download, im gewählten Format. Der Server bleibt
+je Feld, welcher Wert gelten soll (bei Notizen und eigenen Feldern auch „Alle verbinden“); verborgene Passwörter erscheinen als „Variante A/B“, gleicher Buchstabe heißt gleicher Wert. Ein Klick auf „Datei ohne
+Dubletten erstellen“ liefert die bereinigte Datei als Download. Das **Format** wählst du direkt neben dem Knopf (oben und unten gibt es dieselbe Leiste). Die Auswertung, zu der die Karten gehören, wird mitgeschickt, nicht der aktuelle Stand der Eingabefelder; ändern sich Entscheidungen oder Format nach dem Erstellen, gilt die Datei als veraltet. Vor dem Neuladen oder erneuten Auswerten warnt die Seite, wenn du Entscheidungen geändert hast. Der Server bleibt
 zustandslos: Dafür werden die Dateien ein zweites Mal gesendet, zusammen mit deinen Entscheidungen, die
 gegen die Gruppen-IDs geprüft werden.
 
