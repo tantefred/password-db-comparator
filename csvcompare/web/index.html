@@ -646,6 +646,21 @@ function onModeChange() {
 }
 
 /* ---------- Anfrage ---------- */
+async function requestAnalysis(a, b, options) {
+  const resp = await fetch("/api/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Token": TOKEN },
+    body: JSON.stringify({
+      old: { name: a.name, text: a.text },
+      new: b ? { name: b.name, text: b.text } : null,
+      options,
+    }),
+  });
+  let data = null;
+  try { data = await resp.json(); } catch (_) { /* keine JSON-Antwort */ }
+  if (!resp.ok) throw new Error((data && data.error) || `Fehler ${resp.status}`);
+  return data;
+}
 window.addEventListener("beforeunload", (e) => {
   if (state.dirty) { e.preventDefault(); e.returnValue = ""; }   // Entscheidungen gingen verloren
 });
@@ -656,18 +671,7 @@ async function run() {
   $("run").disabled = true;
   const snapshot = { a: state.a, b: state.b, options: collectOptions() };
   try {
-    const resp = await fetch("/api/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Token": TOKEN },
-      body: JSON.stringify({
-        old: { name: snapshot.a.name, text: snapshot.a.text },
-        new: snapshot.b ? { name: snapshot.b.name, text: snapshot.b.text } : null,
-        options: snapshot.options,
-      }),
-    });
-    let data = null;
-    try { data = await resp.json(); } catch (_) { /* keine JSON-Antwort */ }
-    if (!resp.ok) throw new Error((data && data.error) || `Fehler ${resp.status}`);
+    const data = await requestAnalysis(snapshot.a, snapshot.b, snapshot.options);
     state.last = data;
     render(data);
     state.run = { ...snapshot, optionsJson: JSON.stringify(snapshot.options) };
@@ -874,8 +878,32 @@ function renderClean(out, r) {
     return;
   }
   const exportSlot = h("div", { id: "clean-export" });
-  const counts = [], makes = [];
+  const counts = [], makes = [], revealBoxes = [], revealNotes = [];
   formatChoosers = [];
+  // Klartext nachladen, ohne die Karten neu aufzubauen: Entscheidungen bleiben erhalten
+  const alreadyClear = $("show-secrets").checked;   // die Auswertung enthält die Werte schon
+  let revealed = null;
+  const setReveal = async (on) => {
+    revealBoxes.forEach((b) => (b.checked = on));
+    revealNotes.forEach((n) => (n.textContent = ""));
+    if (!on) {
+      revealed = null;   // Klartext nicht länger im Speicher halten als nötig
+      cleanForm.forEach((f) => f.applyValues(null));
+      return;
+    }
+    try {
+      if (!revealed) {
+        const run = state.run;
+        if (!run) throw new Error("Bitte zuerst auswerten.");
+        const data = await requestAnalysis(run.a, null, { ...run.options, show_secrets: true });
+        revealed = new Map(data.report.groups.map((g) => [g.id, g]));
+      }
+      cleanForm.forEach((f) => { const g = revealed.get(f.group.id); if (g) f.applyValues(g); });
+    } catch (err) {
+      revealBoxes.forEach((b) => (b.checked = false));
+      revealNotes.forEach((n) => (n.textContent = err.message || String(err)));
+    }
+  };
   const invalidateExport = () => {
     if (!exportSlot.dataset.made) return;   // es gibt noch keine erstellte Datei
     delete exportSlot.dataset.made;
@@ -899,7 +927,17 @@ function renderClean(out, r) {
     makes.push(make);
     reset.addEventListener("click", () => { cleanForm.forEach((f) => f.reset()); update(); });
     make.addEventListener("click", () => makeCleanFile(makes, exportSlot));
-    return h("section", { class: "panel cleanbar" }, count, reset, make, formatChooser(counts.length));
+    const box = h("input", { type: "checkbox" });
+    const note = h("span", { class: "note", role: "status" });
+    box.checked = alreadyClear;
+    box.disabled = alreadyClear;
+    box.addEventListener("change", () => setReveal(box.checked));
+    revealBoxes.push(box);
+    revealNotes.push(note);
+    const reveal = h("div", { class: "cleanformat" },
+      h("label", { class: "check", title: alreadyClear ? "In den Optionen bereits eingeschaltet" : null },
+        box, h("span", { text: "Werte im Klartext zeigen" })), note);
+    return h("section", { class: "panel cleanbar" }, count, reset, make, reveal, formatChooser(counts.length));
   };
   out.append(cleanBar());
   r.groups.forEach((g) => out.append(cleanCard(g, update)));
@@ -936,12 +974,34 @@ function cleanCard(g, update) {
   const optAll = mk("keep_all", "Alle behalten");
 
   const pickSelects = {};
+  const optionRefs = [], cellRefs = [];
+  const pickOptionText = (col, ref) => ref.newest
+    ? `Neuester Eintrag (${g.newest_member + 1}) – ${valueLabel(g, col, g.newest_member)}`
+    : `Eintrag ${ref.i + 1} – ${valueLabel(g, col, ref.i)}`;
+  const fillCell = (td, c, i) => {
+    const v = g.members[i].values[c];
+    const masked = g.masked_columns.includes(c);
+    if (v === "" || (masked && v === "(leer)")) { td.className = "empty"; td.textContent = "(leer)"; return; }
+    const letter = masked ? g.variants[c][i] : null;
+    td.className = "";
+    td.textContent = letter ? `${v} · ${variantName(c, letter)}` : v;
+  };
+  // Die maskierte Ansicht merken, damit der Klartext-Schalter sie wiederherstellen kann
+  const maskedView = {
+    values: g.members.map((m) => ({ ...m.values })),
+    masked_columns: [...g.masked_columns],
+    variants: structuredClone(g.variants),
+  };
   const conflictBox = h("div", { class: "conflicts" },
     h("strong", { text: "Verschiedene Werte – welcher soll gelten?" }),
     g.conflicts.map((col) => {
-      const sel = h("select", { "aria-label": COLUMN_LABEL[col] || col },
-        h("option", { value: "", text: `Neuester Eintrag (${g.newest_member + 1}) – ${valueLabel(g, col, g.newest_member)}` }),
-        g.members.map((_, i) => h("option", { value: i, text: `Eintrag ${i + 1} – ${valueLabel(g, col, i)}` })),
+      const options = [{ value: "", newest: true }, ...g.members.map((_, i) => ({ value: i, i }))].map((ref) => {
+        const opt = h("option", { value: ref.value });
+        optionRefs.push({ opt, col, ref });
+        opt.textContent = pickOptionText(col, ref);
+        return opt;
+      });
+      const sel = h("select", { "aria-label": COLUMN_LABEL[col] || col }, options,
         col === "Notes" ? h("option", { value: "both", text: "Alle verbinden" }) : null);
       pickSelects[col] = sel;
       return h("label", null, h("span", { text: `${COLUMN_LABEL[col] || col}:` }), sel);
@@ -958,19 +1018,18 @@ function cleanCard(g, update) {
       h("tr", null, h("th", { scope: "row", text: "Geändert" }),
         g.members.map((m) => h("td", { text: formatTime(m.last_modified), title: m.last_modified || null }))),
       cols.map((c) => h("tr", null, h("th", { scope: "row", text: COLUMN_LABEL[c] || c }),
-        g.members.map((m) => {
-          const v = m.values[c];
-          const masked = g.masked_columns.includes(c);
-          if (v === "" || (masked && v === "(leer)")) return h("td", { class: "empty", text: "(leer)" });
-          const letter = masked ? g.variants[c][g.members.indexOf(m)] : null;
-          return h("td", { text: letter ? `${v} · ${variantName(c, letter)}` : v });
+        g.members.map((_, i) => {
+          const td = h("td");
+          cellRefs.push({ td, c, i });
+          fillCell(td, c, i);
+          return td;
         })))));
 
   const body = h("div", { class: "dbody" }, table,
     h("div", { class: "choices", role: "radiogroup", "aria-label": "Was soll mit der Gruppe geschehen?" }, optMerge, optKeep, optAll),
     g.conflicts.length ? conflictBox : null);
   if (g.conflicts.some((c) => g.masked_columns.includes(c))) {
-    conflictBox.append(h("span", { class: "note", text: "Verborgene Werte sind nur durch Buchstaben unterscheidbar: gleicher Buchstabe = gleicher Wert. Die Werte selbst siehst du mit „Passwörter im Klartext zeigen“ (Optionen) nach erneutem Auswerten." }));
+    conflictBox.append(h("span", { class: "note", text: "Verborgene Werte sind nur durch Buchstaben unterscheidbar: gleicher Buchstabe = gleicher Wert (P Passwort, T TOTP, F eigene Felder). Mit „Werte im Klartext zeigen“ in der Leiste siehst du sie, deine Entscheidungen bleiben erhalten." }));
   }
   const card = h("section", { class: "panel dgroup" },
     h("div", { class: "dhead" }, h("span", { class: "reason", text: g.reason }),
@@ -1009,6 +1068,16 @@ function cleanCard(g, update) {
     reset: () => { reset(); baseline = JSON.stringify(decisionOf()); },
     changed: () => JSON.stringify(decisionOf()) !== baseline,
     markSaved: () => { baseline = JSON.stringify(decisionOf()); },
+    applyValues: (revealed) => {   // ``null`` = wieder die maskierte Ansicht
+      const view = revealed
+        ? { values: revealed.members.map((m) => m.values), masked_columns: revealed.masked_columns, variants: revealed.variants }
+        : maskedView;
+      g.members.forEach((m, i) => (m.values = view.values[i]));
+      g.masked_columns = view.masked_columns;
+      g.variants = view.variants;
+      cellRefs.forEach(({ td, c, i }) => fillCell(td, c, i));
+      optionRefs.forEach(({ opt, col, ref }) => (opt.textContent = pickOptionText(col, ref)));
+    },
     decision: () => decisionOf(),
   });
   cleanForm[cleanForm.length - 1].reset();
@@ -1025,14 +1094,7 @@ async function makeCleanFile(buttons, slot) {
     const decisions = {};
     cleanForm.forEach((f) => (decisions[f.group.id] = f.decision()));
     const opts = { ...run.options, export_clean: true, decisions, export_format: exportFormat() };
-    const resp = await fetch("/api/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Token": TOKEN },
-      body: JSON.stringify({ old: { name: run.a.name, text: run.a.text }, new: null, options: opts }),
-    });
-    let data = null;
-    try { data = await resp.json(); } catch (_) { /* keine JSON-Antwort */ }
-    if (!resp.ok) throw new Error((data && data.error) || `Fehler ${resp.status}`);
+    const data = await requestAnalysis(run.a, null, opts);
     const panel = exportsPanel(data.exports);
     slot.replaceChildren(panel);
     slot.dataset.made = "1";

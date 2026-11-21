@@ -247,7 +247,7 @@ class StaticPageTests(unittest.TestCase):
     def test_page_supports_a_single_file(self):
         self.assertIn('value="overview" checked', self.html)
         self.assertIn('value="compare" disabled', self.html)
-        self.assertIn("snapshot.b ? {", self.html)
+        self.assertIn("new: b ? {", self.html)
         self.assertIn('id="clear-b"', self.html)
 
     def test_page_offers_cleaning_with_decisions(self):
@@ -324,6 +324,11 @@ class StaticPageTests(unittest.TestCase):
         self.assertIn('VARIANT_PREFIX = { Password: "P", TOTP: "T", Fields: "F" }', self.html)
         self.assertIn("(:\\d\\d(\\.\\d+)?)?$/.test(text)", self.html)
         self.assertIn("markSaved", self.html)
+
+    def test_plaintext_toggle_changes_only_the_display(self):
+        for text in ("setReveal", "applyValues", "Werte im Klartext zeigen", "show_secrets: true"):
+            self.assertIn(text, self.html, text)
+        self.assertEqual(self.html.count('fetch("/api/analyze"'), 1)  # eine gemeinsame Anfrage
 
     def test_file_contents_are_never_inserted_as_html(self):
         for risky in (
