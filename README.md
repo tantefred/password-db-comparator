@@ -80,6 +80,7 @@ Passwörter im Klartext; Papierkorb-Gruppen werden ausgelassen.
 - Im Terminal ohne Rückfragen: `--export-clean` führt nur Gruppen der Art `key` zusammen, mit
   `--clean-kinds key,login` auch `login`. `title` wird nie automatisch zusammengeführt.
   Zusammen mit `--dedupe` erscheint zuerst die Liste der Gruppen.
+- **Eigene Felder** lassen sich bei einem Konflikt nur wählen, nicht verbinden (aus verbundenem Text wären Typ und Namen mit Leerzeichen nicht mehr zerlegbar). Bei einem Bitwarden-CSV bleiben die Felder des gewählten Eintrags erhalten.
 - **Daten aus Bitwarden bleiben erhalten:** Passwort-Verlauf, Passkeys, Sammlungen, URL-Abgleichsmodi und die Typen eigener Felder **aller** zusammengeführten Einträge landen im Ergebnis (Bitwarden-JSON). Nur was sich nicht vereinen lässt (z. B. verschiedene Organisationen), steht in der Meldung; in anderen Zielformaten nennt die Verlustmeldung, was nicht gespeichert wird.
 - **Frühere Passwörter** der zusammengeführten Einträge speichert nur das **Bitwarden-JSON**
   (`passwordHistory`). Im KeePass-CSV gehen sie verloren; das meldet das Skript als
@@ -269,7 +270,7 @@ Zeiten erscheinen lokal und lesbar (`10.06.2024, 12:00 (vor 5 Monaten)`); JSON-B
 **Dubletten bereinigen:** Der Modus „Dubletten bereinigen“ (eine Datei) zeigt je Dublettengruppe eine Karte mit den
 Mitgliedern nebeneinander, den abweichenden Werten und der Wahl: *Zusammenführen* (Vorgabe bei `key`
 und `login`), *Nur diesen behalten* oder *Alle behalten* (Vorgabe bei `title`). Bei Konflikten wählst du
-je Feld, welcher Wert gelten soll (bei Notizen auch „Alle verbinden“); verborgene Passwörter erscheinen als „Variante A/B“, gleicher Buchstabe heißt gleicher Wert. Ein Klick auf „Datei ohne
+je Feld, welcher Wert gelten soll (bei Notizen auch „Alle verbinden“); verborgene Werte erscheinen als „Variante P-A“, „P-B“ (Passwort), „T-A“ (TOTP) oder „F-A“ (eigene Felder); innerhalb einer Spalte heißt gleicher Buchstabe gleicher Wert. Der Schalter „Werte im Klartext zeigen“ in der Leiste lädt die Werte nach und ändert nur die Anzeige, deine Entscheidungen bleiben erhalten. Ein Klick auf „Datei ohne
 Dubletten erstellen“ liefert die bereinigte Datei als Download. Das **Format** wählst du direkt neben dem Knopf (oben und unten gibt es dieselbe Leiste). Die Auswertung, zu der die Karten gehören, wird mitgeschickt, nicht der aktuelle Stand der Eingabefelder; ändern sich Entscheidungen oder Format nach dem Erstellen, gilt die Datei als veraltet. Vor dem Neuladen oder erneuten Auswerten warnt die Seite, wenn du Entscheidungen geändert hast. Der Server bleibt
 zustandslos: Dafür werden die Dateien ein zweites Mal gesendet, zusammen mit deinen Entscheidungen, die
 gegen die Gruppen-IDs geprüft werden.
