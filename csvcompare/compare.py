@@ -1,174 +1,250 @@
-"""Vergleichslogik: verschobene Einträge, Aktualität, Merge und Suche."""
+"""Vergleich zweier Dateien: verschobene Einträge, Aktualität und Unterschiede je Eintrag."""
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import NamedTuple
 
-from .common import human_delta, parse_ts
-from .constants import EXPECTED, KEY_COLS, TIME_COL
+from .columns import ALL_NAMES, CORE_NAMES, KEY_NAMES, MODIFIED, TIME_NAMES
+from .display import human_delta, plural
+from .values import differing_columns, parse_time, values_equal
 
+# Welche Datei ist bei einem geänderten Eintrag aktueller?
+NEWER_IN_NEW, NEWER_IN_OLD, UNCLEAR = "newer_in_new", "newer_in_old", "unclear"
+FRESHNESS = (NEWER_IN_NEW, NEWER_IN_OLD, UNCLEAR)
 
-def find_moves(old, new, removed, added, ignored):
-    """Findet verschobene/umbenannte Einträge unter den nur einseitig vorhandenen Keys.
+# Wie sicher ist die Zuordnung eines verschobenen oder umbenannten Eintrags?
+CERTAIN, LIKELY = "certain", "likely"
 
-    Rückgabe: Liste (alter_key, neuer_key, sicherheit) mit sicherheit 'sicher' oder
-    'wahrscheinlich'. Gepaart wird nur bei eindeutigen 1:1-Treffern.
-    """
-    def same(r, a, col):
-        return col not in ignored and old[r][col] != "" and old[r][col] == new[a][col]
-
-    def strong(r, a):
-        return same(r, a, "Created") and any(
-            same(r, a, c) for c in ("Password", "URL", "Title"))
-
-    def likely(r, a):
-        return all(same(r, a, c) for c in ("Username", "Password", "URL"))
-
-    moves = []
-    left_old, left_new = list(removed), list(added)
-    for matcher, confidence in ((strong, "sicher"), (likely, "wahrscheinlich")):
-        cands = {r: [a for a in left_new if matcher(r, a)] for r in left_old}
-        reverse = defaultdict(list)
-        for r, lst in cands.items():
-            for a in lst:
-                reverse[a].append(r)
-        paired = [(r, lst[0]) for r, lst in cands.items()
-                  if len(lst) == 1 and len(reverse[lst[0]]) == 1]
-        for r, a in paired:
-            moves.append((r, a, confidence))
-        left_old = [r for r in left_old if r not in {m[0] for m in paired}]
-        left_new = [a for a in left_new if a not in {m[1] for m in paired}]
-    return sorted(moves)
+TIME_REASON = (
+    "Zeitstempel verschiedener Formate sind nicht vergleichbar, sie bestimmen "
+    "nur, welche Datei aktueller ist"
+)
 
 
-def classify(key, old, new, n1, n2, new_key=None):
-    """Gibt (gruppe, delta_text) zurück. gruppe: 'old_outdated' | 'new_outdated' | 'unclear'."""
-    t_old = parse_ts(old[key][TIME_COL])
-    t_new = parse_ts(new[new_key or key][TIME_COL])
-    if t_old is None or t_new is None:
-        return "unclear", "Zeitstempel nicht auswertbar"
-    diff = (t_new - t_old).total_seconds()
-    if diff > 0:
-        return "old_outdated", f"{n2} ist {human_delta(diff)} neuer"
-    if diff < 0:
-        return "new_outdated", f"{n1} ist {human_delta(diff)} neuer"
-    return "unclear", "gleicher Zeitstempel, Inhalt unterschiedlich"
+class Side(NamedTuple):
+    """Eine der ausgewerteten Dateien: Name, Einträge und was beim Einlesen bekannt wurde."""
+
+    name: str
+    entries: dict
+    source: object
 
 
-def build_merged(old, new, removed, added, moves, compare_cols):
-    """Vereinigt beide Dateien; bei Unterschieden gewinnt die jeweils neuere Version.
-
-    Rückgabe: (zeilen, statistik, konflikte). Konflikte sind Einträge mit
-    unterschiedlichem Inhalt, bei denen die Aktualität nicht bestimmbar ist
-    (gleicher/fehlender Zeitstempel); dort wird die Version aus Datei 2 genommen.
-    """
-    stats = {"nur_alt": 0, "nur_neu": 0, "alt_neuer": 0, "neu_neuer": 0, "gleich": 0}
-    conflicts = []
-    rows = []
-
-    pairs = [(k, k) for k in sorted(set(old) & set(new))]
-    pairs += [(ok, nk) for ok, nk, _ in moves]
-    for ok, nk in pairs:
-        t_old = parse_ts(old[ok][TIME_COL])
-        t_new = parse_ts(new[nk][TIME_COL])
-        differs = any(old[ok][c] != new[nk][c] for c in compare_cols)
-        if t_old and t_new and t_old > t_new:
-            rows.append(old[ok])
-            stats["alt_neuer"] += 1
-        elif t_old and t_new and t_new > t_old:
-            rows.append(new[nk])
-            stats["neu_neuer"] += 1
-        else:
-            rows.append(new[nk])
-            if differs:
-                conflicts.append(nk)
-            else:
-                stats["gleich"] += 1
-    for k in removed:
-        rows.append(old[k])
-        stats["nur_alt"] += 1
-    for k in added:
-        rows.append(new[k])
-        stats["nur_neu"] += 1
-
-    rows.sort(key=lambda r: (r["Group"], r["Title"], r["Username"]))
-    return rows, stats, conflicts
+def side_notes(cmp, side):
+    """Hinweise zu einer Datei: die des Einlesens, beim Vergleich zusätzlich zur Zuordnung."""
+    notes = list(side.source.notes) if side.source else []
+    numbered = sum(1 for key in side.entries if key.number > 1)
+    if numbered and not cmp.single:
+        subject = plural(numbered, "Eintrag hat", "Einträge haben")
+        verb = "wird" if numbered == 1 else "werden"
+        notes.append(
+            f"{subject} denselben Schlüssel (Gruppe, Titel, Username) wie ein anderer und {verb} "
+            f"nur nach der Reihenfolge in der Datei zugeordnet."
+        )
+    return notes
 
 
-def search_matches(needle, old, new, removed, added, moves, groups):
-    """Sucht needle in Gruppe/Titel/Username beider Dateien.
+class Move(NamedTuple):
+    """Ein Eintrag, der in der zweiten Datei unter anderem Schlüssel steht."""
 
-    Rückgabe: (anzahl_treffer, ergebnisse) mit ergebnisse = Liste (art, daten):
-    'moved' -> move, 'only_old'/'only_new'/'identical' -> key,
-    'changed' -> (key, gruppe, diffs, delta). Ein verschobenes Paar erscheint nur einmal.
-    """
-    needle = needle.strip().lower()
-    changed_by_key = {k: (grp, diffs, delta)
-                      for grp, items in groups.items() for k, diffs, delta in items}
-    matches = sorted(k for k in set(old) | set(new)
-                     if needle in " / ".join(k[:3]).lower())
-    removed_set, added_set = set(removed), set(added)
-    moved_by_key = {k: m for m in moves for k in m[:2]}
-    shown_moves = set()
-    results = []
-    for k in matches:
-        if k in moved_by_key:
-            move = moved_by_key[k]
-            if move not in shown_moves:
-                shown_moves.add(move)
-                results.append(("moved", move))
-        elif k in removed_set:
-            results.append(("only_old", k))
-        elif k in added_set:
-            results.append(("only_new", k))
-        elif k in changed_by_key:
-            grp, diffs, delta = changed_by_key[k]
-            results.append(("changed", (k, grp, diffs, delta)))
-        else:
-            results.append(("identical", k))
-    return len(matches), results
+    old_key: tuple
+    new_key: tuple
+    confidence: str  # CERTAIN oder LIKELY
+
+    @property
+    def key_columns(self):
+        """Welche Schlüsselspalten (Gruppe, Titel, Username) sich geändert haben."""
+        pairs = zip(KEY_NAMES, self.old_key.identity, self.new_key.identity, strict=True)
+        return [name for name, old, new in pairs if old != new]
+
+
+class Change(NamedTuple):
+    """Unterschiede eines Eintrags zwischen beiden Dateien."""
+
+    key: tuple
+    new_key: tuple  # gleich ``key``, außer bei verschobenen Einträgen
+    columns: list  # Spalten mit Unterschieden (leer: nur der Schlüssel unterscheidet sich)
+    note: str  # welche Datei aktueller ist, z. B. „neu.csv ist 3 Tage neuer“
 
 
 @dataclass
 class Comparison:
-    """Ergebnis des Vergleichs zweier (bereits gefilterter) Dateien."""
+    """Ergebnis des Vergleichs zweier (bereits gefilterter) Dateien.
+
+    Mit ``new_name=None`` steht nur eine Datei zur Auswertung (``single``): Dann gibt es keinen
+    Vergleich, und alle Auswertungen einzelner Dateien laufen über ``sides``.
+    """
+
     old: dict
     new: dict
-    n1: str
-    n2: str
-    ignored: list
-    compare_cols: list
-    removed: list    # nur in der ersten Datei (ohne verschobene)
-    added: list      # nur in der zweiten Datei (ohne verschobene)
-    moves: list      # (alter_key, neuer_key, sicherheit)
-    groups: dict     # 'old_outdated' | 'new_outdated' | 'unclear' -> [(key, diffs, delta)]
+    old_name: str
+    new_name: str | None
+    ignored: list  # per Option ignorierte Spalten
+    columns: list  # tatsächlich verglichene Spalten
+    only_old: list = field(default_factory=list)  # Schlüssel nur in der ersten Datei
+    only_new: list = field(default_factory=list)  # Schlüssel nur in der zweiten Datei
+    moves: list = field(default_factory=list)  # Move
+    changes: dict = field(default_factory=lambda: {status: [] for status in FRESHNESS})
+    old_source: object = None  # LoadResult der ersten Datei (Format, Datenbankname, Hinweise)
+    new_source: object = None  # LoadResult der zweiten Datei
+    auto_ignored: list = field(default_factory=list)  # [(spalte, grund)]
+
+    @property
+    def single(self):
+        """Wird nur eine Datei ausgewertet (kein Vergleich)?"""
+        return self.new_name is None
+
+    @property
+    def sides(self):
+        """Die vorhandenen Dateien: eine bei ``single``, sonst beide."""
+        sides = [Side(self.old_name, self.old, self.old_source)]
+        if not self.single:
+            sides.append(Side(self.new_name, self.new, self.new_source))
+        return sides
 
     @property
     def n_changed(self):
-        return sum(len(v) for v in self.groups.values())
+        return sum(len(changes) for changes in self.changes.values())
 
     @property
     def identical(self):
-        return not (self.removed or self.added or self.n_changed or self.moves)
+        return not (self.only_old or self.only_new or self.n_changed or self.moves)
+
+    def change_of(self, old_key, new_key=None):
+        """Unterschiede und Aktualität eines Eintrags: (aktualität, Change).
+
+        Bei verschobenen Einträgen steht ``new_key`` für den Schlüssel in der zweiten Datei.
+        """
+        new_key = new_key or old_key
+        old_row, new_row = self.old[old_key], self.new[new_key]
+        freshness, note = compare_freshness(old_row, new_row, self.old_name, self.new_name)
+        columns = differing_columns(old_row, new_row, self.columns)
+        return freshness, Change(old_key, new_key, columns, note)
+
+    def move_change(self, move):
+        """Die Unterschiede eines verschobenen Eintrags (abgesehen von seinem Schlüssel)."""
+        return self.change_of(move.old_key, move.new_key)[1]
 
 
-def compare_files(old, new, n1, n2, ignored, detect_moves=True):
-    """Vergleicht zwei Dateien und gibt ein Comparison-Objekt zurück."""
-    removed = sorted(set(old) - set(new))
-    added = sorted(set(new) - set(old))
-    compare_cols = [c for c in EXPECTED if c not in KEY_COLS and c not in ignored]
+def compare_freshness(old_row, new_row, old_name, new_name):
+    """Welche Datei hat die neuere Version? Rückgabe: (aktualität, Text)."""
+    old_time, new_time = parse_time(old_row[MODIFIED]), parse_time(new_row[MODIFIED])
+    if old_time is None or new_time is None:
+        return UNCLEAR, "Zeitstempel nicht auswertbar"
+    seconds = (new_time - old_time).total_seconds()
+    if seconds > 0:
+        return NEWER_IN_NEW, f"{new_name} ist {human_delta(seconds)} neuer"
+    if seconds < 0:
+        return NEWER_IN_OLD, f"{old_name} ist {human_delta(seconds)} neuer"
+    return UNCLEAR, "gleicher Zeitstempel, Inhalt unterschiedlich"
 
-    # Verschobene/umbenannte Einträge aus removed/added herauslösen
-    moves = find_moves(old, new, removed, added, ignored) if detect_moves else []
-    moved_old = {m[0] for m in moves}
-    moved_new = {m[1] for m in moves}
-    removed = [k for k in removed if k not in moved_old]
-    added = [k for k in added if k not in moved_new]
 
-    groups = {"old_outdated": [], "new_outdated": [], "unclear": []}
+def unique_pairs(old_keys, new_keys, matches):
+    """Paare (alt, neu), bei denen beide Seiten genau einen Partner haben."""
+    candidates = {old: [new for new in new_keys if matches(old, new)] for old in old_keys}
+    partners = defaultdict(list)
+    for old, news in candidates.items():
+        for new in news:
+            partners[new].append(old)
+    return [
+        (old, news[0])
+        for old, news in candidates.items()
+        if len(news) == 1 and len(partners[news[0]]) == 1
+    ]
+
+
+def find_moves(old, new, only_old, only_new, ignored):
+    """Findet verschobene oder umbenannte Einträge unter den nur einseitig vorhandenen.
+
+    Gepaart wird nur bei eindeutigen 1:1-Treffern, zuerst die sicheren, dann die
+    wahrscheinlichen.
+    """
+
+    def same(old_key, new_key, column):
+        old_value = old[old_key][column]
+        return (
+            column not in ignored
+            and old_value != ""
+            and values_equal(column, old_value, new[new_key][column])
+        )
+
+    def certain(old_key, new_key):  # gleiche Erstellzeit und noch etwas Gemeinsames
+        return same(old_key, new_key, "Created") and any(
+            same(old_key, new_key, column) for column in ("Password", "URL", "Title")
+        )
+
+    def likely(old_key, new_key):  # gleicher Login mit gleicher Adresse
+        return all(same(old_key, new_key, column) for column in ("Username", "Password", "URL"))
+
+    moves = []
+    todo_old, todo_new = list(only_old), list(only_new)
+    for matches, confidence in ((certain, CERTAIN), (likely, LIKELY)):
+        pairs = unique_pairs(todo_old, todo_new, matches)
+        moves += [Move(old_key, new_key, confidence) for old_key, new_key in pairs]
+        paired_old = {old_key for old_key, _ in pairs}
+        paired_new = {new_key for _, new_key in pairs}
+        todo_old = [key for key in todo_old if key not in paired_old]
+        todo_new = [key for key in todo_new if key not in paired_new]
+    return sorted(moves)
+
+
+def comparable_columns(old_name, new_name, ignored, old_source, new_source):
+    """Bestimmt, welche Spalten verglichen werden.
+
+    Verglichen wird, was **beide** Dateien liefern. Spalten, die nur eine Seite hat, und –
+    bei verschiedenen Formaten – die Zeitstempel werden automatisch ausgelassen.
+    Rückgabe: (spalten, [(spalte, grund)]).
+    """
+    provided_old = old_source.provided_columns if old_source else frozenset(CORE_NAMES)
+    provided_new = new_source.provided_columns if new_source else frozenset(CORE_NAMES)
+    formats_differ = bool(old_source and new_source and old_source.format != new_source.format)
+    columns, auto_ignored = [], []
+    for column in ALL_NAMES:
+        if column in KEY_NAMES or column in ignored:
+            continue
+        in_old, in_new = column in provided_old, column in provided_new
+        if in_old and in_new:
+            if formats_differ and column in TIME_NAMES:
+                auto_ignored.append((column, TIME_REASON))
+            else:
+                columns.append(column)
+        elif in_old or in_new:
+            missing = new_name if in_old else old_name
+            auto_ignored.append((column, f"kommt in {missing} nicht vor"))
+    return columns, auto_ignored
+
+
+def compare_files(
+    old, new, old_name, new_name, ignored, detect_moves=True, old_source=None, new_source=None
+):
+    """Vergleicht zwei Dateien (Dicts {Key: Zeile}) und gibt ein Comparison zurück."""
+    columns, auto_ignored = comparable_columns(old_name, new_name, ignored, old_source, new_source)
+    only_old = sorted(set(old) - set(new))
+    only_new = sorted(set(new) - set(old))
+    moves = find_moves(old, new, only_old, only_new, ignored) if detect_moves else []
+    moved_old = {move.old_key for move in moves}
+    moved_new = {move.new_key for move in moves}
+
+    cmp = Comparison(
+        old,
+        new,
+        old_name,
+        new_name,
+        list(ignored),
+        columns,
+        only_old=[key for key in only_old if key not in moved_old],
+        only_new=[key for key in only_new if key not in moved_new],
+        moves=moves,
+        old_source=old_source,
+        new_source=new_source,
+        auto_ignored=auto_ignored,
+    )
     for key in sorted(set(old) & set(new)):
-        diffs = [c for c in compare_cols if old[key][c] != new[key][c]]
-        if diffs:
-            grp, delta = classify(key, old, new, n1, n2)
-            groups[grp].append((key, diffs, delta))
-    return Comparison(old, new, n1, n2, list(ignored), compare_cols,
-                      removed, added, moves, groups)
+        freshness, change = cmp.change_of(key)
+        if change.columns:
+            cmp.changes[freshness].append(change)
+    return cmp
+
+
+def single_file(entries, name, ignored=(), source=None):
+    """Eine einzelne Datei als ``Comparison`` ohne Gegenseite (für Auswertungen ohne Vergleich)."""
+    return Comparison(entries, {}, name, None, list(ignored), [], old_source=source)

@@ -1,56 +1,195 @@
-"""CSV-Exporte: neu hinzugefügte und zusammengeführte Einträge."""
+"""Exporte: die neu hinzugefügten und die zusammengeführten Einträge.
 
-from .common import is_excluded, label
-from .compare import build_merged
-from .csvio import write_csv
+``prepare_added`` und ``prepare_merged`` wählen die Einträge aus und formulieren die Meldungen;
+geschrieben wird erst anschließend (Terminal: in eine Datei, Weboberfläche: als Download).
+"""
+
+from dataclasses import dataclass, field
+
+from .columns import MODIFIED
+from .display import plural
+from .duplicates import find_duplicates
+from .entries import entry_label, is_trash
+from .merge import KEEP_ONE, clean_entries
+from .values import differing_columns, parse_time
+from .writers import DEFAULT_WRITER, WRITERS, loss_lines, lost_data
 
 
-def added_export(cmp):
-    """Nur in der zweiten Datei vorhandene Einträge (ohne Papierkorb).
+@dataclass
+class Export:
+    rows: list  # die Einträge, wie sie geschrieben werden
+    lines: list  # Meldungen, einschließlich dessen, was das Zielformat nicht speichert
+    lost: dict  # {"columns": …, "source": …}, siehe ``writers.lost_data``
+    writer: object  # das Zielformat, in dem die Einträge geschrieben werden
+    conflicts: list = field(default_factory=list)  # Schlüssel mit unklarer Aktualität (nur Merge)
 
-    Rückgabe: (zeilen, meldung); in der Meldung steht {path} für den Zielpfad.
+
+def merge_entries(cmp):
+    """Vereinigt beide Dateien; bei Unterschieden gewinnt die jeweils neuere Version.
+
+    Rückgabe: (zeilen, statistik, konflikte). Konflikte sind Einträge mit unterschiedlichem
+    Inhalt, bei denen die Aktualität nicht bestimmbar ist (gleicher oder fehlender
+    Zeitstempel); dort wird die Version aus der zweiten Datei genommen.
     """
-    rows = [cmp.new[k] for k in cmp.added if not is_excluded(cmp.new[k])]
-    skipped = len(cmp.added) - len(rows)
-    message = (f"{len(rows)} neue Einträge nach '{{path}}' exportiert "
-               f"({skipped} aus Papierkorb ausgelassen; Datei enthält Passwörter im Klartext).\n")
-    return rows, message
+    stats = {
+        "only_old": len(cmp.only_old),
+        "only_new": len(cmp.only_new),
+        "newer_old": 0,
+        "newer_new": 0,
+        "same": 0,
+    }
+    rows, conflicts = [], []
+
+    pairs = [(key, key) for key in sorted(set(cmp.old) & set(cmp.new))]
+    pairs += [(move.old_key, move.new_key) for move in cmp.moves]
+    for old_key, new_key in pairs:
+        old_row, new_row = cmp.old[old_key], cmp.new[new_key]
+        old_time, new_time = parse_time(old_row[MODIFIED]), parse_time(new_row[MODIFIED])
+        if old_time and new_time and old_time > new_time:
+            rows.append(old_row)
+            stats["newer_old"] += 1
+        elif old_time and new_time and new_time > old_time:
+            rows.append(new_row)
+            stats["newer_new"] += 1
+        else:
+            rows.append(new_row)
+            if differing_columns(old_row, new_row, cmp.columns):
+                conflicts.append(new_key)
+            else:
+                stats["same"] += 1
+    rows += [cmp.old[key] for key in cmp.only_old]
+    rows += [cmp.new[key] for key in cmp.only_new]
+
+    rows.sort(key=lambda row: (row["Group"], row["Title"], row["Username"]))
+    return rows, stats, conflicts
 
 
-def merged_export(cmp):
-    """Alle Einträge beider Dateien; bei Unterschieden gewinnt die neuere Version.
+# Dateinamen, wenn bei --export-added/--export-merged kein Pfad angegeben ist
+DEFAULT_NAMES = {"added": "neue_eintraege", "merged": "merged", "clean": "bereinigt"}
 
-    Rückgabe: (zeilen, meldung, konflikte); in der Meldung steht {path} für den Zielpfad.
-    """
-    rows, stats, conflicts = build_merged(cmp.old, cmp.new, cmp.removed, cmp.added,
-                                          cmp.moves, cmp.compare_cols)
-    export = [r for r in rows if not is_excluded(r)]
+
+def pick_writer(format_id=None):
+    """Der Writer zur Kennung (z. B. ``bitwarden-json``); ohne Angabe das KeePass-CSV."""
+    return WRITERS[format_id or DEFAULT_WRITER.format]
+
+
+def export_path(requested, kind, writer):
+    """Zieldatei: der angegebene Pfad, sonst ein Standardname mit passender Endung."""
+    return requested if isinstance(requested, str) else DEFAULT_NAMES[kind] + writer.extension
+
+
+def db_prefix_for_export(cmp):
+    """Datenbankname für Exporte: der aus der zweiten Datei, sonst der aus der ersten."""
+    for source in (cmp.new_source, cmp.old_source):
+        if source is not None and source.db_prefix:
+            return source.db_prefix
+    return None
+
+
+def restore_db_prefix(rows, prefix):
+    """Kopien der Zeilen mit vorangestelltem Datenbanknamen im Gruppenpfad (wie im Original)."""
+    if not prefix:
+        return list(rows)
+    restored = []
+    for row in rows:
+        row = dict(row)
+        row["Group"] = f"{prefix}/{row['Group']}" if row["Group"] else prefix
+        restored.append(row)
+    return restored
+
+
+def prefix_rows(cmp, rows, writer):
+    """Setzt bei Zielformaten, die das brauchen, den Datenbanknamen vor die Gruppenpfade."""
+    return restore_db_prefix(rows, db_prefix_for_export(cmp) if writer.prefix_groups else None)
+
+
+def db_name_lines(cmp, writer):
+    """Hinweis, wenn der entfernte Datenbankname im Zielformat nicht wieder vorkommt."""
+    prefix = db_prefix_for_export(cmp)
+    if not prefix or writer.prefix_groups:
+        return []
+    return [
+        f"  Hinweis: Der Datenbankname „{prefix}“ aus den Gruppenpfaden wird im {writer.label} "
+        f"nicht gespeichert."
+    ]
+
+
+def with_losses(rows, lines, writer, **extra):
+    """Hängt an die Meldungen an, was das Zielformat nicht speichern kann."""
+    lost = lost_data(rows, writer)
+    lines = lines + writer.notes(rows) + loss_lines(lost, writer)
+    return Export(rows, lines, lost, writer, **extra)
+
+
+def prepare_added(cmp, path, writer=DEFAULT_WRITER):
+    """Die nur in der zweiten Datei vorhandenen Einträge (ohne Papierkorb)."""
+    wanted = [cmp.new[key] for key in cmp.only_new if not is_trash(cmp.new[key])]
+    rows = prefix_rows(cmp, wanted, writer)
+    skipped = len(cmp.only_new) - len(rows)
+    count = plural(len(rows), "neuer Eintrag", "neue Einträge")
     lines = [
-        f"{len(export)} Einträge nach '{{path}}' exportiert "
-        f"({len(rows) - len(export)} aus Papierkorb ausgelassen; "
+        f"{count} nach '{path}' exportiert ({skipped} aus Papierkorb ausgelassen; "
+        f"Datei enthält Passwörter im Klartext)."
+    ]
+    return with_losses(rows, lines + db_name_lines(cmp, writer), writer)
+
+
+def prepare_merged(cmp, path, writer=DEFAULT_WRITER):
+    """Alle Einträge beider Dateien; bei Unterschieden gewinnt die neuere Version."""
+    merged, stats, conflicts = merge_entries(cmp)
+    wanted = [row for row in merged if not is_trash(row)]
+    rows = prefix_rows(cmp, wanted, writer)
+    lines = [
+        f"{plural(len(rows), 'Eintrag', 'Einträge')} nach '{path}' exportiert "
+        f"({len(merged) - len(rows)} aus Papierkorb ausgelassen; "
         f"Datei enthält Passwörter im Klartext).",
-        f"  nur in {cmp.n1}: {stats['nur_alt']}, nur in {cmp.n2}: {stats['nur_neu']}, "
-        f"neuere Version aus {cmp.n1}: {stats['alt_neuer']}, "
-        f"aus {cmp.n2}: {stats['neu_neuer']}, unverändert: {stats['gleich']}",
+        f"  nur in {cmp.old_name}: {stats['only_old']}, "
+        f"nur in {cmp.new_name}: {stats['only_new']}, "
+        f"neuere Version aus {cmp.old_name}: {stats['newer_old']}, "
+        f"aus {cmp.new_name}: {stats['newer_new']}, unverändert: {stats['same']}",
     ]
     if conflicts:
-        lines.append(f"  {len(conflicts)} Konflikt(e) mit unklarer Aktualität – "
-                     f"Version aus {cmp.n2} übernommen, bitte prüfen:")
-        lines += [f"    ! {label(k)}" for k in conflicts]
-    return export, lines, conflicts
+        lines.append(
+            f"  {len(conflicts)} Konflikt(e) mit unklarer Aktualität – "
+            f"Version aus {cmp.new_name} übernommen, bitte prüfen:"
+        )
+        lines += [f"    ! {entry_label(key)}" for key in conflicts]
+    return with_losses(rows, lines + db_name_lines(cmp, writer), writer, conflicts=conflicts)
 
 
-def export_added(cmp, path, log):
-    """Schreibt die nur in der zweiten Datei vorhandenen Einträge in eine CSV-Datei."""
-    rows, message = added_export(cmp)
-    write_csv(path, rows)
-    log(message.format(path=path))
+def prepare_clean(
+    cmp, path, writer=DEFAULT_WRITER, kinds=None, auto_kinds=("key",), decisions=None
+):
+    """Die Datei ohne Dubletten (nur eine Datei).
 
-
-def export_merged(cmp, path, log):
-    """Schreibt die zusammengeführten Einträge in eine CSV-Datei."""
-    rows, lines, _ = merged_export(cmp)
-    write_csv(path, rows)
-    for line in lines:
-        log(line.format(path=path))
-    log()
+    Zusammengeführt wird nach ``decisions``; Gruppen ohne Entscheidung nur, wenn ihre Art in
+    ``auto_kinds`` steht. Konflikte werden zugunsten des zuletzt geänderten Eintrags gelöst
+    und in den Meldungen genannt.
+    """
+    groups = find_duplicates(cmp.old, kinds) if kinds else find_duplicates(cmp.old)
+    cleaned = clean_entries(cmp.old, groups, decisions, auto_kinds)
+    rows = prefix_rows(cmp, cleaned.rows, writer)
+    lines = [
+        f"{plural(len(rows), 'Eintrag', 'Einträge')} nach '{path}' exportiert "
+        f"({plural(len(cleaned.merged), 'Gruppe', 'Gruppen')} bearbeitet, "
+        f"{plural(cleaned.removed, 'Eintrag', 'Einträge')} entfernt, "
+        f"{cleaned.trash} aus Papierkorb ausgelassen; Datei enthält Passwörter im Klartext)."
+    ]
+    conflicted = [merged for merged in cleaned.merged if merged.conflicts]
+    if conflicted:
+        lines.append(
+            f"  {plural(len(conflicted), 'Konflikt', 'Konflikte')} – der zuletzt geänderte "
+            f"Eintrag hat sich durchgesetzt (außer bei eigener Wahl), bitte prüfen:"
+        )
+        for merged in conflicted:
+            first = merged.group.keys[0]
+            lines.append(f"    ! {entry_label(first)}: {', '.join(merged.conflicts)}")
+    unmerged = [(merged, note) for merged in cleaned.merged for note in merged.notes]
+    if unmerged:
+        lines.append("  Beim Zusammenführen nicht vereinbar (der Basis-Eintrag gilt):")
+        lines += [f"    ! {entry_label(m.group.keys[0])}: {note}" for m, note in unmerged]
+    kept_one = sum(1 for merged in cleaned.merged if merged.action == KEEP_ONE)
+    if kept_one:
+        lines.append(f"  {plural(kept_one, 'Gruppe', 'Gruppen')}: nur ein Eintrag behalten.")
+    conflicts = [merged.group.keys[0] for merged in conflicted]
+    return with_losses(rows, lines + db_name_lines(cmp, writer), writer, conflicts=conflicts)

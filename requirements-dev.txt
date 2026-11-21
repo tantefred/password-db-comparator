@@ -1,0 +1,2 @@
+# Werkzeuge für die Entwicklung (das Programm selbst braucht keine Pakete)
+ruff>=0.6

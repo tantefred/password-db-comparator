@@ -1,0 +1,24 @@
+# Konfiguration für ruff (Linter und Formatter). Das Programm selbst braucht keine Pakete;
+# ruff ist nur für die Entwicklung gedacht (siehe requirements-dev.txt).
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [".venv", ".idea"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",  # pycodestyle: Stil und Leerraum
+    "F",       # pyflakes: ungenutzte Importe, undefinierte Namen
+    "I",       # isort: Importe sortieren
+    "B",       # bugbear: typische Fehlerquellen
+    "UP",      # pyupgrade: moderne Schreibweisen
+    "SIM",     # einfachere Formulierungen
+    "C4",      # Comprehensions
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["csvcompare", "tests"]
+
+[tool.ruff.format]
+quote-style = "double"

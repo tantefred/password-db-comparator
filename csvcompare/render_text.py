@@ -1,171 +1,255 @@
 """Textausgabe auf der Konsole."""
 
-from datetime import datetime, timezone
-
 from .analysis import audit_entries, check_entries, stats_rows
-from .common import label, short
-from .compare import classify
-from .constants import KEY_COLS, SECRET_COLS, TIME_COL
+from .columns import MODIFIED, SECRET_NAMES
+from .compare import (
+    CERTAIN,
+    FRESHNESS,
+    LIKELY,
+    NEWER_IN_NEW,
+    NEWER_IN_OLD,
+    UNCLEAR,
+    Side,
+    side_notes,
+)
+from .display import display_value, plural
+from .duplicates import find_duplicates
+from .entries import entry_label
+from .importers import FORMAT_LABELS, KEEPASS_CSV
+from .search import FOUND, IDENTICAL, MOVED, ONLY_IN_NEW, ONLY_IN_OLD
+
+CONFIDENCE_LABEL = {CERTAIN: "sicher", LIKELY: "wahrscheinlich"}
 
 
-def print_changed(k, diffs, delta, old, new, show_secrets, indent="  ",
-                  new_k=None, header=None):
-    """Gibt einen geänderten Eintrag mit Unterschieden aus.
-
-    new_k: Key des Eintrags in der zweiten Datei, falls er sich von k unterscheidet.
-    """
-    nk = new_k or k
-    names = [c for c in diffs if c != TIME_COL]
-    print(f"{indent}{header or '~ ' + label(k)}")
-    if not diffs:
-        print(f"{indent}    sonst keine Änderungen")
-    else:
-        kind = "nur Zeitstempel" if not names else "Unterschiede in: " + ", ".join(names)
-        print(f"{indent}    {kind}  ({delta})")
-        print(f"{indent}    Last Modified: {old[k][TIME_COL]}  |  {new[nk][TIME_COL]}")
-    for c in names:
-        secret = c in SECRET_COLS
-        a = short(old[k][c], secret, show_secrets)
-        b = short(new[nk][c], secret, show_secrets)
-        if secret and not show_secrets:
-            print(f"{indent}    {c}: geändert ({a} → {b})")
-        else:
-            print(f"{indent}    {c}: {a}  →  {b}")
-
-
-def print_move(move, compare_cols, old, new, n1, n2, show_secrets, indent="  "):
-    """Gibt ein erkanntes Paar aus verschobenem/umbenanntem Eintrag aus."""
-    ok, nk, confidence = move
-    key_changes = [c for c, a, b in zip(KEY_COLS, ok, nk) if a != b]
-    diffs = [c for c in compare_cols if old[ok][c] != new[nk][c]]
-    _, delta = classify(ok, old, new, n1, n2, new_key=nk)
-    header = (f"↷ {label(ok)}  →  {label(nk)}\n"
-              f"{indent}    geändert in: {', '.join(key_changes)}  [{confidence}]")
-    print_changed(ok, diffs, delta, old, new, show_secrets, indent=indent,
-                  new_k=nk, header=header)
-
-
-def print_stats(old, new, n1, n2):
-    """Gibt die Anzahl der Einträge pro Gruppe für beide Dateien aus."""
-    rows = stats_rows(old, new)
-    names = [g or "(ohne Gruppe)" for g, _, _ in rows]
-    w = max([len(x) for x in names] + [len("Gesamt"), len("Gruppe")])
-    w1, w2 = max(len(n1), 6), max(len(n2), 6)
-    print(f"{'Gruppe':<{w}}  {n1:>{w1}}  {n2:>{w2}}  Differenz")
-    print("-" * (w + w1 + w2 + 15))
-    for name, (_, a, b) in zip(names, rows):
-        print(f"{name:<{w}}  {a:>{w1}}  {b:>{w2}}  {b - a:+d}")
-    print("-" * (w + w1 + w2 + 15))
-    a, b = len(old), len(new)
-    print(f"{'Gesamt':<{w}}  {a:>{w1}}  {b:>{w2}}  {b - a:+d}")
-
-
-def print_check(old, new, n1, n2):
-    """Gibt das Prüfergebnis beider Dateien aus."""
-    for name, entries in ((n1, old), (n2, new)):
-        print(f"=== {name} ===")
-        findings = check_entries(entries)
-        if not findings:
-            print("  Keine Auffälligkeiten.\n")
-            continue
-        for title, lines in findings:
-            print(f"  {title}: {len(lines)}")
-            for line in lines:
-                print(f"    - {line}")
-        print()
-
-
-def print_password_check(old, new, n1, n2, min_length, max_age_days):
-    """Gibt die Passwortqualität beider Dateien aus."""
-    now = datetime.now(timezone.utc)
-    for name, entries in ((n1, old), (n2, new)):
-        print(f"=== {name} ===")
-        findings, totp = audit_entries(entries, min_length, max_age_days, now)
-        if not findings:
-            print("  Keine Auffälligkeiten.")
-        for title, lines in findings:
-            print(f"  {title}: {len(lines)}")
-            for line in lines:
-                print(f"    - {line}")
-        print(f"  TOTP: {totp} von {len(entries)} Einträgen haben TOTP eingerichtet\n")
-
-
-def group_titles(n1, n2):
+def freshness_titles(cmp):
     """Abschnittsüberschriften für geänderte Einträge, mit den echten Dateinamen."""
+    old, new = cmp.old_name, cmp.new_name
     return {
-        "old_outdated": f"Geändert – {n2} ist aktueller ({n1} muss aktualisiert werden)",
-        "new_outdated": f"Geändert – {n1} ist aktueller ({n2} muss aktualisiert werden)",
-        "unclear": "Geändert – Aktualität unklar (manuell prüfen)",
+        NEWER_IN_NEW: f"Geändert – {new} ist aktueller ({old} muss aktualisiert werden)",
+        NEWER_IN_OLD: f"Geändert – {old} ist aktueller ({new} muss aktualisiert werden)",
+        UNCLEAR: "Geändert – Aktualität unklar (manuell prüfen)",
     }
 
 
-def print_header(cmp, hide_trash, group):
-    """Kopfzeilen: Dateien, Anzahl der Einträge und aktive Filter."""
-    print(f"{cmp.n1}: {len(cmp.old)} Einträge")
-    print(f"{cmp.n2}: {len(cmp.new)} Einträge")
+def print_change(cmp, change, show_secrets, header=None, indent="  "):
+    """Gibt einen Eintrag mit seinen Unterschieden aus (``header`` ersetzt die Titelzeile)."""
+    old_row, new_row = cmp.old[change.key], cmp.new[change.new_key]
+    shown = [column for column in change.columns if column != MODIFIED]
+    print(f"{indent}{header or '~ ' + entry_label(change.key)}")
+    if not change.columns:
+        print(f"{indent}    sonst keine Änderungen")
+    else:
+        kind = "nur Zeitstempel" if not shown else "Unterschiede in: " + ", ".join(shown)
+        print(f"{indent}    {kind}  ({change.note})")
+        print(f"{indent}    {MODIFIED}: {old_row[MODIFIED]}  |  {new_row[MODIFIED]}")
+    for column in shown:
+        secret = column in SECRET_NAMES
+        old_text = display_value(old_row[column], secret, show_secrets)
+        new_text = display_value(new_row[column], secret, show_secrets)
+        if secret and not show_secrets:
+            print(f"{indent}    {column}: geändert ({old_text} → {new_text})")
+        else:
+            print(f"{indent}    {column}: {old_text}  →  {new_text}")
+
+
+def print_move(cmp, move, show_secrets, indent="  "):
+    """Gibt ein erkanntes Paar aus verschobenem oder umbenanntem Eintrag aus."""
+    header = (
+        f"↷ {entry_label(move.old_key)}  →  {entry_label(move.new_key)}\n"
+        f"{indent}    geändert in: {', '.join(move.key_columns)}  "
+        f"[{CONFIDENCE_LABEL[move.confidence]}]"
+    )
+    print_change(cmp, cmp.move_change(move), show_secrets, header=header, indent=indent)
+
+
+def print_findings(findings):
+    """Gibt die Funde einer Prüfung aus (Überschrift, Anzahl, Zeilen)."""
+    if not findings:
+        print("  Keine Auffälligkeiten.")
+    for finding in findings:
+        print(f"  {finding.title}: {len(finding.lines)}")
+        for line in finding.lines:
+            print(f"    - {line}")
+
+
+def print_header(cmp, args):
+    """Kopfzeilen: Dateien, Anzahl der Einträge, Hinweise und aktive Filter."""
+    for name, entries, source in cmp.sides:
+        format_label = None
+        if source and source.format != KEEPASS_CSV:
+            format_label = FORMAT_LABELS[source.format]
+        print(f"{name}: {len(entries)} Einträge" + (f" ({format_label})" if format_label else ""))
+        for note in side_notes(cmp, Side(name, entries, source)):
+            print(f"  Hinweis: {note}")
     if cmp.ignored:
         print(f"Ignorierte Spalten: {', '.join(cmp.ignored)}")
-    if hide_trash:
+    columns_by_reason = {}
+    for column, reason in cmp.auto_ignored:
+        columns_by_reason.setdefault(reason, []).append(column)
+    for reason, columns in columns_by_reason.items():
+        print(f"Automatisch ausgelassen ({reason}): {', '.join(columns)}")
+    if args.hide_trash:
         print("Papierkorb-Gruppen ausgeblendet")
-    if group is not None:
-        print(f"Gruppenfilter: '{group.strip()}'")
+    if args.group is not None:
+        print(f"Gruppenfilter: '{args.group.strip()}'")
 
 
-def print_search(query, n_matches, results, cmp, show_secrets):
+def print_stats_single(cmp):
+    """Anzahl der Einträge pro Gruppe für eine einzelne Datei."""
+    rows = stats_rows(cmp.old, {})
+    names = [group or "(ohne Gruppe)" for group, _, _ in rows]
+    width = max([len(name) for name in names] + [len("Gesamt"), len("Gruppe")])
+    width_count = max(len(cmp.old_name), 6)
+    rule = "-" * (width + width_count + 2)
+    print(f"{'Gruppe':<{width}}  {cmp.old_name:>{width_count}}")
+    print(rule)
+    for name, (_, count, _) in zip(names, rows, strict=True):
+        print(f"{name:<{width}}  {count:>{width_count}}")
+    print(rule)
+    print(f"{'Gesamt':<{width}}  {len(cmp.old):>{width_count}}")
+
+
+def print_stats(cmp):
+    """Gibt die Anzahl der Einträge pro Gruppe für beide Dateien aus."""
+    if cmp.single:
+        return print_stats_single(cmp)
+    rows = stats_rows(cmp.old, cmp.new)
+    names = [group or "(ohne Gruppe)" for group, _, _ in rows]
+    width = max([len(name) for name in names] + [len("Gesamt"), len("Gruppe")])
+    width_old, width_new = max(len(cmp.old_name), 6), max(len(cmp.new_name), 6)
+    rule = "-" * (width + width_old + width_new + 15)
+    print(
+        f"{'Gruppe':<{width}}  {cmp.old_name:>{width_old}}  {cmp.new_name:>{width_new}}  Differenz"
+    )
+    print(rule)
+    for name, (_, count_old, count_new) in zip(names, rows, strict=True):
+        print(
+            f"{name:<{width}}  {count_old:>{width_old}}  {count_new:>{width_new}}  "
+            f"{count_new - count_old:+d}"
+        )
+    print(rule)
+    total_old, total_new = len(cmp.old), len(cmp.new)
+    print(
+        f"{'Gesamt':<{width}}  {total_old:>{width_old}}  {total_new:>{width_new}}  "
+        f"{total_new - total_old:+d}"
+    )
+
+
+def print_check(cmp):
+    """Gibt das Prüfergebnis beider Dateien aus."""
+    for name, entries, _ in cmp.sides:
+        print(f"=== {name} ===")
+        print_findings(check_entries(entries))
+        print()
+
+
+def print_password_check(cmp, min_length, max_age_days):
+    """Gibt die Passwortqualität beider Dateien aus."""
+    for name, entries, _ in cmp.sides:
+        print(f"=== {name} ===")
+        findings, totp_count = audit_entries(entries, min_length, max_age_days)
+        print_findings(findings)
+        print(f"  TOTP: {totp_count} von {len(entries)} Einträgen haben TOTP eingerichtet\n")
+
+
+def print_dedupe(cmp, kinds, show_secrets):
+    """Die Dublettengruppen der Datei; Geheimnisse bleiben maskiert."""
+    groups = find_duplicates(cmp.old, kinds)
+    if not groups:
+        print("Keine Dubletten gefunden.")
+        return
+    print(f"{plural(len(groups), 'Dublettengruppe', 'Dublettengruppen')} in {cmp.old_name}\n")
+    for number, group in enumerate(groups, 1):
+        print(f"{number}. {group.reason}  ({len(group.keys)} Einträge)")
+        for key in group.keys:
+            print(f"   - {entry_label(key)}   {MODIFIED}: {cmp.old[key][MODIFIED]}")
+        shown = list(group.differing)
+        print("   Unterschiede in: " + (", ".join(shown) if shown else "keine"))
+        for column in shown:
+            secret = column in SECRET_NAMES
+            values = [
+                display_value(cmp.old[key][column], secret, show_secrets) for key in group.keys
+            ]
+            print(f"     {column}: " + "  |  ".join(values))
+        print()
+
+
+def print_overview(cmp, min_length, max_age_days):
+    """Statistik, Prüfung auf Dubletten und Passwortqualität zusammen."""
+    print("== Statistik ==")
+    print_stats(cmp)
+    print("\n== Prüfung auf Dubletten und kaputte Einträge ==")
+    print_check(cmp)
+    for name, entries, _ in cmp.sides:
+        groups = len(find_duplicates(entries))
+        if groups:
+            print(
+                f"Zusammenführbare Dublettengruppen in {name}: {groups} "
+                f"(jeder Eintrag nur in der stärksten Gruppe; siehe --dedupe)\n"
+            )
+    print("== Passwortqualität ==")
+    print_password_check(cmp, min_length, max_age_days)
+
+
+def print_search(cmp, query, hits, show_secrets):
     """Gibt die Suchtreffer samt Status aus."""
-    n1, n2, old, new = cmp.n1, cmp.n2, cmp.old, cmp.new
-    titles = group_titles(n1, n2)
-    print(f"Suche nach '{query}': {n_matches} Treffer\n")
-    for kind, data in results:
-        if kind == "moved":
-            print(f"  Status: verschoben/umbenannt")
-            print_move(data, cmp.compare_cols, old, new, n1, n2, show_secrets)
-        elif kind == "only_old":
-            print(f"  - {label(data)}")
-            print(f"      Status: nur in {n1} (in {n2} nicht vorhanden)")
-            print(f"      Last Modified: {old[data][TIME_COL]}")
-        elif kind == "only_new":
-            print(f"  + {label(data)}")
-            print(f"      Status: nur in {n2} (in {n1} nicht vorhanden)")
-            print(f"      Last Modified: {new[data][TIME_COL]}")
-        elif kind == "changed":
-            k, grp, diffs, delta = data
-            print(f"  Status: {titles[grp]}")
-            print_changed(k, diffs, delta, old, new, show_secrets)
+    titles = freshness_titles(cmp)
+    print(f"Suche nach '{query}': {len(hits)} Treffer\n")
+    for hit in hits:
+        if hit.status == MOVED:
+            print("  Status: verschoben/umbenannt")
+            print_move(cmp, hit.item, show_secrets)
+        elif hit.status == ONLY_IN_OLD:
+            print(f"  - {entry_label(hit.item)}")
+            print(f"      Status: nur in {cmp.old_name} (in {cmp.new_name} nicht vorhanden)")
+            print(f"      {MODIFIED}: {cmp.old[hit.item][MODIFIED]}")
+        elif hit.status == ONLY_IN_NEW:
+            print(f"  + {entry_label(hit.item)}")
+            print(f"      Status: nur in {cmp.new_name} (in {cmp.old_name} nicht vorhanden)")
+            print(f"      {MODIFIED}: {cmp.new[hit.item][MODIFIED]}")
+        elif hit.status == FOUND:
+            print(f"  * {entry_label(hit.item)}")
+            print(f"      {MODIFIED}: {cmp.old[hit.item][MODIFIED]}")
+        elif hit.status == IDENTICAL:
+            print(f"  = {entry_label(hit.item)}")
+            print("      Status: identisch in beiden Dateien")
+            print(f"      {MODIFIED}: {cmp.old[hit.item][MODIFIED]}")
         else:
-            print(f"  = {label(data)}")
-            print(f"      Status: identisch in beiden Dateien")
-            print(f"      Last Modified: {old[data][TIME_COL]}")
+            print(f"  Status: {titles[hit.status]}")
+            print_change(cmp, hit.item, show_secrets)
         print()
 
 
 def print_compare(cmp, show_secrets):
     """Gibt die Abschnitte des Vergleichs aus (verschoben, nur in einer Datei, geändert)."""
-    n1, n2, old, new = cmp.n1, cmp.n2, cmp.old, cmp.new
-    titles = group_titles(n1, n2)
     if cmp.moves:
         print(f"== Verschoben/umbenannt: {len(cmp.moves)} ==")
         for move in cmp.moves:
-            print_move(move, cmp.compare_cols, old, new, n1, n2, show_secrets)
+            print_move(cmp, move, show_secrets)
         print()
-    if cmp.removed:
-        print(f"== Nur in {n1} (in {n2} nicht vorhanden): {len(cmp.removed)} ==")
-        for k in cmp.removed:
-            print(f"  - {label(k)}")
+    if cmp.only_old:
+        print(
+            f"== Nur in {cmp.old_name} (in {cmp.new_name} nicht vorhanden): {len(cmp.only_old)} =="
+        )
+        for key in cmp.only_old:
+            print(f"  - {entry_label(key)}")
         print()
-    if cmp.added:
-        print(f"== Nur in {n2} (in {n1} nicht vorhanden): {len(cmp.added)} ==")
-        for k in cmp.added:
-            print(f"  + {label(k)}")
+    if cmp.only_new:
+        print(
+            f"== Nur in {cmp.new_name} (in {cmp.old_name} nicht vorhanden): {len(cmp.only_new)} =="
+        )
+        for key in cmp.only_new:
+            print(f"  + {entry_label(key)}")
         print()
 
-    for grp in ("old_outdated", "new_outdated", "unclear"):
-        items = cmp.groups[grp]
-        if not items:
+    titles = freshness_titles(cmp)
+    for freshness in FRESHNESS:
+        changes = cmp.changes[freshness]
+        if not changes:
             continue
-        print(f"== {titles[grp]}: {len(items)} ==")
-        for k, diffs, delta in items:
-            print_changed(k, diffs, delta, old, new, show_secrets)
+        print(f"== {titles[freshness]}: {len(changes)} ==")
+        for change in changes:
+            print_change(cmp, change, show_secrets)
         print()
 
 
@@ -174,10 +258,13 @@ def print_summary(cmp):
     if cmp.identical:
         print("Keine Unterschiede.")
         return
-    g = cmp.groups
-    print(f"Zusammenfassung: {len(cmp.removed)} nur in {cmp.n1}, {len(cmp.added)} nur in {cmp.n2}, "
-          f"{len(cmp.moves)} verschoben/umbenannt, "
-          f"{cmp.n_changed} geändert "
-          f"({len(g['old_outdated'])} in {cmp.n1} zu aktualisieren, "
-          f"{len(g['new_outdated'])} in {cmp.n2} zu aktualisieren, "
-          f"{len(g['unclear'])} manuell prüfen).")
+    count = {freshness: len(cmp.changes[freshness]) for freshness in FRESHNESS}
+    print(
+        f"Zusammenfassung: {len(cmp.only_old)} nur in {cmp.old_name}, "
+        f"{len(cmp.only_new)} nur in {cmp.new_name}, "
+        f"{len(cmp.moves)} verschoben/umbenannt, "
+        f"{cmp.n_changed} geändert "
+        f"({count[NEWER_IN_NEW]} in {cmp.old_name} zu aktualisieren, "
+        f"{count[NEWER_IN_OLD]} in {cmp.new_name} zu aktualisieren, "
+        f"{count[UNCLEAR]} manuell prüfen)."
+    )

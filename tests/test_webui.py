@@ -1,25 +1,19 @@
 """Tests des lokalen Webservers: Verhalten und Schutzmaßnahmen."""
+
 import http.client
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
 import unittest
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
+from csvcompare.service import analyze
+from csvcompare.webui import make_server
+from tests.helpers import ROOT, read_fixture
 
-from csvcompare.service import analyze  # noqa: E402
-from csvcompare.webui import make_server  # noqa: E402
-
-
-def read(name):
-    with open(os.path.join(ROOT, "tests", name), encoding="utf-8", newline="") as f:
-        return f.read()
-
-
-ALT, NEU = read("alt.csv"), read("neu.csv")
+ALT, NEU = read_fixture("alt.csv"), read_fixture("neu.csv")
 TOKEN = "test-token"
 
 
@@ -60,8 +54,11 @@ class ServerTestCase(unittest.TestCase):
 
     @staticmethod
     def payload(options=None):
-        return {"old": {"name": "alt.csv", "text": ALT},
-                "new": {"name": "neu.csv", "text": NEU}, "options": options or {}}
+        return {
+            "old": {"name": "alt.csv", "text": ALT},
+            "new": {"name": "neu.csv", "text": NEU},
+            "options": options or {},
+        }
 
 
 class ServerTests(ServerTestCase):
@@ -87,8 +84,9 @@ class ServerTests(ServerTestCase):
         status, headers, body = self.post(self.payload({"ignore": ["Icon"], "export_added": True}))
         self.assertEqual(status, 200)
         self.assertTrue(headers["content-type"].startswith("application/json"))
-        expected = analyze("alt.csv", ALT, "neu.csv", NEU,
-                           {"ignore": ["Icon"], "export_added": True})
+        expected = analyze(
+            "alt.csv", ALT, "neu.csv", NEU, {"ignore": ["Icon"], "export_added": True}
+        )
         self.assertEqual(json.loads(body), expected)
 
     def test_usage_errors_are_reported_as_400_with_message(self):
@@ -104,9 +102,15 @@ class ServerTests(ServerTestCase):
         self.assertIn("fehlen Spalten", json.loads(body)["error"])
 
     def test_malformed_requests(self):
-        for raw in (b"not json", b"{}", b'{"old": 1, "new": 2}',
-                    json.dumps({"old": {"name": "a", "text": 1}, "new": {"name": "b", "text": ""}}).encode(),
-                    json.dumps({**self.payload(), "options": []}).encode()):
+        for raw in (
+            b"not json",
+            b"{}",
+            b'{"old": 1, "new": 2}',
+            json.dumps(
+                {"old": {"name": "a", "text": 1}, "new": {"name": "b", "text": ""}}
+            ).encode(),
+            json.dumps({**self.payload(), "options": []}).encode(),
+        ):
             with self.subTest(raw=raw[:30]):
                 status, _, _ = self.post(None, raw=raw)
                 self.assertEqual(status, 400)
@@ -123,6 +127,32 @@ class ServerTests(ServerTestCase):
         self.assertEqual(data["report"]["match_count"], 0)
 
 
+class FormatTests(ServerTestCase):
+    def test_json_and_csv_exports_can_be_compared(self):
+        payload = {
+            "old": {"name": "kp.csv", "text": read_fixture("keepassium_a.csv")},
+            "new": {"name": "bw.json", "text": read_fixture("bitwarden.json")},
+            "options": {},
+        }
+        status, _, body = self.post(payload)
+        self.assertEqual(status, 200)
+        files = json.loads(body)["report"]["files"]
+        self.assertEqual(
+            (files["old"]["format"], files["new"]["format"]), ("keepass-csv", "bitwarden-json")
+        )
+        self.assertTrue(files["new"]["notes"])
+
+    def test_encrypted_bitwarden_export_is_a_clear_400(self):
+        payload = {
+            "old": {"name": "a.json", "text": json.dumps({"encrypted": True, "data": "x"})},
+            "new": {"name": "b.csv", "text": read_fixture("keepassium_a.csv")},
+            "options": {},
+        }
+        status, _, body = self.post(payload)
+        self.assertEqual(status, 400)
+        self.assertIn("verschlüsselter Bitwarden-Export", json.loads(body)["error"])
+
+
 class SecurityTests(ServerTestCase):
     def test_missing_or_wrong_token_is_rejected(self):
         for token in (None, "", "falsch", TOKEN + "x"):
@@ -132,8 +162,12 @@ class SecurityTests(ServerTestCase):
                 self.assertNotIn("Eintrag", body.decode("utf-8"))
 
     def test_foreign_host_header_is_rejected(self):
-        for host in ("evil.example.com", "evil.example.com:80", "192.168.1.5:8765",
-                     "127.0.0.1.evil.com"):
+        for host in (
+            "evil.example.com",
+            "evil.example.com:80",
+            "192.168.1.5:8765",
+            "127.0.0.1.evil.com",
+        ):
             with self.subTest(host=host):
                 self.assertEqual(self.post(self.payload(), host=host)[0], 403)
                 self.assertEqual(self.request("GET", "/", headers={"Host": host})[0], 403)
@@ -157,11 +191,16 @@ class SecurityTests(ServerTestCase):
 
     def test_server_does_not_log_requests(self):
         proc = subprocess.run(
-            [sys.executable, "-c",
-             "import sys; sys.path.insert(0, %r); "
-             "from csvcompare.webui import make_handler; "
-             "h = make_handler('t', 1); print(h.log_message.__qualname__)" % ROOT],
-            capture_output=True, text=True)
+            [
+                sys.executable,
+                "-c",
+                f"import sys; sys.path.insert(0, {ROOT!r}); "
+                "from csvcompare.webui import make_handler; "
+                "h = make_handler('t', 1); print(h.log_message.__qualname__)",
+            ],
+            capture_output=True,
+            text=True,
+        )
         self.assertIn("log_message", proc.stdout)
         self.assertEqual(proc.stderr, "")
 
@@ -199,24 +238,174 @@ class StaticPageTests(unittest.TestCase):
 
     def test_page_loads_nothing_from_outside(self):
         import re
+
         self.assertEqual(re.findall(r"https?://", self.html), [])
         self.assertEqual(re.findall(r"""\b(?:src|href)\s*=\s*["'](?!#)""", self.html), [])
         self.assertNotIn("@import", self.html)
         self.assertNotIn("url(", self.html)
 
+    def test_page_supports_a_single_file(self):
+        self.assertIn('value="overview" checked', self.html)
+        self.assertIn('value="compare" disabled', self.html)
+        self.assertIn("new: b ? {", self.html)
+        self.assertIn('id="clear-b"', self.html)
+
+    def test_page_offers_cleaning_with_decisions(self):
+        self.assertEqual(len(re.findall(r'<input type="radio" name="mode"', self.html)), 7)
+        self.assertIn('value="clean"', self.html)
+        for text in ("export_clean: true", "decisions", "keep_all", "newest_member", "both"):
+            self.assertIn(text, self.html, text)
+        self.assertIn("cleanForm", self.html)
+
+    def test_create_button_is_offered_above_and_below_the_cards(self):
+        self.assertIn("out.append(cleanBar());", self.html)  # oben
+        self.assertIn("out.append(cleanBar(), exportSlot)", self.html)
+        # die Entscheidungen werden erst beim Klick gelesen, nicht beim Aufbau der Leiste
+        click = self.html[self.html.index("async function makeCleanFile") :]
+        self.assertIn("cleanForm.forEach((f) => (decisions[f.group.id] = f.decision()))", click)
+
+    def test_changed_decisions_mark_the_created_file_as_outdated(self):
+        self.assertIn("exportSlot.dataset.made", self.html)
+        self.assertIn("veraltet", self.html)
+        self.assertIn('addEventListener("change", update)', self.html)
+
+    def test_unsupported_data_is_a_warning_not_an_error(self):
+        self.assertEqual(self.html.count("--warn-soft:"), 3)  # hell, Systemdunkel, Dunkel-Schalter
+        lost = next(line for line in self.html.splitlines() if line.startswith(".lost {"))
+        self.assertIn("var(--warn", lost)
+        self.assertNotIn("--danger", lost)
+        self.assertIn("color-scheme: light", self.html)  # „Hell“ auch bei dunklem System
+
+    def test_results_are_tied_to_the_files_and_options_they_were_made_with(self):
+        for text in ("state.run", "optionsJson", "stale-note", "Ergebnis veraltet", "lockClean"):
+            self.assertIn(text, self.html, text)
+        click = self.html[self.html.index("async function makeCleanFile") :]
+        self.assertIn("const run = state.run;", click)
+        self.assertNotIn("collectOptions()", click.split("/* ----- Suche")[0])  # gemerkte Optionen
+
+    def test_files_are_decoded_strictly_as_utf8(self):
+        self.assertIn("fatal: true", self.html)
+        self.assertIn("readAsArrayBuffer", self.html)
+        self.assertNotIn("readAsText", self.html)
+        self.assertIn("keine UTF-8-Textdatei", self.html)
+
+    def test_cleaning_bar_offers_the_format_and_guards_unsaved_decisions(self):
+        for text in (
+            "formatChooser",
+            "CLEAN_FORMAT_HINT",
+            "beforeunload",
+            "state.dirty",
+            "confirm(",
+        ):
+            self.assertIn(text, self.html, text)
+        self.assertIn('id="clear-a"', self.html)
+        self.assertIn("Auf Vorschläge zurücksetzen", self.html)
+        self.assertNotIn("Vorschläge übernehmen", self.html)
+
+    def test_modes_are_named_by_what_they_do(self):
+        self.assertIn("<span>Dubletten bereinigen</span>", self.html)
+        self.assertIn('value="check"><span>Prüfen</span>', self.html)
+        self.assertIn("braucht zwei Dateien", self.html)  # Tooltip des gesperrten Vergleichs
+
+    def test_conflicts_are_a_decision_with_visible_variants(self):
+        conflicts = next(line for line in self.html.splitlines() if line.startswith(".conflicts {"))
+        self.assertIn("var(--warn", conflicts)
+        self.assertNotIn("--danger", conflicts)
+        for text in ("valueLabel", "Variante", "masked_columns"):
+            self.assertIn(text, self.html, text)
+
+    def test_times_are_shown_for_humans_and_values_are_labelled_on_phones(self):
+        for text in ("formatTime", "Intl.DateTimeFormat", "Intl.RelativeTimeFormat"):
+            self.assertIn(text, self.html, text)
+        self.assertIn('table.diff td.a::before { content: "1: "', self.html)
+        self.assertIn('table.diff td.b::before { content: "2: "', self.html)
+
+    def test_variants_are_named_per_column_and_times_accept_fractions(self):
+        self.assertIn('VARIANT_PREFIX = { Password: "P", TOTP: "T", Fields: "F" }', self.html)
+        self.assertIn("(:\\d\\d(\\.\\d+)?)?$/.test(text)", self.html)
+        self.assertIn("markSaved", self.html)
+
+    def test_plaintext_toggle_changes_only_the_display(self):
+        for text in ("setReveal", "applyValues", "Werte im Klartext zeigen", "show_secrets: true"):
+            self.assertIn(text, self.html, text)
+        self.assertEqual(self.html.count('fetch("/api/analyze"'), 1)  # eine gemeinsame Anfrage
+
     def test_file_contents_are_never_inserted_as_html(self):
-        for risky in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write",
-                      "eval(", "new Function", "srcdoc"):
+        for risky in (
+            "innerHTML",
+            "outerHTML",
+            "insertAdjacentHTML",
+            "document.write",
+            "eval(",
+            "new Function",
+            "srcdoc",
+        ):
             self.assertNotIn(risky, self.html, risky)
 
     def test_page_does_not_store_anything_in_the_browser(self):
         for storage in ("localStorage", "sessionStorage", "indexedDB", "document.cookie"):
             self.assertNotIn(storage, self.html, storage)
 
+    def test_page_accepts_json_files_and_knows_the_new_columns(self):
+        self.assertEqual(self.html.count('accept=".csv,.json,'), 2)
+        for column in ("Favorite", "Type", "Reprompt", "Fields", "URLs"):
+            self.assertIn(f'"{column}"', self.html)
+        self.assertIn('id="keep-db-name"', self.html)
+        self.assertIn("keep_db_name", self.html)
+
+    def test_page_offers_both_export_formats_and_sends_the_choice(self):
+        from csvcompare.writers import WRITERS
+
+        for format_id in WRITERS:
+            self.assertIn(f'name="export-format" value="{format_id}"', self.html)
+        self.assertIn("opts.export_format = exportFormat()", self.html)
+        self.assertIn("e.mime", self.html)  # Download mit dem Medientyp des Formats
+
+    def test_format_detection_in_the_page_matches_the_server(self):
+        import re
+        import shutil
+
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node ist nicht installiert")
+        from csvcompare.importers import load_any
+
+        func = re.search(r"function sniffFormat\(text\) \{.*?\n\}", self.html, re.S).group(0)
+        samples = {
+            name: read_fixture(name)
+            for name in ("alt.csv", "keepassium_a.csv", "bitwarden.json", "bitwarden.csv")
+        }
+        samples["bom.json"] = chr(0xFEFF) + samples["bitwarden.json"]
+        samples["bom.csv"] = chr(0xFEFF) + samples["bitwarden.csv"]
+        samples["blank.json"] = "\n  " + samples["bitwarden.json"]
+        samples["crlf.csv"] = samples["bitwarden.csv"].replace("\n", "\r\n")
+        script = (
+            func + "\nconst s = JSON.parse(require('fs').readFileSync(0, 'utf8'));"
+            "console.log(JSON.stringify(Object.fromEntries("
+            "Object.entries(s).map(([k, v]) => [k, sniffFormat(v)]))));"
+        )
+        proc = subprocess.run(
+            [node, "-e", script],
+            input=json.dumps(samples),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        in_page = json.loads(proc.stdout)
+        for name, text in samples.items():
+            with self.subTest(name=name):
+                self.assertEqual(in_page[name], load_any(name, text).format)
+
+    def test_downloads_have_no_byte_order_mark(self):
+        # Die CSV-Downloads müssen byte-gleich zu den Dateien aus dem Terminal sein.
+        self.assertNotIn(chr(0xFEFF), self.html)
+
     def test_javascript_syntax(self):
         import re
         import shutil
         import tempfile
+
         node = shutil.which("node")
         if not node:
             self.skipTest("node ist nicht installiert")
@@ -232,22 +421,40 @@ class StaticPageTests(unittest.TestCase):
 
 class CommandLineEntryTests(unittest.TestCase):
     def test_ui_rejects_files(self):
-        proc = subprocess.run([sys.executable, os.path.join(ROOT, "compare_csv.py"), "--ui",
-                               "tests/alt.csv"], cwd=ROOT, capture_output=True, text=True)
+        proc = subprocess.run(
+            [sys.executable, os.path.join(ROOT, "compare_csv.py"), "--ui", "tests/alt.csv"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
         self.assertEqual(proc.returncode, 2)
         self.assertIn("--ui braucht keine Dateien", proc.stderr)
 
-    def test_files_are_still_required_without_ui(self):
-        for args in ([], ["tests/alt.csv"]):
-            proc = subprocess.run([sys.executable, os.path.join(ROOT, "compare_csv.py"), *args],
-                                  cwd=ROOT, capture_output=True, text=True)
-            self.assertEqual(proc.returncode, 2)
-            self.assertIn("required: alt, neu", proc.stderr)
+    def test_at_least_one_file_is_required_without_ui(self):
+        proc = subprocess.run(
+            [sys.executable, os.path.join(ROOT, "compare_csv.py")],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("mindestens eine Datei", proc.stderr)
 
     def test_ui_starts_and_serves_on_loopback(self):
         proc = subprocess.Popen(
-            [sys.executable, os.path.join(ROOT, "compare_csv.py"), "--ui", "--no-browser",
-             "--port", "0"], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            [
+                sys.executable,
+                os.path.join(ROOT, "compare_csv.py"),
+                "--ui",
+                "--no-browser",
+                "--port",
+                "0",
+            ],
+            cwd=ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
         try:
             line = proc.stdout.readline()
             self.assertIn("http://127.0.0.1:", line)

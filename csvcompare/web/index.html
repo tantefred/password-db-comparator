@@ -24,10 +24,14 @@
   --moved-soft: #e0e3f4;
   --danger: #a3262f;
   --danger-soft: #f8e1e2;
+  /* Warnung (Hinweis, kein Fehler) */
+  --warn: #7d4700;
+  --warn-soft: #fdeccf;
   --radius: 6px;
   --font: "Avenir Next", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
+:root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -46,6 +50,8 @@
     --moved-soft: #272c4c;
     --danger: #ff8d93;
     --danger-soft: #3d2124;
+    --warn: #f3b866;
+    --warn-soft: #3a2c12;
   }
 }
 :root[data-theme="dark"] {
@@ -53,6 +59,7 @@
   --line: #2d3948; --focus: #7da0ff; --a: #e3a850; --a-soft: #3a2d17; --b: #4fc0cb;
   --b-soft: #14343a; --moved: #9aa6ee; --moved-soft: #272c4c; --danger: #ff8d93;
   --danger-soft: #3d2124;
+  --warn: #f3b866; --warn-soft: #3a2c12;
 }
 
 * { box-sizing: border-box; }
@@ -110,14 +117,43 @@ details.panel > summary::-webkit-details-marker { display: none; }
 .drop .meta { color: var(--muted); font-size: 13px; }
 .drop.filled { border-style: solid; background: var(--surface); }
 .swap { justify-self: start; }
+.dgroup .dhead { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 12px 16px 0; }
+.dgroup .dhead .reason { font-weight: 650; overflow-wrap: anywhere; }
+.dgroup .dbody { padding: 10px 16px 14px; display: grid; gap: 12px; }
+table.members { width: 100%; border-collapse: collapse; font-size: 13.5px; table-layout: fixed; }
+table.members th, table.members td { text-align: left; vertical-align: top; padding: 4px 10px 4px 0; overflow-wrap: anywhere; }
+table.members thead th { font-size: 12.5px; font-weight: 600; }
+table.members tbody th { width: 96px; font-weight: 500; color: var(--muted); }
+table.members td { font: 13px/1.45 var(--mono); white-space: pre-wrap; }
+table.members td.empty { font-family: var(--font); color: var(--muted); font-style: italic; }
+table.members .base { color: var(--b); }
+.choices { display: grid; gap: 6px; }
+.choices .opt { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 14px; }
+.choices select, .conflicts select { padding: 4px 6px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); max-width: 100%; }
+.conflicts { display: grid; gap: 6px; padding: 8px 10px; background: var(--warn-soft); border-left: 4px solid var(--warn); border-radius: 0 var(--radius) var(--radius) 0; font-size: 13.5px; }
+.conflicts .note { color: inherit; opacity: .85; }
+.conflicts label { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.cleanformat { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 13.5px; }
+.cleanformat .modes { width: auto; min-width: 260px; }
+.cleanformat .modes label:last-child { grid-column: auto; }
+.stale-note { padding: 10px 14px; border: 1px solid var(--warn); border-left-width: 4px; background: var(--warn-soft); color: var(--warn); border-radius: var(--radius); font-weight: 500; }
+.cleanbar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 12px 16px; }
+.cleanbar .count { font-weight: 600; margin-right: auto; }
+.file-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.section-title { margin: 6px 2px -6px; font-size: 15px; font-weight: 650; }
 
 /* ---------- Formularelemente ---------- */
-.modes { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--sunken); }
-.modes label { position: relative; text-align: center; padding: 8px 2px; font-size: 13px; cursor: pointer; border-right: 1px solid var(--line); line-height: 1.25; display: grid; place-items: center; }
-.modes label:last-child { border-right: 0; }
+.modes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--line); }
+.modes label { position: relative; text-align: center; padding: 8px 2px; font-size: 13px; cursor: pointer; background: var(--sunken); line-height: 1.25; display: grid; place-items: center; }
+.modes:not(.two) label:last-child { grid-column: span 2; }
+.modes label:has(input:disabled) { opacity: .45; cursor: not-allowed; }
+.modes label:has(input:disabled) input { cursor: not-allowed; }
 .modes input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
 .modes label:has(input:checked) { background: var(--ink); color: var(--surface); font-weight: 600; }
 .modes label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
+.modes.two { grid-template-columns: repeat(2, 1fr); }
+.modes.is-disabled { opacity: .5; }
+.modes.is-disabled label { cursor: not-allowed; }
 .hint { color: var(--muted); font-size: 13px; margin: 0; }
 .field { display: grid; gap: 4px; }
 .field > span, legend { font-size: 13px; font-weight: 600; }
@@ -163,6 +199,11 @@ a.btn { display: inline-block; text-decoration: none; }
 .side.b { background: var(--b-soft); color: var(--b); }
 .side small { font-weight: 500; color: var(--muted); margin-left: 6px; }
 .filters { color: var(--muted); font-size: 13px; }
+.hints { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; display: grid; gap: 2px; }
+.skipped { margin: 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.lost { margin: 0; padding: 8px 12px; border-left: 4px solid var(--warn); background: var(--warn-soft); border-radius: 0 var(--radius) var(--radius) 0; font-size: 13.5px; }
+.lost strong { color: var(--warn); }
+.lost ul { margin: 4px 0 0; padding-left: 18px; }
 .cmd { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .cmd code { font: 12.5px/1.4 var(--mono); background: var(--sunken); border: 1px solid var(--line); border-radius: 4px; padding: 4px 8px; overflow-wrap: anywhere; flex: 1 1 280px; }
 .cmd .lbl { font-size: 13px; color: var(--muted); }
@@ -213,6 +254,9 @@ table.diff td.a { color: var(--a); }
 table.diff td.b { color: var(--b); }
 table.diff td.masked { font-family: var(--font); font-size: 13.5px; font-style: italic; color: var(--muted); }
 @media (max-width: 560px) {
+  /* Ohne Spaltenköpfe sagt sonst nur die Farbe, welcher Wert aus welcher Datei stammt */
+  table.diff td.a::before { content: "1: "; font-weight: 700; }
+  table.diff td.b::before { content: "2: "; font-weight: 700; }
   table.diff, table.diff tbody, table.diff tr, table.diff th, table.diff td { display: block; width: auto; }
   table.diff thead { display: none; }
   table.diff tr { padding: 4px 0; }
@@ -251,7 +295,7 @@ pre.json { margin: 0; padding: 14px 16px; max-height: 420px; overflow: auto; fon
 <body>
 <header class="topbar">
   <h1>CSV Comparator</h1>
-  <p>Vergleicht zwei KeePassium-Exporte. Läuft nur auf diesem Rechner, nichts wird gespeichert oder verschickt.</p>
+  <p>Vergleicht und bereinigt Passwort-Exporte (KeePass, Bitwarden). Läuft nur auf diesem Rechner, nichts wird gespeichert oder verschickt.</p>
   <span class="spacer"></span>
   <button class="linkish" id="theme" type="button">Dunkel / Hell wechseln</button>
 </header>
@@ -265,17 +309,21 @@ pre.json { margin: 0; padding: 14px 16px; max-height: 420px; overflow: auto; fon
           <label class="drop a" id="drop-a">
             <span class="tag" aria-hidden="true">1</span>
             <span class="name" data-name>Erste Datei wählen</span>
-            <span class="meta" data-meta>CSV hierher ziehen oder klicken</span>
-            <input type="file" id="file-a" accept=".csv,text/csv,text/plain" aria-label="Erste CSV-Datei">
+            <span class="meta" data-meta>CSV oder JSON hierher ziehen oder klicken</span>
+            <input type="file" id="file-a" accept=".csv,.json,text/csv,application/json,text/plain" aria-label="Erste Datei (CSV oder JSON)">
           </label>
           <label class="drop b" id="drop-b">
             <span class="tag" aria-hidden="true">2</span>
-            <span class="name" data-name>Zweite Datei wählen</span>
-            <span class="meta" data-meta>CSV hierher ziehen oder klicken</span>
-            <input type="file" id="file-b" accept=".csv,text/csv,text/plain" aria-label="Zweite CSV-Datei">
+            <span class="name" data-name>Zweite Datei (optional)</span>
+            <span class="meta" data-meta>CSV oder JSON hierher ziehen oder klicken</span>
+            <input type="file" id="file-b" accept=".csv,.json,text/csv,application/json,text/plain" aria-label="Zweite Datei (CSV oder JSON)">
           </label>
         </div>
-        <button class="btn quiet swap" type="button" id="swap">Dateien tauschen</button>
+        <div class="file-actions">
+          <button class="btn quiet swap" type="button" id="swap" disabled>Dateien tauschen</button>
+          <button class="btn quiet" type="button" id="clear-a" hidden>Erste Datei entfernen</button>
+          <button class="btn quiet" type="button" id="clear-b" hidden>Zweite Datei entfernen</button>
+        </div>
       </div>
     </section>
 
@@ -283,10 +331,12 @@ pre.json { margin: 0; padding: 14px 16px; max-height: 420px; overflow: auto; fon
       <h2 id="h-mode">Was möchtest du sehen?</h2>
       <div class="body">
         <div class="modes" role="radiogroup" aria-labelledby="h-mode">
-          <label><input type="radio" name="mode" value="compare" checked><span>Vergleich</span></label>
+          <label><input type="radio" name="mode" value="compare" disabled><span>Vergleich</span></label>
+          <label><input type="radio" name="mode" value="overview" checked><span>Überblick</span></label>
+          <label><input type="radio" name="mode" value="clean"><span>Dubletten bereinigen</span></label>
           <label><input type="radio" name="mode" value="search"><span>Suche</span></label>
           <label><input type="radio" name="mode" value="stats"><span>Statistik</span></label>
-          <label><input type="radio" name="mode" value="check"><span>Dubletten</span></label>
+          <label><input type="radio" name="mode" value="check"><span>Prüfen</span></label>
           <label><input type="radio" name="mode" value="password-check"><span>Passwörter</span></label>
         </div>
         <p class="hint" id="mode-hint"></p>
@@ -310,6 +360,7 @@ pre.json { margin: 0; padding: 14px 16px; max-height: 420px; overflow: auto; fon
           <input class="text-in" id="group" type="text" placeholder="z. B. Privat">
         </label>
         <label class="check"><input type="checkbox" id="hide-trash"><span>Papierkorb ausblenden<small>Einträge aus Papierkorb-Gruppen werden ganz ignoriert.</small></span></label>
+        <label class="check"><input type="checkbox" id="keep-db-name"><span>Datenbanknamen in Gruppen behalten<small>KeePassium setzt ihn vor jeden Gruppenpfad (z. B. DB1/Web); normalerweise wird er entfernt.</small></span></label>
         <label class="check"><input type="checkbox" id="detect-moves" checked><span>Verschobene Einträge erkennen<small>Sonst erscheinen sie als „entfernt“ plus „neu“.</small></span></label>
         <fieldset>
           <legend>Spalten ignorieren</legend>
@@ -322,8 +373,16 @@ pre.json { margin: 0; padding: 14px 16px; max-height: 420px; overflow: auto; fon
     <details class="panel" id="export-panel">
       <summary>Exportieren</summary>
       <div class="body">
-        <label class="check"><input type="checkbox" id="export-added"><span>Neu hinzugefügte Einträge<small>Nur in Datei 2, ohne Papierkorb. Als CSV zum Importieren.</small></span></label>
+        <label class="check"><input type="checkbox" id="export-added"><span>Neu hinzugefügte Einträge<small>Nur in Datei 2, ohne Papierkorb. Zum Importieren in das gewählte Format.</small></span></label>
         <label class="check"><input type="checkbox" id="export-merged"><span>Zusammengeführte Datei<small>Alle Einträge, bei Unterschieden die neuere Version.</small></span></label>
+        <fieldset class="field" id="export-format-field">
+          <legend>Format der Exporte</legend>
+          <div class="modes two" id="export-format-modes" role="radiogroup" aria-label="Format der Exporte">
+            <label><input type="radio" name="export-format" value="keepass-csv" checked><span>KeePass-CSV</span></label>
+            <label><input type="radio" name="export-format" value="bitwarden-json"><span>Bitwarden-JSON</span></label>
+          </div>
+          <p class="hint" id="format-hint"></p>
+        </fieldset>
         <p class="hint" id="export-hint">Exporte gibt es nur im Vergleich. Die Dateien enthalten Passwörter im Klartext.</p>
       </div>
     </details>
@@ -333,12 +392,12 @@ pre.json { margin: 0; padding: 14px 16px; max-height: 420px; overflow: auto; fon
 
   <section class="results" id="results" aria-live="polite">
     <div class="panel empty" id="empty">
-      <h2>Zwei Exporte, ein Überblick</h2>
-      <p>Du siehst, was sich zwischen den Dateien unterscheidet und in welcher davon die jeweils neuere Version liegt.</p>
+      <h2>Ein Export oder zwei, ein Überblick</h2>
+      <p>Mit zwei Dateien siehst du, was sich unterscheidet und in welcher die jeweils neuere Version liegt. Eine einzelne Datei kannst du auf Dubletten, Passwortqualität und mehr prüfen.</p>
       <ol>
-        <li>Wähle links die beiden CSV-Dateien aus.</li>
+        <li>Wähle links eine oder zwei Dateien aus (CSV oder JSON).</li>
         <li>Lege fest, was du sehen möchtest.</li>
-        <li>Klicke auf „Vergleichen“.</li>
+        <li>Klicke auf die Schaltfläche darunter.</li>
       </ol>
     </div>
   </section>
@@ -347,22 +406,55 @@ pre.json { margin: 0; padding: 14px 16px; max-height: 420px; overflow: auto; fon
 <script>
 "use strict";
 const TOKEN = document.querySelector('meta[name="csv-token"]').content;
-const COLUMNS = ["Password", "URL", "Notes", "TOTP", "Icon", "Last Modified", "Created"];
-const COLUMN_LABEL = { "Password": "Passwort", "URL": "URL", "Notes": "Notizen", "TOTP": "TOTP",
-  "Icon": "Icon", "Last Modified": "Geändert am", "Created": "Erstellt am" };
-const SECRET = new Set(["Password", "TOTP"]);
-const MODE_LABEL = { "compare": "Vergleichen", "search": "Suchen", "stats": "Zählen",
-  "check": "Prüfen", "password-check": "Prüfen" };
+const COLUMNS = ["Password", "URL", "Notes", "TOTP", "Icon", "Last Modified", "Created",
+  "Favorite", "Type", "Reprompt", "Fields", "URLs"];
+const COLUMN_LABEL = { "Group": "Gruppe", "Title": "Titel", "Username": "Username",
+  "Password": "Passwort", "URL": "URL", "Notes": "Notizen", "TOTP": "TOTP", "Icon": "Icon",
+  "Last Modified": "Geändert am", "Created": "Erstellt am", "Favorite": "Favorit", "Type": "Typ",
+  "Reprompt": "Passwort-Nachfrage", "Fields": "Eigene Felder", "URLs": "Alle URLs" };
+const FORMAT_LABEL = { "keepass-csv": "KeePass-CSV", "bitwarden-json": "Bitwarden-JSON",
+  "bitwarden-csv": "Bitwarden-CSV" };
+const MODE_LABEL = { "compare": "Vergleichen", "overview": "Auswerten", "clean": "Dubletten anzeigen", "search": "Suchen",
+  "stats": "Zählen", "check": "Prüfen", "password-check": "Prüfen" };
+const EXPORT_FORMAT_HINT = {
+  "keepass-csv": "Zum Import in KeePassium oder KeePassXC (CSV).",
+  "bitwarden-json": "Unverschlüsselt, zum Import in Bitwarden oder Vaultwarden (Dateityp „Bitwarden (json)“).",
+};
 const MODE_HINT = {
+  "clean": "Findet Dubletten in einer Datei. Du entscheidest je Gruppe, ob zusammengeführt wird, und bekommst die Datei ohne Dubletten.",
+  "overview": "Statistik, Dubletten und Passwortqualität auf einen Blick, für jede Datei einzeln.",
   "compare": "Was ist neu, entfernt, verschoben oder geändert – und in welcher Datei steht die neuere Version?",
-  "search": "Findet einen Eintrag über Gruppe, Titel oder Username und zeigt seinen Status.",
+  "search": "Findet einen Eintrag über Gruppe, Titel oder Username und zeigt seinen Status (bei zwei Dateien im Vergleich).",
   "stats": "Wie viele Einträge liegen pro Gruppe in jeder Datei?",
   "check": "Sucht in jeder Datei einzeln nach Dubletten, fehlenden Passwörtern und ungültigen URLs.",
   "password-check": "Zeigt wiederverwendete, kurze und lange nicht geänderte Passwörter. Passwörter selbst erscheinen nie."
 };
 
 const $ = (id) => document.getElementById(id);
-const state = { a: null, b: null, last: null, urls: [] };
+
+/* Zeiten für Menschen: lokale Zeit und Abstand zu heute. Rohwerte bleiben im JSON-Bericht. */
+const DATE_FORMAT = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+const RELATIVE_FORMAT = new Intl.RelativeTimeFormat("de", { numeric: "auto" });
+function toDate(text) {
+  // Zeiten ohne Zeitzone gelten wie auf dem Server als UTC
+  const zoned = /^\d{4}-\d\d-\d\d[T ]\d\d:\d\d(:\d\d(\.\d+)?)?$/.test(text) ? `${text.replace(" ", "T")}Z` : text;
+  const date = new Date(zoned);
+  return isNaN(date) ? null : date;
+}
+function relativeTime(date) {
+  const seconds = (date - Date.now()) / 1000;
+  for (const [unit, size] of [["year", 31536000], ["month", 2592000], ["day", 86400], ["hour", 3600], ["minute", 60]]) {
+    if (Math.abs(seconds) >= size) return RELATIVE_FORMAT.format(Math.round(seconds / size), unit);
+  }
+  return "gerade eben";
+}
+function formatTime(text, withRelative = true) {
+  const date = text ? toDate(text) : null;
+  if (!date) return text || "–";
+  const absolute = DATE_FORMAT.format(date);
+  return withRelative ? `${absolute} (${relativeTime(date)})` : absolute;
+}
+const state = { a: null, b: null, last: null, urls: [], userMode: false, run: null, dirty: false };
 
 /* ---------- DOM-Helfer: Inhalte nie als HTML einsetzen ---------- */
 function h(tag, attrs, ...children) {
@@ -388,31 +480,89 @@ function setupDrop(key, dropEl, input) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      state[key] = { name: file.name, text: String(reader.result), size: file.size };
+      let text;
+      try {
+        // Strikt dekodieren: ungültige Bytes würden sonst still zu „�“ und Vergleiche verfälschen.
+        text = new TextDecoder("utf-8", { fatal: true }).decode(reader.result);
+      } catch (_) {
+        showError(`„${file.name}“ ist keine UTF-8-Textdatei und kann nicht gelesen werden.`);
+        return;
+      }
+      state[key] = { name: file.name, text, size: file.size };
       renderDrop(key, dropEl);
-      refreshRun();
+      syncModeToFiles();
     };
     reader.onerror = () => showError(`„${file.name}“ konnte nicht gelesen werden.`);
-    reader.readAsText(file, "utf-8");
+    reader.readAsArrayBuffer(file);
   };
   input.addEventListener("change", () => load(input.files[0]));
   ["dragenter", "dragover"].forEach((ev) => dropEl.addEventListener(ev, (e) => { e.preventDefault(); dropEl.classList.add("over"); }));
   ["dragleave", "drop"].forEach((ev) => dropEl.addEventListener(ev, (e) => { e.preventDefault(); dropEl.classList.remove("over"); }));
   dropEl.addEventListener("drop", (e) => load(e.dataTransfer.files[0]));
 }
+// Gleiche Regeln wie auf dem Server; maßgeblich ist später die Angabe im Ergebnis.
+function sniffFormat(text) {
+  const t = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
+  const first = t.trimStart().charAt(0);
+  if (first === "{" || first === "[") return "bitwarden-json";
+  const header = t.split(/\r?\n/, 1)[0];
+  return header.includes("login_uri") && header.includes("login_username") ? "bitwarden-csv" : "keepass-csv";
+}
 function renderDrop(key, dropEl) {
   const f = state[key];
   dropEl.classList.toggle("filled", !!f);
-  dropEl.querySelector("[data-name]").textContent = f ? f.name : (key === "a" ? "Erste Datei wählen" : "Zweite Datei wählen");
+  dropEl.querySelector("[data-name]").textContent = f ? f.name : (key === "a" ? "Erste Datei wählen" : "Zweite Datei (optional)");
   dropEl.querySelector("[data-meta]").textContent = f
-    ? `${(f.size / 1024).toLocaleString("de-DE", { maximumFractionDigits: 1 })} KB – klicken zum Ersetzen`
-    : "CSV hierher ziehen oder klicken";
+    ? `${FORMAT_LABEL[sniffFormat(f.text)]}, ${(f.size / 1024).toLocaleString("de-DE", { maximumFractionDigits: 1 })} KB – klicken zum Ersetzen`
+    : "CSV oder JSON hierher ziehen oder klicken";
 }
 function refreshRun() {
   const mode = currentMode();
   const needsSearch = mode === "search" && !$("search").value.trim();
-  $("run").disabled = !(state.a && state.b) || needsSearch;
+  const hasFiles = mode === "compare" ? state.a && state.b : state.a;
+  $("run").disabled = !hasFiles || needsSearch;
   $("run").textContent = MODE_LABEL[mode];
+  $("swap").disabled = !(state.a && state.b);
+  $("clear-a").hidden = !state.a;
+  $("clear-b").hidden = !state.b;
+  checkStale();
+}
+
+/* Ergebnisse gehören zu den Dateien und Optionen, mit denen sie berechnet wurden. */
+let lockClean = () => {};
+function isStale() {
+  const r = state.run;
+  return !!r && (state.a !== r.a || state.b !== r.b || JSON.stringify(collectOptions()) !== r.optionsJson);
+}
+function checkStale() {
+  const note = $("stale-note");
+  const stale = isStale();
+  if (stale && !note) {
+    $("results").prepend(h("div", { class: "stale-note", id: "stale-note", role: "status",
+      text: "Ergebnis veraltet: Dateien oder Einstellungen haben sich geändert. Bitte neu auswerten." }));
+  } else if (!stale && note) {
+    note.remove();
+  }
+  lockClean(stale);
+}
+
+/* Der Vergleich braucht zwei Dateien; ohne Wahl des Nutzers passt sich der Modus der Dateizahl an. */
+function setMode(value) {
+  document.querySelector(`input[name="mode"][value="${value}"]`).checked = true;
+  onModeChange();
+}
+function syncModeToFiles() {
+  const two = !!(state.a && state.b);
+  const compareRadio = document.querySelector('input[name="mode"][value="compare"]');
+  const cleanRadio = document.querySelector('input[name="mode"][value="clean"]');
+  compareRadio.disabled = !two;
+  cleanRadio.disabled = two;
+  compareRadio.closest("label").title = two ? "" : "Der Vergleich braucht zwei Dateien";
+  cleanRadio.closest("label").title = two ? "Dubletten bereinigen geht nur mit einer Datei" : "";
+  if (!two && currentMode() === "compare") setMode("overview");
+  else if (two && currentMode() === "clean") setMode("compare");
+  else if (two && !state.userMode && currentMode() === "overview") setMode("compare");
+  else refreshRun();
 }
 
 /* ---------- Optionen ---------- */
@@ -425,54 +575,106 @@ function collectOptions() {
     group: $("group").value,
     hide_trash: $("hide-trash").checked,
     detect_moves: $("detect-moves").checked,
+    keep_db_name: $("keep-db-name").checked,
     show_secrets: $("show-secrets").checked,
   };
   if (mode === "search") opts.search = $("search").value;
-  if (mode === "password-check") {
-    opts.min_length = Number($("min-length").value);
-    opts.max_age_days = Number($("max-age").value);
+  if (mode === "password-check" || mode === "overview") {
+    // Leere Felder nicht als 0 senden: dann gilt der Standard des Servers
+    if ($("min-length").value.trim()) opts.min_length = Number($("min-length").value);
+    if ($("max-age").value.trim()) opts.max_age_days = Number($("max-age").value);
   }
   if (mode === "compare") {
     opts.export_added = $("export-added").checked;
     opts.export_merged = $("export-merged").checked;
+    if (opts.export_added || opts.export_merged) opts.export_format = exportFormat();
   }
   return opts;
+}
+function exportFormat() {
+  return document.querySelector('input[name="export-format"]:checked').value;
+}
+function onExportFormatChange() {
+  $("format-hint").textContent = EXPORT_FORMAT_HINT[exportFormat()];
+  syncFormatChoosers();
+}
+/* Das Format der bereinigten Datei lässt sich neben dem Knopf wählen; es ist dieselbe Wahl wie unter „Exportieren“. */
+const CLEAN_FORMAT_HINT = {
+  "keepass-csv": "Frühere Passwörter zusammengeführter Einträge gehen in diesem Format verloren.",
+  "bitwarden-json": "Behält frühere Passwörter, Passkeys und Sammlungen.",
+};
+let formatChoosers = [];
+let onCleanFormatChange = () => {};
+function syncFormatChoosers() {
+  const current = exportFormat();
+  formatChoosers.forEach(({ radios, hint }) => {
+    radios.forEach((r) => (r.checked = r.value === current));
+    hint.textContent = CLEAN_FORMAT_HINT[current];
+  });
+}
+function formatChooser(index) {
+  const radios = ["keepass-csv", "bitwarden-json"].map((value) =>
+    h("input", { type: "radio", name: `clean-format-${index}`, value }));
+  const hint = h("span", { class: "note" });
+  radios.forEach((r) => r.addEventListener("change", () => {
+    document.querySelector(`input[name="export-format"][value="${r.value}"]`).click();
+    onCleanFormatChange();
+  }));
+  formatChoosers.push({ radios, hint });
+  return h("div", { class: "cleanformat" },
+    h("strong", { text: "Format:" }),
+    h("div", { class: "modes two", role: "radiogroup", "aria-label": "Format der bereinigten Datei" },
+      radios.map((r) => h("label", null, r, h("span", { text: FORMAT_LABEL[r.value] })))),
+    hint);
 }
 function onModeChange() {
   const mode = currentMode();
   $("mode-hint").textContent = MODE_HINT[mode];
   $("f-search").classList.toggle("is-hidden", mode !== "search");
-  $("f-pw").classList.toggle("is-hidden", mode !== "password-check");
+  $("f-pw").classList.toggle("is-hidden", mode !== "password-check" && mode !== "overview");
   const canExport = mode === "compare";
+  const canChooseFormat = canExport || mode === "clean";
   for (const id of ["export-added", "export-merged"]) {
     $(id).disabled = !canExport;
     if (!canExport) $(id).checked = false;
   }
-  $("export-hint").classList.toggle("is-hidden", canExport);
+  document.querySelectorAll('input[name="export-format"]').forEach((r) => (r.disabled = !canChooseFormat));
+  $("export-format-modes").classList.toggle("is-disabled", !canChooseFormat);
+  $("export-hint").classList.toggle("is-hidden", canChooseFormat);
   refreshRun();
   if (mode === "search") $("search").focus();
 }
 
 /* ---------- Anfrage ---------- */
+async function requestAnalysis(a, b, options) {
+  const resp = await fetch("/api/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Token": TOKEN },
+    body: JSON.stringify({
+      old: { name: a.name, text: a.text },
+      new: b ? { name: b.name, text: b.text } : null,
+      options,
+    }),
+  });
+  let data = null;
+  try { data = await resp.json(); } catch (_) { /* keine JSON-Antwort */ }
+  if (!resp.ok) throw new Error((data && data.error) || `Fehler ${resp.status}`);
+  return data;
+}
+window.addEventListener("beforeunload", (e) => {
+  if (state.dirty) { e.preventDefault(); e.returnValue = ""; }   // Entscheidungen gingen verloren
+});
 async function run() {
+  if (state.dirty && !confirm("Deine Entscheidungen zu den Dubletten gehen verloren, wenn du neu auswertest. Trotzdem fortfahren?")) return;
   clearResults();
   $("results").append(h("p", { class: "status", text: "Wird ausgewertet …" }));
   $("run").disabled = true;
+  const snapshot = { a: state.a, b: state.b, options: collectOptions() };
   try {
-    const resp = await fetch("/api/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Token": TOKEN },
-      body: JSON.stringify({
-        old: { name: state.a.name, text: state.a.text },
-        new: { name: state.b.name, text: state.b.text },
-        options: collectOptions(),
-      }),
-    });
-    let data = null;
-    try { data = await resp.json(); } catch (_) { /* keine JSON-Antwort */ }
-    if (!resp.ok) throw new Error((data && data.error) || `Fehler ${resp.status}`);
+    const data = await requestAnalysis(snapshot.a, snapshot.b, snapshot.options);
     state.last = data;
     render(data);
+    state.run = { ...snapshot, optionsJson: JSON.stringify(snapshot.options) };
   } catch (err) {
     showError(err.message || String(err));
   } finally {
@@ -482,6 +684,9 @@ async function run() {
 
 /* ---------- Anzeige ---------- */
 function clearResults() {
+  state.run = null;
+  state.dirty = false;
+  lockClean = () => {};
   state.urls.forEach((u) => URL.revokeObjectURL(u));
   state.urls = [];
   $("results").replaceChildren();
@@ -505,6 +710,8 @@ function render(data) {
   const out = $("results");
   out.append(headPanel(data));
   if (r.mode === "compare") renderCompare(out, r, data);
+  else if (r.mode === "dedupe") renderClean(out, r);
+  else if (r.mode === "overview") renderOverview(out, r);
   else if (r.mode === "search") renderSearch(out, r, data);
   else if (r.mode === "stats") renderStats(out, r);
   else renderFindings(out, r);
@@ -527,12 +734,21 @@ function headPanel(data) {
     catch (_) { copy.textContent = "Nicht möglich"; }
     setTimeout(() => (copy.textContent = "Kopieren"), 1600);
   });
+  const hints = [f.old, f.new].filter(Boolean).flatMap((side) => (side.notes || []).map((n) => `${side.name}: ${n}`));
+  const skippedByReason = {};
+  for (const a of fl.auto_ignored || []) (skippedByReason[a.reason] = skippedByReason[a.reason] || []).push(COLUMN_LABEL[a.column] || a.column);
+  const skipped = Object.entries(skippedByReason).map(([reason, cols]) => `${cols.join(", ")} – ${reason}`);
+  const formatBadge = (side) => h("span", { class: "badge", text: FORMAT_LABEL[side.format] || side.format });
   return h("section", { class: "panel head", id: "top" },
     h("div", { class: "pair" },
-      sideTag("a", f.old.name), h("small", { class: "note", text: plural(f.old.entries, "Eintrag", "Einträge") }),
-      h("span", { class: "sep", "aria-hidden": "true", text: "⇄" }),
-      sideTag("b", f.new.name), h("small", { class: "note", text: plural(f.new.entries, "Eintrag", "Einträge") })),
+      sideTag("a", f.old.name), formatBadge(f.old), h("small", { class: "note", text: plural(f.old.entries, "Eintrag", "Einträge") }),
+      f.new ? [
+        h("span", { class: "sep", "aria-hidden": "true", text: "⇄" }),
+        sideTag("b", f.new.name), formatBadge(f.new), h("small", { class: "note", text: plural(f.new.entries, "Eintrag", "Einträge") }),
+      ] : null),
     notes.length ? h("div", { class: "filters", text: notes.join("  ·  ") }) : null,
+    hints.length ? h("ul", { class: "hints" }, hints.map((t) => h("li", { text: t }))) : null,
+    skipped.length ? h("p", { class: "skipped" }, h("strong", { text: "Nicht verglichen: " }), skipped.join("  ·  ")) : null,
     h("div", { class: "cmd" }, h("span", { class: "lbl", text: "Im Terminal:" }), h("code", { text: data.command }), copy));
 }
 
@@ -607,7 +823,7 @@ function changedBody(it, r) {
   const nodes = [entryNode(it.entry)];
   if (it.only_timestamp) nodes.push(h("div", null, h("span", { class: "badge", text: "nur Zeitstempel" })));
   if (cols.length) nodes.push(fieldRows(it.changes, cols, r));
-  nodes.push(h("div", { class: "note" }, it.note ? `${it.note}.  ` : "", `Zuletzt geändert: ${lm.old}  |  ${lm.new}`));
+  nodes.push(h("div", { class: "note" }, it.note ? `${it.note}.  ` : "", `Zuletzt geändert: ${formatTime(lm.old)}  |  ${formatTime(lm.new)}`));
   return nodes;
 }
 function movedBody(it, r) {
@@ -630,24 +846,274 @@ function exportsPanel(exps) {
   if (!keys.length) return null;
   const items = keys.map((k) => {
     const e = exps[k];
-    const url = URL.createObjectURL(new Blob(["﻿" + e.csv], { type: "text/csv;charset=utf-8" }));
+    const url = URL.createObjectURL(new Blob([e.content], { type: `${e.mime};charset=utf-8` }));
     state.urls.push(url);
-    const title = k === "added" ? "Neu hinzugefügte Einträge" : "Zusammengeführte Datei";
+    const title = { added: "Neu hinzugefügte Einträge", merged: "Zusammengeführte Datei", clean: "Datei ohne Dubletten" }[k];
+    const lost = [
+      ...Object.entries(e.lost.columns).map(([col, n]) => `${COLUMN_LABEL[col] || col}: ${plural(n, "Eintrag", "Einträge")}`),
+      ...Object.entries(e.lost.source).map(([label, n]) => `${label}: ${plural(n, "Eintrag", "Einträge")}`),
+    ];
     return h("div", { class: "export" },
       h("strong", { text: title }),
-      e.lines.map((l) => h("p", { class: l.startsWith("    !") ? "note" : null, text: l.trim() })),
+      e.lines.filter((l) => !l.includes("nicht speicherbar"))
+        .map((l) => h("p", { class: l.startsWith("    !") ? "note" : null, text: l.trim() })),
+      lost.length ? h("div", { class: "lost", role: "note" }, h("strong", { text: `⚠ Im ${e.target} nicht speicherbar` }),
+        h("ul", null, lost.map((t) => h("li", { text: t })))) : null,
       h("a", { class: "btn", href: url, download: e.filename, text: `${e.filename} speichern` }));
   });
   return h("section", { class: "panel" }, h("h2", { text: "Exporte" }),
     h("div", { class: "exports" }, h("p", { class: "hint", text: "Die Dateien enthalten Passwörter im Klartext. Nach dem Import wieder löschen." }), items));
 }
 
+/* ----- Bereinigen ----- */
+const KIND_DEFAULT = { key: "merge", login: "merge", title: "keep_all" };
+const KIND_BADGE = { key: "Identischer Schlüssel", login: "Gleicher Login", title: "Nur ein Hinweis" };
+let cleanForm = [];   // je Gruppe: { group, action(), keep(), picks(), root }
+
+function renderClean(out, r) {
+  cleanForm = [];
+  if (!r.groups.length) {
+    out.append(h("div", { class: "panel empty" }, h("h2", { text: "Keine Dubletten" }),
+      h("p", { text: "In dieser Datei gibt es nichts zusammenzuführen." })));
+    return;
+  }
+  const exportSlot = h("div", { id: "clean-export" });
+  const counts = [], makes = [], revealBoxes = [], revealNotes = [];
+  formatChoosers = [];
+  // Klartext nachladen, ohne die Karten neu aufzubauen: Entscheidungen bleiben erhalten
+  const alreadyClear = $("show-secrets").checked;   // die Auswertung enthält die Werte schon
+  let revealed = null;
+  const setReveal = async (on) => {
+    revealBoxes.forEach((b) => (b.checked = on));
+    revealNotes.forEach((n) => (n.textContent = ""));
+    if (!on) {
+      revealed = null;   // Klartext nicht länger im Speicher halten als nötig
+      cleanForm.forEach((f) => f.applyValues(null));
+      return;
+    }
+    try {
+      if (!revealed) {
+        const run = state.run;
+        if (!run) throw new Error("Bitte zuerst auswerten.");
+        const data = await requestAnalysis(run.a, null, { ...run.options, show_secrets: true });
+        revealed = new Map(data.report.groups.map((g) => [g.id, g]));
+      }
+      cleanForm.forEach((f) => { const g = revealed.get(f.group.id); if (g) f.applyValues(g); });
+    } catch (err) {
+      revealBoxes.forEach((b) => (b.checked = false));
+      revealNotes.forEach((n) => (n.textContent = err.message || String(err)));
+    }
+  };
+  const invalidateExport = () => {
+    if (!exportSlot.dataset.made) return;   // es gibt noch keine erstellte Datei
+    delete exportSlot.dataset.made;
+    exportSlot.replaceChildren(h("p", { class: "note", role: "status", text: "Die Entscheidungen oder das Format haben sich geändert. Die zuvor erstellte Datei ist veraltet – bitte neu erstellen." }));
+  };
+  onCleanFormatChange = invalidateExport;
+  const update = () => {
+    const merged = cleanForm.filter((f) => f.action() === "merge").length;
+    const removed = cleanForm.reduce((n, f) => n + (f.action() === "keep_all" ? 0 : f.group.members.length - 1), 0);
+    const text = `${plural(r.group_count, "Gruppe", "Gruppen")}, ${merged} zusammenführen, ${plural(removed, "Eintrag", "Einträge")} entfallen`;
+    counts.forEach((c) => (c.textContent = text));
+    state.dirty = cleanForm.some((f) => f.changed());
+    invalidateExport();   // Entscheidungen haben sich seit dem Erstellen geändert
+  };
+  // Dieselbe Leiste oben und unten: so muss man nach dem Ändern nicht zurückscrollen.
+  const cleanBar = () => {
+    const count = h("span", { class: "count" });
+    const make = h("button", { class: "btn", type: "button", text: "Datei ohne Dubletten erstellen" });
+    const reset = h("button", { class: "btn quiet", type: "button", text: "Auf Vorschläge zurücksetzen" });
+    counts.push(count);
+    makes.push(make);
+    reset.addEventListener("click", () => { cleanForm.forEach((f) => f.reset()); update(); });
+    make.addEventListener("click", () => makeCleanFile(makes, exportSlot));
+    const box = h("input", { type: "checkbox" });
+    const note = h("span", { class: "note", role: "status" });
+    box.checked = alreadyClear;
+    box.disabled = alreadyClear;
+    box.addEventListener("change", () => setReveal(box.checked));
+    revealBoxes.push(box);
+    revealNotes.push(note);
+    const reveal = h("div", { class: "cleanformat" },
+      h("label", { class: "check", title: alreadyClear ? "In den Optionen bereits eingeschaltet" : null },
+        box, h("span", { text: "Werte im Klartext zeigen" })), note);
+    return h("section", { class: "panel cleanbar" }, count, reset, make, reveal, formatChooser(counts.length));
+  };
+  out.append(cleanBar());
+  r.groups.forEach((g) => out.append(cleanCard(g, update)));
+  out.append(cleanBar(), exportSlot);
+  lockClean = (locked) => makes.forEach((b) => (b.disabled = locked));
+  syncFormatChoosers();
+  update();
+}
+/* Wie ein Wert in der Auswahl heißt: der Wert selbst, bei verborgenen Werten „Variante A“ (gleiche Werte, gleicher Buchstabe). */
+const VARIANT_PREFIX = { Password: "P", TOTP: "T", Fields: "F" };   // Buchstaben gelten je Spalte
+const variantName = (col, letter) => `Variante ${VARIANT_PREFIX[col] || "?"}-${letter}`;
+function valueLabel(g, col, i) {
+  const v = g.members[i].values[col];
+  if (g.masked_columns.includes(col)) {
+    const letter = g.variants[col][i];
+    return letter ? variantName(col, letter) : "leer";
+  }
+  if (v === "" || v == null) return "leer";
+  return v.length > 40 ? `${v.slice(0, 40)} …` : v.replace(/\s+/g, " ");
+}
+function memberName(g, i) {
+  const m = g.members[i], l = entryLabel(m.entry);
+  return `${i + 1}. ${l.title} (${l.path}) – geändert ${formatTime(m.last_modified, false)}`;
+}
+function cleanCard(g, update) {
+  const radioName = `act-${g.id}`;
+  const mk = (value, label) => h("label", { class: "opt" },
+    h("input", { type: "radio", name: radioName, value }), label);
+  const optMerge = mk("merge", `Zusammenführen (neuester Eintrag ${g.newest_member + 1} gewinnt, Lücken werden gefüllt)`);
+  const keepSelect = h("select", { "aria-label": "Eintrag, der behalten wird" },
+    g.members.map((_, i) => h("option", { value: i, text: memberName(g, i) })));
+  const optKeep = mk("keep", "Nur diesen behalten: ");
+  optKeep.append(keepSelect);
+  const optAll = mk("keep_all", "Alle behalten");
+
+  const pickSelects = {};
+  const optionRefs = [], cellRefs = [];
+  const pickOptionText = (col, ref) => ref.newest
+    ? `Neuester Eintrag (${g.newest_member + 1}) – ${valueLabel(g, col, g.newest_member)}`
+    : `Eintrag ${ref.i + 1} – ${valueLabel(g, col, ref.i)}`;
+  const fillCell = (td, c, i) => {
+    const v = g.members[i].values[c];
+    const masked = g.masked_columns.includes(c);
+    if (v === "" || (masked && v === "(leer)")) { td.className = "empty"; td.textContent = "(leer)"; return; }
+    const letter = masked ? g.variants[c][i] : null;
+    td.className = "";
+    td.textContent = letter ? `${v} · ${variantName(c, letter)}` : v;
+  };
+  // Die maskierte Ansicht merken, damit der Klartext-Schalter sie wiederherstellen kann
+  const maskedView = {
+    values: g.members.map((m) => ({ ...m.values })),
+    masked_columns: [...g.masked_columns],
+    variants: structuredClone(g.variants),
+  };
+  const conflictBox = h("div", { class: "conflicts" },
+    h("strong", { text: "Verschiedene Werte – welcher soll gelten?" }),
+    g.conflicts.map((col) => {
+      const options = [{ value: "", newest: true }, ...g.members.map((_, i) => ({ value: i, i }))].map((ref) => {
+        const opt = h("option", { value: ref.value });
+        optionRefs.push({ opt, col, ref });
+        opt.textContent = pickOptionText(col, ref);
+        return opt;
+      });
+      const sel = h("select", { "aria-label": COLUMN_LABEL[col] || col }, options,
+        col === "Notes" ? h("option", { value: "both", text: "Alle verbinden" }) : null);
+      pickSelects[col] = sel;
+      return h("label", null, h("span", { text: `${COLUMN_LABEL[col] || col}:` }), sel);
+    }));
+
+  const cols = g.differing_columns;
+  const table = h("table", { class: "members" },
+    h("thead", null, h("tr", null, h("th", { scope: "col" }, h("span", { class: "sr-only", text: "Feld" })),
+      g.members.map((_, i) => h("th", { scope: "col", class: i === g.newest_member ? "base" : null,
+        text: `Eintrag ${i + 1}${i === g.newest_member ? " (neuester)" : ""}` })))),
+    h("tbody", null,
+      h("tr", null, h("th", { scope: "row", text: "Eintrag" }),
+        g.members.map((m) => { const l = entryLabel(m.entry); return h("td", { text: `${l.title}\n${l.path}` }); })),
+      h("tr", null, h("th", { scope: "row", text: "Geändert" }),
+        g.members.map((m) => h("td", { text: formatTime(m.last_modified), title: m.last_modified || null }))),
+      cols.map((c) => h("tr", null, h("th", { scope: "row", text: COLUMN_LABEL[c] || c }),
+        g.members.map((_, i) => {
+          const td = h("td");
+          cellRefs.push({ td, c, i });
+          fillCell(td, c, i);
+          return td;
+        })))));
+
+  const body = h("div", { class: "dbody" }, table,
+    h("div", { class: "choices", role: "radiogroup", "aria-label": "Was soll mit der Gruppe geschehen?" }, optMerge, optKeep, optAll),
+    g.conflicts.length ? conflictBox : null);
+  if (g.conflicts.some((c) => g.masked_columns.includes(c))) {
+    conflictBox.append(h("span", { class: "note", text: "Verborgene Werte sind nur durch Buchstaben unterscheidbar: gleicher Buchstabe = gleicher Wert (P Passwort, T TOTP, F eigene Felder). Mit „Werte im Klartext zeigen“ in der Leiste siehst du sie, deine Entscheidungen bleiben erhalten." }));
+  }
+  const card = h("section", { class: "panel dgroup" },
+    h("div", { class: "dhead" }, h("span", { class: "reason", text: g.reason }),
+      h("span", { class: `badge ${g.kind === "title" ? "" : "b"}`, text: KIND_BADGE[g.kind] }),
+      h("span", { class: "note", text: plural(g.members.length, "Eintrag", "Einträge") })),
+    body);
+
+  const radios = () => [...card.querySelectorAll(`input[name="${radioName}"]`)];
+  const action = () => radios().find((x) => x.checked).value;
+  const sync = () => {
+    conflictBox.classList.toggle("is-hidden", action() !== "merge");
+    keepSelect.disabled = action() !== "keep";
+    update();
+  };
+  const reset = () => {
+    radios().forEach((x) => (x.checked = x.value === KIND_DEFAULT[g.kind]));
+    keepSelect.value = String(g.newest_member);
+    Object.values(pickSelects).forEach((s) => (s.value = ""));
+    sync();
+  };
+  const decisionOf = () => {
+    const a = action();
+    if (a === "keep") return { action: a, keep: Number(keepSelect.value) };
+    if (a !== "merge") return { action: a };
+    const picks = {};
+    for (const [col, sel] of Object.entries(pickSelects)) {
+      if (sel.value !== "") picks[col] = sel.value === "both" ? "both" : Number(sel.value);
+    }
+    return { action: a, picks };
+  };
+  radios().forEach((x) => x.addEventListener("change", sync));
+  [keepSelect, ...Object.values(pickSelects)].forEach((s) => s.addEventListener("change", update));
+  let baseline = "";
+  cleanForm.push({
+    group: g, action,
+    reset: () => { reset(); baseline = JSON.stringify(decisionOf()); },
+    changed: () => JSON.stringify(decisionOf()) !== baseline,
+    markSaved: () => { baseline = JSON.stringify(decisionOf()); },
+    applyValues: (revealed) => {   // ``null`` = wieder die maskierte Ansicht
+      const view = revealed
+        ? { values: revealed.members.map((m) => m.values), masked_columns: revealed.masked_columns, variants: revealed.variants }
+        : maskedView;
+      g.members.forEach((m, i) => (m.values = view.values[i]));
+      g.masked_columns = view.masked_columns;
+      g.variants = view.variants;
+      cellRefs.forEach(({ td, c, i }) => fillCell(td, c, i));
+      optionRefs.forEach(({ opt, col, ref }) => (opt.textContent = pickOptionText(col, ref)));
+    },
+    decision: () => decisionOf(),
+  });
+  cleanForm[cleanForm.length - 1].reset();
+  return card;
+}
+async function makeCleanFile(buttons, slot) {
+  buttons.forEach((b) => (b.disabled = true));
+  delete slot.dataset.made;
+  slot.replaceChildren(h("p", { class: "status", text: "Wird erstellt …" }));
+  try {
+    // Dieselbe Datei und dieselben Optionen wie bei der Auswertung, zu der die Karten gehören
+    const run = state.run;
+    if (!run) throw new Error("Bitte zuerst auswerten.");
+    const decisions = {};
+    cleanForm.forEach((f) => (decisions[f.group.id] = f.decision()));
+    const opts = { ...run.options, export_clean: true, decisions, export_format: exportFormat() };
+    const data = await requestAnalysis(run.a, null, opts);
+    const panel = exportsPanel(data.exports);
+    slot.replaceChildren(panel);
+    slot.dataset.made = "1";
+    cleanForm.forEach((f) => f.markSaved());   // die Datei ist erstellt: kein Warnen vor Verlust mehr
+    state.dirty = false;
+    panel.scrollIntoView({ block: "nearest" });
+  } catch (err) {
+    slot.replaceChildren(h("div", { class: "alert", role: "alert", text: err.message || String(err) }));
+  } finally {
+    buttons.forEach((b) => (b.disabled = isStale()));
+  }
+}
+
 /* ----- Suche ----- */
 const SEARCH_STATUS = {
-  moved: ["Verschoben/umbenannt", "moved"], identical: ["Identisch in beiden Dateien", ""], unclear: ["Aktualität unklar", "warn"],
+  found: ["Gefunden", ""], moved: ["Verschoben/umbenannt", "moved"], identical: ["Identisch in beiden Dateien", ""], unclear: ["Aktualität unklar", "warn"],
 };
 function renderSearch(out, r) {
-  const a = r.files.old.name, b = r.files.new.name;
+  const a = r.files.old.name, b = r.files.new ? r.files.new.name : "";
   const status = (s) => ({
     only_in_old: [`Nur in ${a}`, "a"], only_in_new: [`Nur in ${b}`, "b"],
     newer_in_new: [`${b} ist aktueller`, "b"], newer_in_old: [`${a} ist aktueller`, "a"],
@@ -660,7 +1126,7 @@ function renderSearch(out, r) {
   const list = h("ul", { class: "entries" }, r.results.map((it) => {
     const [label, tone] = status(it.status);
     const body = it.status === "moved" ? movedBody(it, r)
-      : it.differing_columns ? changedBody(it, r) : [entryNode(it.entry), h("div", { class: "note", text: `Zuletzt geändert: ${it.last_modified}` })];
+      : it.differing_columns ? changedBody(it, r) : [entryNode(it.entry), h("div", { class: "note", text: `Zuletzt geändert: ${formatTime(it.last_modified)}` })];
     return h("li", { class: "entry" }, h("div", null, h("span", { class: `badge ${tone}`, text: label })), body);
   }));
   out.append(h("section", { class: "panel group" },
@@ -669,24 +1135,34 @@ function renderSearch(out, r) {
 
 /* ----- Statistik ----- */
 function renderStats(out, r) {
-  const a = r.files.old.name, b = r.files.new.name;
-  const max = Math.max(1, ...r.groups.map((g) => Math.max(g.old, g.new)));
+  const a = r.files.old.name, b = r.files.new ? r.files.new.name : null;
+  const max = Math.max(1, ...r.groups.map((g) => Math.max(g.old, g.new || 0)));
   const bars = (g) => h("div", { class: "pair-bars" },
     h("div", { class: "bl a" }, h("i", { style: `width: ${(g.old / max) * 100}%` }), g.old),
-    h("div", { class: "bl b" }, h("i", { style: `width: ${(g.new / max) * 100}%` }), g.new));
+    b ? h("div", { class: "bl b" }, h("i", { style: `width: ${(g.new / max) * 100}%` }), g.new) : null);
   const diff = (n) => (n > 0 ? "+" : n < 0 ? "−" : "±") + Math.abs(n);
   out.append(h("section", { class: "panel" }, h("h2", { text: "Einträge pro Gruppe" }),
     h("table", { class: "stats" },
       h("thead", null, h("tr", null, h("th", { scope: "col", text: "Gruppe" }),
-        h("th", { scope: "col" }, sideTag("a", a), " ", sideTag("b", b)), h("th", { scope: "col", style: "text-align:right", text: "Differenz" }))),
+        h("th", { scope: "col" }, sideTag("a", a), b ? [" ", sideTag("b", b)] : null),
+        b ? h("th", { scope: "col", style: "text-align:right", text: "Differenz" }) : null)),
       h("tbody", null, r.groups.map((g) => h("tr", null,
-        h("td", { class: "g", text: g.group || "(ohne Gruppe)" }), h("td", null, bars(g)), h("td", { class: "d", text: diff(g.difference) })))),
+        h("td", { class: "g", text: g.group || "(ohne Gruppe)" }), h("td", null, bars(g)),
+        b ? h("td", { class: "d", text: diff(g.difference) }) : null))),
       h("tfoot", null, h("tr", null, h("td", { class: "g", text: "Gesamt" }),
-        h("td", { text: `${r.total.old} | ${r.total.new}` }), h("td", { class: "d", text: diff(r.total.difference) }))))));
+        h("td", { text: b ? `${r.total.old} | ${r.total.new}` : `${r.total.old}` }),
+        b ? h("td", { class: "d", text: diff(r.total.difference) }) : null)))));
 }
 
 /* ----- Prüfungen ----- */
-function renderFindings(out, r) {
+function renderOverview(out, r) {
+  out.append(h("h2", { class: "section-title", text: "Statistik" }));
+  renderStats(out, { ...r.stats, files: r.files });
+  renderFindings(out, { ...r.check, files: r.files }, "Dubletten und kaputte Einträge");
+  renderFindings(out, { ...r.password_check, files: r.files }, "Passwortqualität");
+}
+function renderFindings(out, r, title) {
+  if (title) out.append(h("h2", { class: "section-title", text: title }));
   r.results.forEach((res, i) => {
     const side = i === 0 ? "a" : "b";
     const entries = r.files[i === 0 ? "old" : "new"].entries;
@@ -728,8 +1204,29 @@ $("swap").addEventListener("click", () => {
   [state.a, state.b] = [state.b, state.a];
   renderDrop("a", $("drop-a")); renderDrop("b", $("drop-b")); refreshRun();
 });
-document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener("change", onModeChange));
+$("clear-a").addEventListener("click", () => {
+  state.a = state.b;   // die zweite Datei rückt nach
+  state.b = null;
+  $("file-a").value = "";
+  $("file-b").value = "";
+  renderDrop("a", $("drop-a")); renderDrop("b", $("drop-b"));
+  syncModeToFiles();
+});
+$("clear-b").addEventListener("click", () => {
+  state.b = null;
+  $("file-b").value = "";
+  renderDrop("b", $("drop-b"));
+  syncModeToFiles();
+});
+document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener("change", () => {
+  state.userMode = true;
+  onModeChange();
+}));
+document.querySelectorAll('input[name="export-format"]').forEach((r) => r.addEventListener("change", onExportFormatChange));
+onExportFormatChange();
 $("search").addEventListener("input", refreshRun);
+$("form").addEventListener("input", checkStale);
+$("form").addEventListener("change", checkStale);
 $("form").addEventListener("submit", (e) => { e.preventDefault(); if (!$("run").disabled) run(); });
 $("theme").addEventListener("click", () => {
   const root = document.documentElement;

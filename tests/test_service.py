@@ -1,32 +1,20 @@
 """Tests der Service-Schicht (Weboberfläche): gleiches Ergebnis wie die Kommandozeile."""
+
 import copy
 import json
 import os
-import subprocess
-import sys
+import tempfile
 import unittest
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
+from csvcompare.service import UsageError, analyze, options_to_argv
+from tests.helpers import fixture_path, read_fixture, run
 
-from csvcompare.service import UsageError, analyze, options_to_argv  # noqa: E402
-
-SCRIPT = os.path.join(ROOT, "compare_csv.py")
-
-
-def read(name):
-    with open(os.path.join(ROOT, "tests", name), encoding="utf-8", newline="") as f:
-        return f.read()
-
-
-ALT, NEU = read("alt.csv"), read("neu.csv")
+ALT, NEU = read_fixture("alt.csv"), read_fixture("neu.csv")
 
 
 def cli_json(*args):
-    proc = subprocess.run([sys.executable, SCRIPT, "tests/alt.csv", "tests/neu.csv", *args,
-                           "--format", "json"], cwd=ROOT, capture_output=True,
-                          text=True, encoding="utf-8")
-    return proc.returncode, json.loads(proc.stdout)
+    rc, out, _ = run("tests/alt.csv", "tests/neu.csv", *args, "--format", "json")
+    return rc, json.loads(out)
 
 
 def without_paths(report):
@@ -50,18 +38,24 @@ class SameAsCommandLineTests(unittest.TestCase):
         ({"ignore": ["Icon", "Notes"]}, ["--ignore", "Icon,Notes"]),
         ({"hide_trash": True}, ["--hide-trash"]),
         ({"group": "web"}, ["--group", "web"]),
-        ({"group": "web", "hide_trash": True, "ignore": ["Icon"]},
-         ["--group", "web", "--hide-trash", "--ignore", "Icon"]),
+        (
+            {"group": "web", "hide_trash": True, "ignore": ["Icon"]},
+            ["--group", "web", "--hide-trash", "--ignore", "Icon"],
+        ),
         ({"detect_moves": False}, ["--no-detect-moves"]),
         ({"mode": "search", "search": "mail"}, ["--search", "mail"]),
         ({"mode": "search", "search": "streaming"}, ["--search", "streaming"]),
         ({"mode": "stats"}, ["--stats"]),
         ({"mode": "stats", "group": "privat"}, ["--stats", "--group", "privat"]),
         ({"mode": "check"}, ["--check"]),
-        ({"mode": "password-check", "max_age_days": 100000},
-         ["--password-check", "--max-age-days", "100000"]),
-        ({"mode": "password-check", "min_length": 25, "max_age_days": 100000},
-         ["--password-check", "--min-length", "25", "--max-age-days", "100000"]),
+        (
+            {"mode": "password-check", "max_age_days": 100000},
+            ["--password-check", "--max-age-days", "100000"],
+        ),
+        (
+            {"mode": "password-check", "min_length": 25, "max_age_days": 100000},
+            ["--password-check", "--min-length", "25", "--max-age-days", "100000"],
+        ),
     ]
 
     def test_reports_match_cli(self):
@@ -78,27 +72,31 @@ class SameAsCommandLineTests(unittest.TestCase):
         self.assertEqual(result["report"]["match_count"], 0)
 
     def test_exports_match_cli_files(self):
-        import tempfile
         with tempfile.TemporaryDirectory() as d:
             a, m = os.path.join(d, "a.csv"), os.path.join(d, "m.csv")
-            subprocess.run([sys.executable, SCRIPT, "tests/alt.csv", "tests/neu.csv",
-                            "--export-added", a, "--export-merged", m],
-                           cwd=ROOT, capture_output=True, check=True)
+            rc, _, _ = run(
+                "tests/alt.csv", "tests/neu.csv", "--export-added", a, "--export-merged", m
+            )
+            self.assertEqual(rc, 0)
             result = ui({"export_added": True, "export_merged": True})
             with open(a, encoding="utf-8", newline="") as f:
-                self.assertEqual(result["exports"]["added"]["csv"], f.read())
+                self.assertEqual(result["exports"]["added"]["content"], f.read())
             with open(m, encoding="utf-8", newline="") as f:
-                self.assertEqual(result["exports"]["merged"]["csv"], f.read())
+                self.assertEqual(result["exports"]["merged"]["content"], f.read())
         self.assertEqual(result["exports"]["merged"]["filename"], "merged.csv")
         self.assertEqual(len(result["exports"]["merged"]["conflicts"]), 2)
 
 
 class ServiceBehaviourTests(unittest.TestCase):
     def test_command_line_equivalent_is_shown(self):
-        cmd = ui({"ignore": ["Icon"], "hide_trash": True, "mode": "search",
-                  "search": "mail server"})["command"]
-        self.assertEqual(cmd, "python3 compare_csv.py alt.csv neu.csv --ignore=Icon "
-                              "--hide-trash '--search=mail server'")
+        cmd = ui(
+            {"ignore": ["Icon"], "hide_trash": True, "mode": "search", "search": "mail server"}
+        )["command"]
+        self.assertEqual(
+            cmd,
+            "python3 compare_csv.py alt.csv neu.csv --ignore=Icon "
+            "--hide-trash '--search=mail server'",
+        )
 
     def test_no_exports_unless_requested(self):
         self.assertEqual(ui({})["exports"], {})
@@ -132,9 +130,8 @@ class ServiceBehaviourTests(unittest.TestCase):
             {"mode": "password-check", "max_age_days": True},
         ]
         for options in bad:
-            with self.subTest(options=options):
-                with self.assertRaises(UsageError):
-                    ui(options)
+            with self.subTest(options=options), self.assertRaises(UsageError):
+                ui(options)
 
     def test_unusable_csv_raises_usage_error(self):
         with self.assertRaises(UsageError) as ctx:
@@ -153,3 +150,111 @@ class ServiceBehaviourTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SingleFileServiceTests(unittest.TestCase):
+    def setUp(self):
+        self.text = read_fixture("keepassium_a.csv")
+
+    def test_one_file_defaults_to_the_overview(self):
+        result = analyze("a.csv", self.text, None, None, {})
+        self.assertEqual(result["report"]["mode"], "overview")
+        self.assertIsNone(result["report"]["files"]["new"])
+        self.assertEqual(
+            result["command"],
+            "python3 compare_csv.py a.csv --overview --min-length=10 --max-age-days=730",
+        )
+
+    def test_one_file_matches_the_command_line(self):
+        _, out, _ = run(fixture_path("keepassium_a.csv"), "--stats")
+        result = analyze("keepassium_a.csv", self.text, None, None, {"mode": "stats"})
+        self.assertEqual(result["report"]["total"], {"old": 8})
+        self.assertIn("Gesamt", out)
+
+    def test_compare_needs_two_files(self):
+        with self.assertRaises(UsageError):
+            analyze("a.csv", self.text, None, None, {"mode": "compare"})
+
+    def test_exports_need_two_files(self):
+        with self.assertRaises(UsageError):
+            analyze("a.csv", self.text, None, None, {"mode": "stats", "export_added": True})
+
+    def test_search_in_one_file(self):
+        result = analyze("a.csv", self.text, None, None, {"mode": "search", "search": "mail"})
+        self.assertEqual([r["status"] for r in result["report"]["results"]], ["found"])
+
+
+class CleanServiceTests(unittest.TestCase):
+    def setUp(self):
+        self.text = read_fixture("dubletten.csv")
+
+    def first_call(self, **options):
+        return analyze("d.csv", self.text, None, None, {"mode": "clean", **options})
+
+    def test_first_call_lists_groups_with_conflicts_and_newest_member(self):
+        result = self.first_call()
+        report = result["report"]
+        self.assertEqual(report["mode"], "dedupe")
+        self.assertEqual(result["exports"], {})
+        first = report["groups"][0]
+        self.assertEqual(first["conflicts"], ["Password"])
+        self.assertEqual(first["newest_member"], 1)
+        self.assertEqual(result["command"], "python3 compare_csv.py d.csv --dedupe")
+
+    def test_second_call_returns_the_cleaned_file(self):
+        groups = {g["kind"]: g["id"] for g in self.first_call()["report"]["groups"]}
+        decisions = {
+            groups["key"]: {"action": "merge", "picks": {"Password": 0}},
+            groups["login"]: {"action": "keep", "keep": 1},
+        }
+        result = self.first_call(
+            export_clean=True, decisions=decisions, export_format="keepass-csv"
+        )
+        export = result["exports"]["clean"]
+        self.assertEqual(export["filename"], "bereinigt.csv")
+        self.assertEqual(export["entries"], 9 - 1 - 2 - 1)  # Papierkorb, key, login
+        self.assertIn("pw-alt", export["content"])
+        self.assertNotIn("pw-neu", export["content"])
+        self.assertEqual(export["lost"]["source"], {"Frühere Passwörter": 1})
+
+    def test_groups_without_a_decision_are_kept(self):
+        export = self.first_call(export_clean=True, decisions={})["exports"]["clean"]
+        self.assertEqual(export["entries"], 8)  # nur der Papierkorb fällt weg
+
+    def test_bitwarden_format_keeps_the_history(self):
+        groups = {g["kind"]: g["id"] for g in self.first_call()["report"]["groups"]}
+        result = self.first_call(
+            export_clean=True,
+            decisions={groups["key"]: {"action": "merge"}},
+            export_format="bitwarden-json",
+        )
+        export = result["exports"]["clean"]
+        self.assertEqual(export["filename"], "bereinigt.json")
+        self.assertIn("passwordHistory", export["content"])
+        self.assertEqual(export["lost"]["source"], {})
+
+    def test_invalid_decisions_are_rejected(self):
+        group_id = self.first_call()["report"]["groups"][0]["id"]
+        bad = (
+            {"gibtsnicht": {"action": "merge"}},
+            {group_id: {"action": "löschen"}},
+            {group_id: {"action": "keep", "keep": 7}},
+            {group_id: {"action": "merge", "picks": {"Password": 7}}},
+            {group_id: {"action": "merge", "picks": {"Created": 0}}},
+            {group_id: "merge"},
+            {group_id: {"action": "keep", "keep": True}},
+            [],
+        )
+        for decisions in bad:
+            with self.subTest(decisions=decisions), self.assertRaises(UsageError):
+                self.first_call(export_clean=True, decisions=decisions)
+
+    def test_clean_needs_one_file_and_the_clean_mode(self):
+        with self.assertRaises(UsageError):
+            analyze("a.csv", self.text, "b.csv", self.text, {"mode": "clean"})
+        with self.assertRaises(UsageError):
+            analyze("a.csv", self.text, None, None, {"mode": "stats", "export_clean": True})
+
+    def test_unknown_export_format_is_rejected(self):
+        with self.assertRaises(UsageError):
+            self.first_call(export_clean=True, decisions={}, export_format="docx")
